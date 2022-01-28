@@ -1,0 +1,1 @@
+build.exe > log.txt

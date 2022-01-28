@@ -1,0 +1,20 @@
+// this is a spec for the level format
+//
+// the first line of the ascii level representation always dictates maximum width of the level
+// there are still unimplemented features
+// max map dimensions are 128x128 for now
+
+s : start
+F : finish
+
+# : solid wall
+<number from 0 to 9> : portal index, there alwas have to be two of those portals in the map
+^ : elevated floor
+v : low ceiling
+x : hole in the ground (player can fall to death)
+
+a : ammo
+h : health
+
+w : walking enemy
+t : turret enemy
