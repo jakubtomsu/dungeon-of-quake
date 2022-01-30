@@ -4,7 +4,7 @@
 // there are still unimplemented features
 // max map dimensions are 128x128 for now
 
-s : start
+S : start
 F : finish
 
 # : solid wall

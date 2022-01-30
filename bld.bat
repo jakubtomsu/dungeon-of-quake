@@ -1,2 +1,2 @@
 
-odin run main.odin -out:build/build.exe -o:speed
+odin run raydinfps.odin -out:build/raydinfps.exe -o:speed -strict-style
