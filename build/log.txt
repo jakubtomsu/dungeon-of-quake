@@ -1,0 +1,90 @@
+loadpath D:\qfps\build
+map_loadFromFile fullpath D:\qfps\build\levels\test.qfmap
+\n
+\n
+\n
+\n
+\n
+\n
+\n
+\n
+\n
+\n
+\n
+\n
+end
+bounds[0] 21 bounds[1] 13
+loading texture:  D:\qfps\build\textures\test.png
+frame = 0 deltatime = 0.000
+pos [15.000, 0.000, 105.000] vel [0.000, 0.000, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 1 deltatime = 0.443
+pos [15.000, -19.615, 105.000] vel [0.000, -44.288, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 2 deltatime = 0.062
+pos [15.000, -22.738, 105.000] vel [0.000, -50.476, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 3 deltatime = 0.063
+pos [15.000, -26.328, 105.000] vel [0.000, -56.797, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 4 deltatime = 0.062
+pos [15.000, -30.223, 105.000] vel [0.000, -62.982, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 5 deltatime = 0.063
+pos [15.000, -34.604, 105.000] vel [0.000, -69.303, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 6 deltatime = 0.062
+pos [15.000, -39.271, 105.000] vel [0.000, -75.485, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 7 deltatime = 0.063
+pos [15.000, -44.444, 105.000] vel [0.000, -81.808, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 8 deltatime = 0.103
+pos [15.000, -53.982, 105.000] vel [0.000, -92.158, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 9 deltatime = 0.063
+pos [15.000, -60.215, 105.000] vel [0.000, -98.487, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 10 deltatime = 0.070
+pos [15.000, -67.611, 105.000] vel [0.000, -105.498, 0.000]
+phy offs [0.000, 0.000, 0.000] norm [-1.000, 0.000, 0.000] hit false
+frame = 11 deltatime = 0.084
+pos [15.000, -77.232, 105.000] vel [0.000, -113.941, 0.000]
+phy offs [0.000, 3.232, 0.000] norm [0.000, 1.000, 0.000] hit true
+frame = 12 deltatime = 0.093
+pos [15.000, -74.214, 105.000] vel [0.000, -2.313, 0.000]
+phy offs [0.000, 0.214, 0.000] norm [0.000, 1.000, 0.000] hit true
+INFO: Initializing raylib 3.7
+INFO: DISPLAY: Device initialized successfully
+INFO:     > Display size: 1920 x 1080
+INFO:     > Render size:  1440 x 810
+INFO:     > Screen size:  1440 x 810
+INFO:     > Viewport offsets: 0, 0
+INFO: GLAD: OpenGL extensions loaded successfully
+INFO: GL: Supported extensions count: 399
+INFO: GL: OpenGL device information:
+INFO:     > Vendor:   NVIDIA Corporation
+INFO:     > Renderer: NVIDIA GeForce RTX 2060 SUPER/PCIe/SSE2
+INFO:     > Version:  3.3.0 NVIDIA 496.76
+INFO:     > GLSL:     3.30 NVIDIA via Cg compiler
+INFO: GL: DXT compressed textures supported
+INFO: GL: ETC2/EAC compressed textures supported
+INFO: TEXTURE: [ID 1] Texture loaded successfully (1x1 - 1 mipmaps)
+INFO: TEXTURE: [ID 1] Default texture loaded successfully
+INFO: SHADER: [ID 1] Vertex shader compiled successfully
+INFO: SHADER: [ID 2] Fragment shader compiled successfully
+INFO: SHADER: [ID 3] Program shader loaded successfully
+INFO: SHADER: [ID 3] Default shader loaded successfully
+INFO: RLGL: Render batch vertex buffers loaded successfully in RAM (CPU)
+INFO: RLGL: Render batch vertex buffers loaded successfully in VRAM (GPU)
+INFO: RLGL: Default OpenGL state initialized successfully
+INFO: TEXTURE: [ID 2] Texture loaded successfully (128x128 - 1 mipmaps)
+INFO: FONT: Default font loaded successfully
+INFO: TIMER: Target time per frame: 13.333 milliseconds
+INFO: FILEIO: [D:\qfps\build\textures\test.png] File loaded successfully
+INFO: IMAGE: [D:\qfps\build\textures\test.png] Data loaded successfully (1056x1056)
+INFO: TEXTURE: [ID 3] Texture loaded successfully (1056x1056 - 1 mipmaps)
+INFO: TEXTURE: [ID 2] Unloaded texture data from VRAM (GPU)
+INFO: SHADER: [ID 3] Default shader unloaded successfully
+INFO: TEXTURE: [ID 1] Default texture unloaded successfully
+INFO: Window closed successfully

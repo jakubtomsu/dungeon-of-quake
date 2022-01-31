@@ -1,20 +1,26 @@
 // this is a spec for the map format
 //
-// the first line of the ascii map representation always dictates maximum width of the map
 // there are still unimplemented features
 // max map dimensions are 128x128 for now
 
-S : start
-F : finish
+s : start
+f : finish
 
 # : solid wall
-<number from 0 to 9> : portal index, there alwas have to be two of those portals in the map
 ^ : elevated floor
 v : low ceiling
 x : hole in the ground (player can fall to death)
+- : bridge, platform in between floor and ceiling
+% : destroyable wall
 
 a : ammo
 h : health
 
+r : rocket launcher
+m : machine gun
+g : shotgun
+
 w : walking enemy
 t : turret enemy
+
+
