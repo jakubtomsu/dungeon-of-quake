@@ -14,7 +14,7 @@ out vec4 finalColor;
 // NOTE: Add here your custom variables
 
 float postergamma = 0.6;
-float numColors = 8.0;
+float numColors = 16.0;
 const float screengamma = 2.2;
 
 // Narkowicz 2015, "ACES Filmic Tone Mapping Curve"
@@ -34,10 +34,10 @@ void main() {
 	vec3 col = origColor;
 
 	// posterization
-	col = pow(col, vec3(postergamma, postergamma, postergamma));
-	col = col*numColors;
-	col = floor(col);
-	col = col/numColors;
+	//col = pow(col, vec3(postergamma, postergamma, postergamma));
+	//col = col*numColors;
+	//col = floor(col);
+	//col = col/numColors;
 	//col = pow(col, vec3(1.0/postergamma));
 
 	//col = tonemapACES(col);
