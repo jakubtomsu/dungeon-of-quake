@@ -154,7 +154,7 @@ _init :: proc() {
 
 	map_clearAll()
 	tilemap.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
-	map_loadFromFile("empty.qfmap")
+	map_loadFromFile("test.qfmap")
 	map_basetexture = loadTexture("test4.png")
 	//map_debugPrint()
 }
@@ -410,6 +410,9 @@ map_debugPrint :: proc() {
 //
 
 PHY_MAX_TILE_BOXES :: 4
+PHY_BOXCAST_EPS :: 1e-2
+
+
 
 phy_box_t :: struct {
 	pos  : vec3,
@@ -522,9 +525,8 @@ phy_clipSphereWithTilemap :: proc(pos : vec3, rad : f32) -> (vec3, vec3, bool) {
 
 // "linecast" box through the tilemap
 // boxsize < TILE_WIDTH
-// @param clipeps: epsilon variable which offsets the boxsize so the result is still barely outside the volume
 // @returns: newpos, normal, tmin
-phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3, clipeps : f32) -> (vec3, vec3, bool) {
+phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3, vec3, bool) {
 	using math
 	posxz := vec2{pos.x, pos.z}
 	dir := wishpos - pos
@@ -544,11 +546,11 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3, clipeps :
 		dirinv		: vec3, // 1.0/dir
 		dirinvabs	: vec3, // abs(1.0/dir)
 		boxoffs		: vec3,
-		eps		: f32,
 		tmin		: f32,
 		normal		: vec3,
 		boxlen		: f32,
 		hit		: bool,
+		linelen	: f32,
 	}
 
 	ctx : phy_boxCastContext_t = {}
@@ -558,11 +560,11 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3, clipeps :
 	ctx.dirinv	= vec3{1,1,1}/dir
 	ctx.dirinvabs	= vec3{abs(ctx.dirinv.x), abs(ctx.dirinv.y), abs(ctx.dirinv.z)}
 	ctx.boxoffs	= boxsize
-	ctx.eps		= clipeps
 	ctx.tmin	= linelen
 	ctx.normal	= vec3{0,0.1,0} // debug value
 	ctx.boxlen	= linalg.length(boxsize)
 	ctx.hit		= false
+	ctx.linelen	= linelen
 
 	// DDA init
 	deltadist := vec2{abs(1.0/ddadir.x), abs(1.0/ddadir.y)}
@@ -625,7 +627,11 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3, clipeps :
 			t2 := -n + k
 			tn := max(max(t1.x, t1.y), t1.z)
 			tf := min(min(t2.x, t2.y), t2.z)
-			if tn>tf || tf<0.0 || tn>ctx.tmin do continue // no intersection or we have closer hit
+			isinside := tn<-0.001 && tn<tf && tf>-0.0001
+			if isinside do ctx.hit = true
+			if tn>tf || tf<0.0 || tn>ctx.tmin || tn<-ctx.linelen || isinside {
+				continue // no intersection or we have closer hit
+			}
 			ctx.tmin = tn
 			ctx.normal = -ctx.dirsign * cast(vec3)(glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))
 			ctx.hit = true
@@ -675,8 +681,6 @@ mouseDeltaY : f32
 
 player_update :: proc() {
 	oldpos := player_pos
-
-	rl.DrawSphere(player_pos, PLAYER_RADIUS, rl.PINK)
 
 	//{
 	//	bpos := vec3{TILE_WIDTH*2,0,TILE_WIDTH*2}
@@ -729,23 +733,21 @@ player_update :: proc() {
 		player_velocity += dir * accelspeed
 	}
 
-	//player_velocity += forw  * movedir.y * deltatime * cast(f32)(player_isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
-	//player_velocity += right * movedir.x * deltatime * cast(f32)(player_isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
-
-	player_accelerate(forw*movedir.y + right*movedir.x, PLAYER_SPEED, player_isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
+	player_accelerate(forw*movedir.y + right*movedir.x, PLAYER_SPEED,
+		player_isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
 
 	wishpos := player_pos + player_velocity * deltatime
 	
 	//phy_vec, phy_norm, phy_hit := phy_clipSphereWithTilemap(player_pos, PLAYER_RADIUS)
-	phy_vec, phy_norm, phy_hit := phy_boxCastTilemap(player_pos, wishpos, vec3{1,1,1}, 0.05)
+	phy_vec, phy_norm, phy_hit := phy_boxCastTilemap(player_pos, wishpos, vec3{1,1,1})
 	
 	println("pos", player_pos, "vel", player_velocity)
 	println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
 	
 	//if phy_hit do player_pos = player_pos + phy_vec
-	//player_pos = phy_vec
+	player_pos = phy_vec + phy_norm*1e-2
 
-	rl.DrawCube(phy_vec, 1,1,1, rl.PINK)
+	//rl.DrawCube(phy_vec, 1,1,1, rl.PINK)
 
 	player_isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
 
@@ -755,14 +757,14 @@ player_update :: proc() {
 		return vel - change
 	}
 
-	//if phy_hit do player_velocity = player_clipVelocity(player_velocity, phy_norm, 0.5)
+	if phy_hit do player_velocity = player_clipVelocity(player_velocity, phy_norm, 1.0)
 
 	// friction
 	{
 		len := linalg.vector_length(player_velocity)
 		friction : f32 = player_isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION
 		drop := len * friction * deltatime
-		//player_velocity = (len == 0.0 ? {} : player_velocity / len) * (len - drop)
+		player_velocity = (len == 0.0 ? {} : player_velocity / len) * (len - drop)
 	}
 
 
@@ -793,8 +795,9 @@ player_update :: proc() {
 
 	{
 		size := vec3{1,1,1}
-		//pos, normal, tmin := phy_boxCastTilemap(camera.position, camera.position + cam_forw*1000.0, size*0.5)
-		//rl.DrawCube(pos, size.x, size.y, size.z, rl.YELLOW)
-		//rl.DrawLine3D(pos, pos + normal*4, rl.ORANGE)
+		pos, normal, tmin := phy_boxCastTilemap(
+			camera.position, camera.position + cam_forw*1000.0, size*0.5)
+		rl.DrawCube(pos, size.x, size.y, size.z, rl.YELLOW)
+		rl.DrawLine3D(pos, pos + normal*4, rl.ORANGE)
 	}
 }
