@@ -10,6 +10,8 @@ in vec4 vertexColor;
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
+uniform vec3 modPos;
+uniform vec3 modSize;
 
 // Output vertex attributes (to fragment shader)
 out vec3 fragPosition;
@@ -22,7 +24,7 @@ out vec3 fragNormal;
 void main()
 {
 	// Send vertex attributes to fragment shader
-	fragPosition = vec3(matModel*vec4(vertexPosition, 1.0));
+	fragPosition = vec3(modPos + (vertexPosition*modSize));
 	fragTexCoord = vertexTexCoord;
 	fragColor = vertexColor;
 	fragNormal = normalize(vec3(matNormal*vec4(vertexNormal, 1.0)));

@@ -29,7 +29,12 @@ void main() {
 
 	//col = mix(col, vec3(0.85, 0.8, 0.9), clamp(dist, 0.0, 1.0));
 	//col = vec3(dist*0.01);
-	//col = camPos;
+	col = (fragPosition-vec3(100))* 0.01;
+	col = fragPosition - camPos;
+	col = vec3(dist*0.001);
 
+	col = camPos * 0.01;
+	col = fragPosition - vec3(1000,0,1000);
+	
 	finalColor = vec4(col, 1.0);
 }
