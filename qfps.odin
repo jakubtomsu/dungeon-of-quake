@@ -42,8 +42,6 @@ rendertextureMain : rl.RenderTexture2D
 postprocessShader : rl.Shader
 tileShader : rl.Shader
 tileShaderCamPosUniformIndex : rl.ShaderLocationIndex
-tileShaderModPosUniformIndex : rl.ShaderLocationIndex
-tileShaderModSizeUniformIndex : rl.ShaderLocationIndex
 
 // gameplay entity
 // TODO
@@ -137,8 +135,6 @@ _init :: proc() {
 	postprocessShader = loadFragShader("postprocess.frag")
 	tileShader = loadShader("tile.vert", "tile.frag")
 	tileShaderCamPosUniformIndex  = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(tileShader, "camPos")
-	tileShaderModPosUniformIndex  = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(tileShader, "modPos")
-	tileShaderModSizeUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(tileShader, "modSize")
 
 	camera.position = {0, 3, 0}
 	camera.target = {}
@@ -159,7 +155,7 @@ _init :: proc() {
 	map_clearAll()
 	tilemap.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
 	map_loadFromFile("test.qfmap")
-	map_basetexture = loadTexture("test4.png")
+	map_basetexture = loadTexture("test2.png")
 	//map_debugPrint()
 }
 
@@ -382,10 +378,6 @@ map_debugPrint :: proc() {
 
 map_drawTilemap :: proc() {
 	map_drawTileBox :: proc(pos : vec3, size : vec3) {
-		p := pos
-		s := size
-		rl.SetShaderValue(tileShader, tileShaderModPosUniformIndex,  &p, rl.ShaderUniformDataType.VEC3)
-		rl.SetShaderValue(tileShader, tileShaderModSizeUniformIndex, &s, rl.ShaderUniformDataType.VEC3)
 		rl.DrawCubeTexture(map_basetexture, pos, size.x, size.y, size.z, rl.WHITE)
 	}
 	
@@ -761,7 +753,7 @@ player_update :: proc() {
 	println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
 	
 	player_pos = phy_vec
-	if phy_hit do player_pos += phy_norm*PHY_BOXCAST_EPS
+	if phy_hit do player_pos += phy_norm*PHY_BOXCAST_EPS*2.0
 
 	//rl.DrawCube(phy_vec, 1,1,1, rl.PINK)
 

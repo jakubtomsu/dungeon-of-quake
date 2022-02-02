@@ -34,11 +34,11 @@ void main() {
 	vec3 col = origColor;
 
 	// posterization
-	//col = pow(col, vec3(postergamma, postergamma, postergamma));
-	//col = col*numColors;
-	//col = floor(col);
-	//col = col/numColors;
-	//col = pow(col, vec3(1.0/postergamma));
+	col = pow(col, vec3(postergamma, postergamma, postergamma));
+	col = col*numColors;
+	col = floor(col);
+	col = col/numColors;
+	col = pow(col, vec3(1.0/postergamma));
 
 	//col = tonemapACES(col);
 	//col = pow(col, vec3(1.0 / screengamma)); // gamma correction
