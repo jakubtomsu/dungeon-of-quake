@@ -191,6 +191,8 @@ _render2d :: proc() {
 		debugtext("    pos", player_pos)
 		debugtext("    vel", player_velocity)
 		debugtext("    onground", player_isOnGround)
+		debugtext("map")
+		debugtext("bounds", tilemap.bounds)
 	}
 }
 
@@ -201,33 +203,7 @@ _render3d :: proc() {
 	rl.DrawCube(vec3{0, 0, 0}, 0.1,0.1,0.1, rl.RAYWHITE)
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
-	// draw tilemap
-	{
-		for x : i32 = 0; x < tilemap.bounds[0]; x += 1 {
-			for y : i32 = 0; y < tilemap.bounds[1]; y += 1 {
-				posxz : vec2 = {(cast(f32)x) * TILE_WIDTH, (cast(f32)y) * TILE_WIDTH} + vec2{TILE_WIDTH/2.0, TILE_WIDTH/2.0}
-				//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
-				
-				rl.BeginShaderMode(tileShader)
-				checker := cast(bool)((x%2) ~ (y%2))
-				#partial switch tilemap.tiles[x][y] {
-					case map_tileKind_t.WALL:
-						pos := vec3{posxz[0], 0.0, posxz[1]}
-						//rl.DrawCube(pos, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Color{cast(u8)x*50, cast(u8)y*50, 255, 255})
-						rl.DrawCubeTexture(map_basetexture, pos, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.WHITE)
-					case map_tileKind_t.EMPTY:
-						pos0 := vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}
-						pos1 := vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}
-						size := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}
-						//rl.DrawCube(pos0, size.x, size.y, size.z, checker ? rl.RED : rl.PINK)
-						//rl.DrawCube(pos1, size.x, size.y, size.z, checker ? rl.GREEN : rl.BLUE)
-						rl.DrawCubeTexture(map_basetexture, pos0, size.x, size.y, size.z, rl.WHITE)
-						rl.DrawCubeTexture(map_basetexture, pos1, size.x, size.y, size.z, rl.WHITE)
-				}
-				rl.EndShaderMode()
-			}
-		}
-	}
+	map_drawTilemap()
 }
 
 
@@ -400,6 +376,37 @@ map_debugPrint :: proc() {
 	}
 }
 
+map_drawTilemap :: proc() {
+	map_drawTileBox :: proc(pos : vec3, size : vec3) {
+		rl.DrawCubeTexture(map_basetexture, pos, size.x, size.y, size.z, rl.WHITE)
+	}
+	
+	rl.BeginShaderMode(tileShader)
+	for x : i32 = 0; x < tilemap.bounds[0]; x += 1 {
+		for y : i32 = 0; y < tilemap.bounds[1]; y += 1 {
+			posxz : vec2 = {(cast(f32)x) * TILE_WIDTH, (cast(f32)y) * TILE_WIDTH} + vec2{TILE_WIDTH/2.0, TILE_WIDTH/2.0}
+			//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
+			
+			checker := cast(bool)((x%2) ~ (y%2))
+			#partial switch tilemap.tiles[x][y] {
+				case map_tileKind_t.WALL:
+					pos := vec3{posxz[0], 0.0, posxz[1]}
+					//rl.DrawCube(pos, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Color{cast(u8)x*50, cast(u8)y*50, 255, 255})
+					map_drawTileBox(pos, {TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH})
+				case map_tileKind_t.EMPTY:
+					pos0 := vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}
+					pos1 := vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}
+					size := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}
+					//rl.DrawCube(pos0, size.x, size.y, size.z, checker ? rl.RED : rl.PINK)
+					//rl.DrawCube(pos1, size.x, size.y, size.z, checker ? rl.GREEN : rl.BLUE)
+					map_drawTileBox(pos0, {size.x, size.y, size.z})
+					map_drawTileBox(pos1, {size.x, size.y, size.z})
+			}
+		}
+	}
+	rl.EndShaderMode()
+}
+
 
 
 
@@ -537,7 +544,8 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 	tileposw : vec2 = vec2{tileposw3.x, tileposw3.z}
 
 	linelen := linalg.length(dir)
-	dir = linelen == 0.0 ? {0,1,0} : dir / linelen
+	if linelen < 0.0001 do return wishpos, {0,0.1,0}, false
+	dir = linelen == 0.0 ? {0,0,0} : dir / linelen
 	ddadir := linalg.normalize(vec2{dir.x, dir.z})
 
 	phy_boxCastContext_t :: struct {
@@ -559,7 +567,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 	ctx.dirsign	= vec3{sign(dir.x), sign(dir.y), sign(dir.z)}
 	ctx.dirinv	= vec3{1,1,1}/dir
 	ctx.dirinvabs	= vec3{abs(ctx.dirinv.x), abs(ctx.dirinv.y), abs(ctx.dirinv.z)}
-	ctx.boxoffs	= boxsize
+	ctx.boxoffs	= boxsize - {PHY_BOXCAST_EPS, PHY_BOXCAST_EPS, PHY_BOXCAST_EPS}
 	ctx.tmin	= linelen
 	ctx.normal	= vec3{0,0.1,0} // debug value
 	ctx.boxlen	= linalg.length(boxsize)
@@ -619,7 +627,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 		for i : i32 = 0; i < boxcount; i += 1 {
 			box := boxbuf[i]
 
-			//rl.DrawCube(box.pos, box.size.x*2, box.size.y*2, box.size.z*2, rl.Fade(rl.GREEN, 0.5))
+			//rl.DrawCube(box.pos, box.size.x*2, box.size.y*2, box.size.z*2, rl.Fade(rl.GREEN, 0.1))
 
 			n := ctx.dirinv * (ctx.pos - box.pos)
 			k := ctx.dirinvabs * (box.size + ctx.boxoffs)
@@ -627,9 +635,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 			t2 := -n + k
 			tn := max(max(t1.x, t1.y), t1.z)
 			tf := min(min(t2.x, t2.y), t2.z)
-			isinside := tn<-0.001 && tn<tf && tf>-0.0001
-			if isinside do ctx.hit = true
-			if tn>tf || tf<0.0 || tn>ctx.tmin || tn<-ctx.linelen || isinside {
+			if tn>tf || tf<0.0 || tn>ctx.tmin || tn<-ctx.linelen || tf<PHY_BOXCAST_EPS {
 				continue // no intersection or we have closer hit
 			}
 			ctx.tmin = tn
@@ -637,6 +643,8 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 			ctx.hit = true
 		}
 	}
+	
+	ctx.tmin = clamp(ctx.tmin, -ctx.linelen, ctx.linelen)
 
 	return pos + dir*ctx.tmin, ctx.normal, ctx.hit
 }
@@ -653,7 +661,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 player_lookRotEuler : vec3 = {}
 player_pos : vec3 = {TILE_WIDTH/2, 0, TILE_WIDTH/2}
 player_isOnGround : bool
-player_velocity : vec3 = {0,0.1,0}
+player_velocity : vec3 = {0,0.1,0.6}
 
 PLAYER_RADIUS			:: 1.0
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
@@ -661,13 +669,13 @@ PLAYER_LOOK_SENSITIVITY		:: 0.004
 PLAYER_FOV			:: 120
 PLAYER_VIEWMODEL_FOV		:: 120
 
-PLAYER_GRAVITY			:: 100 // 800
+PLAYER_GRAVITY			:: 200 // 800
 PLAYER_SPEED			:: 100 // 320
 PLAYER_GROUND_ACCELERATION	:: 10 // 10
-PLAYER_GROUND_FRICTION		:: 4 // 6
-PLAYER_AIR_ACCELERATION		:: 5.7 // 0.7
+PLAYER_GROUND_FRICTION		:: 6 // 6
+PLAYER_AIR_ACCELERATION		:: 0.7 // 0.7
 PLAYER_AIR_FRICTION		:: 0 // 0
-PLAYER_JUMP_SPEED		:: 37 // 270
+PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
 GUN_SCALE :: 0.7
@@ -720,7 +728,7 @@ player_update :: proc() {
 		player_velocity.y = PLAYER_JUMP_SPEED
 	}
 
-	player_velocity.y -= PLAYER_GRAVITY * deltatime * (player_isOnGround ? 0.25 : 1.0)
+	player_velocity.y -= PLAYER_GRAVITY * deltatime // * (player_isOnGround ? 0.25 : 1.0)
 
 	player_accelerate :: proc(dir : vec3, wishspeed : f32, accel : f32) {
 		currentspeed := linalg.dot(player_velocity, dir)
@@ -744,8 +752,8 @@ player_update :: proc() {
 	println("pos", player_pos, "vel", player_velocity)
 	println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
 	
-	//if phy_hit do player_pos = player_pos + phy_vec
-	player_pos = phy_vec + phy_norm*1e-2
+	player_pos = phy_vec
+	if phy_hit do player_pos += phy_norm*PHY_BOXCAST_EPS
 
 	//rl.DrawCube(phy_vec, 1,1,1, rl.PINK)
 
