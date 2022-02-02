@@ -19,7 +19,8 @@ out vec4 finalColor;
 
 void main() {
 	// Texel color fetching from texture sampler
-	vec4 texelColor = texture(texture0, fragTexCoord)*colDiffuse*fragColor;
+	vec2 uv = fragTexCoord;
+	vec4 texelColor = texture(texture0, uv)*colDiffuse*fragColor;
 	float dist = length(fragPosition - camPos);
 
 	vec3 col = texelColor.rgb;

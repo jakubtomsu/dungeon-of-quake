@@ -1,1 +1,5 @@
 bld_.bat
+
+build/*.exp
+build/*.lib
+build/log.txt

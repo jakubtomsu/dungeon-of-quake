@@ -13,6 +13,7 @@ x : hole in the ground (player can fall to death)
 - : bridge, platform in between floor and ceiling
 % : destroyable wall
 
+
 a : ammo
 h : health
 
