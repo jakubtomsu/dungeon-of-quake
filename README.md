@@ -3,8 +3,8 @@
 still work in progress!
 
 # how to build
-use `./build.bat` command to build the game  
-use `./build.bat run` command to build and run the game  
+use `.\build.bat` command to build the game  
+use `.\build.bat run` command to build and run the game  
 
 ### project dependencies
 Except the Odin compiler, there are **no dependencies whatsoever**  
