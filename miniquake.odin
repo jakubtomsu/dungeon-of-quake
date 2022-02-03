@@ -1,4 +1,4 @@
-package qfps
+package miniquake
 
 
 
@@ -121,7 +121,14 @@ main :: proc() {
 //
 
 _init :: proc() {
-	rl.InitWindow(WINDOW_X, WINDOW_Y, "qfps")
+	rl.InitWindow(WINDOW_X, WINDOW_Y, "miniquake")
+	rl.SetWindowState({
+		rl.ConfigFlag.WINDOW_TOPMOST,
+		rl.ConfigFlag.WINDOW_HIGHDPI,
+		rl.ConfigFlag.WINDOW_HIGHDPI,
+		rl.ConfigFlag.VSYNC_HINT,
+	})
+
 	rl.SetTargetFPS(75)
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
 	println("loadpath", loadpath)
@@ -149,7 +156,7 @@ _init :: proc() {
 
 	map_clearAll()
 	tilemap.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
-	map_loadFromFile("test.qfmap")
+	map_loadFromFile("test.mqm")
 	map_basetexture = loadTexture("test2.png")
 	//map_debugPrint()
 }
@@ -205,10 +212,16 @@ _render2d :: proc() {
 }
 
 _render3d :: proc() {
-	rl.DrawCube(vec3{1, 0, 0}, 1,0.1,0.1, rl.RED)
-	rl.DrawCube(vec3{0, 1, 0}, 0.1,1,0.1, rl.GREEN)
-	rl.DrawCube(vec3{0, 0, 1}, 0.1,0.1,1, rl.BLUE)
-	rl.DrawCube(vec3{0, 0, 0}, 0.1,0.1,0.1, rl.RAYWHITE)
+	when false {
+		if debugIsEnabled {
+			LEN :: 100
+			WID :: 1
+			rl.DrawCube(vec3{LEN, 0, 0}, LEN,WID,WID, rl.RED)
+			rl.DrawCube(vec3{0, LEN, 0}, WID,LEN,WID, rl.GREEN)
+			rl.DrawCube(vec3{0, 0, LEN}, WID,WID,LEN, rl.BLUE)
+			rl.DrawCube(vec3{0, 0, 0}, WID,WID,WID, rl.RAYWHITE)
+		}
+	}
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
 	rl.SetShaderValue(tileShader, tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
@@ -323,7 +336,7 @@ map_clearAll :: proc() {
 }
 
 map_loadFromFile :: proc(name: string) {
-	fullpath := filepath.clean(str.concatenate({loadpath, filepath.SEPARATOR_STRING, "levels", filepath.SEPARATOR_STRING, name}))
+	fullpath := filepath.clean(str.concatenate({loadpath, filepath.SEPARATOR_STRING, "maps", filepath.SEPARATOR_STRING, name}))
 	println("! loading map: ", fullpath)
 	data, success := os.read_entire_file_from_filename(fullpath)
 

@@ -1,4 +1,6 @@
-bld_.bat
+
+# for custom build scripts
+build_.bat
 
 build/*.exp
 build/*.lib
