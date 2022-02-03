@@ -470,6 +470,7 @@ player_update :: proc() {
 	if rl.IsKeyDown(rl.KeyboardKey.A)	do movedir.x += 1.0
 	if rl.IsKeyDown(rl.KeyboardKey.S)	do movedir.y -= 1.0
 	if rl.IsKeyDown(rl.KeyboardKey.D)	do movedir.x -= 1.0
+	if rl.IsKeyPressed(rl.KeyboardKey.C)do player_position.y -= 2.0
 
 	tilepos := map_worldToTile(player_position)
 	c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
@@ -509,8 +510,7 @@ player_update :: proc() {
 	player_isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
 
 
-	if phy_hit do player_velocity = player_clipVelocity(player_velocity, phy_norm, !player_isOnGround && phy_hit ? 1.65 : 1.01)
-	if phy_hit && !player_isOnGround do player_velocity += phy_norm * 1e-2
+	if phy_hit do player_velocity = player_clipVelocity(player_velocity, phy_norm, !player_isOnGround && phy_hit ? 1.5 : 0.98)
 
 	player_velocity = player_friction(player_velocity, player_isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)
 
@@ -525,13 +525,13 @@ player_update :: proc() {
 		player_lookRotEuler.x += rl.GetMouseDelta().y * PLAYER_LOOK_SENSITIVITY
 		player_lookRotEuler.x = clamp(player_lookRotEuler.x, -0.48 * math.PI, 0.48 * math.PI)
 		player_lookRotEuler.z = math.lerp(player_lookRotEuler.z, 0.0, clamp(deltatime * 7.5, 0.0, 1.0))
-		player_lookRotEuler.z -= movedir.x * deltatime * 0.75 - rl.GetMouseDelta().x*0.0001
-		player_lookRotEuler.z = clamp(player_lookRotEuler.z, -math.PI*0.2, math.PI*0.2)
+		player_lookRotEuler.z -= movedir.x*deltatime*0.75
+		player_lookRotEuler.z = clamp(player_lookRotEuler.z, -math.PI*0.3, math.PI*0.3)
 
 		cam_y : f32 = PLAYER_HEAD_CENTER_OFFSET
 		camera.position = player_position + camera.up * cam_y
 		camera.target = camera.position + cam_forw
-		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_lookRotEuler.z, cam_forw), vec3{0,1.0,0}))
+		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_lookRotEuler.z*1.3, cam_forw), vec3{0,1.0,0}))
 	}
 
 	tilepos = map_worldToTile(player_position)
@@ -540,12 +540,24 @@ player_update :: proc() {
 
 	if isInElevatorTile {
 		height := tilemap.elevatorHeights[c]
+		moving := true
+		height += TILE_ELEVATOR_SPEED * deltatime
+		if height > 1.0 {
+			height = 1.0
+			moving = false
+		} else if height < 0.0 {
+			height = 0.0
+			moving = false
+		}
+		
+		tilemap.elevatorHeights[c] = height
+	
 		y0 : f32 = (-4.5)*TILE_WIDTH
 		y1 : f32 = (-1.5)*TILE_WIDTH
-		y := math.lerp(y0, y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y
-		if player_position.y - 0.01 < y {
+		y := math.lerp(y0, y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
+		if player_position.y - 0.01 < y && moving {
 			player_position.y = y
-			if !player_isOnGround do player_velocity = player_friction(player_velocity, PLAYER_GROUND_FRICTION * 0.3)
+			//if !player_isOnGround do player_velocity = player_friction(player_velocity, PLAYER_GROUND_FRICTION * 0.3)
 			player_velocity.y = PLAYER_GRAVITY * deltatime
 		}
 	}
@@ -558,17 +570,10 @@ player_update :: proc() {
 		rl.DrawLine3D(pos, pos + normal*4, rl.ORANGE)
 	}
 
-	// elevator update
-	{
-		
-		if isInElevatorTile do tilemap.elevatorHeights[c] += TILE_ELEVATOR_SPEED * deltatime
 
-		if debugIsEnabled {
-			rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, {0,255,0,100})
-		}
+	if debugIsEnabled {
+		rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, {0,255,0,100})
 	}
-
-
 
 	player_clipVelocity :: proc(vel : vec3, normal : vec3, overbounce : f32) -> vec3 {
 		backoff := linalg.vector_dot(vel, normal) * overbounce
@@ -611,7 +616,9 @@ gun_timer : f32 = 0.0
 gun_ammoCounts : [GUN_COUNT]i32 = {24, 86, 12}
 
 gun_calcViewportPos :: proc() -> vec3 {
-	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2, 0.2}
+	s := math.sin(timepassed * math.PI * 3.0) * clamp(linalg.length(player_velocity) * 0.01, 0.0, 1.0) *
+		0.04 * (player_isOnGround ? 1.0 : 0.05)
+	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2 + s, 0.2}
 }
 
 gun_calcMuzzlePos :: proc() {
@@ -1007,9 +1014,12 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 			t2 := -n + k
 			tn := max(max(t1.x, t1.y), t1.z)
 			tf := min(min(t2.x, t2.y), t2.z)
-			if tn>tf || tf<0.0 || tn>ctx.tmin || tf<PHY_BOXCAST_EPS || tn<-PHY_BOXCAST_EPS { // tn<-PHY_BOXCAST_EPS
-				continue // no intersection or we have closer hit
+
+			if tn>tf || tf<0.0 do continue // no intersection
+			if tn>ctx.tmin || tf<PHY_BOXCAST_EPS || (tn<-PHY_BOXCAST_EPS && tf<PHY_BOXCAST_EPS) {
+				continue
 			}
+		
 			ctx.tmin = tn
 			ctx.normal = -ctx.dirsign * cast(vec3)(glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))
 			ctx.hit = true
