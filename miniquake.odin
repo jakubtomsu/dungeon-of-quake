@@ -6,6 +6,7 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:fmt"
+import "core:c"
 //RAYLIB_USE_LINALG :: true
 import rl "vendor:raylib"
 import "core:os"
@@ -64,7 +65,7 @@ entityBuf : map[entId_t]entity_t
 //
 
 main :: proc() {
-	_init()
+	_app_init()
 
 	for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
 		println("frame =", framespassed, "deltatime =", deltatime)
@@ -74,14 +75,14 @@ main :: proc() {
 		rl.UpdateCamera(&viewmodelCamera)
 		rl.DisableCursor()
 
-		_update()
+		_app_update()
 
 		rl.BeginTextureMode(rendertextureMain)
 			rl.ClearBackground(rl.BLACK)
 
 			rl.BeginMode3D(camera)
-				_render3d()
-				player_update() // TODO: update player after _update() call. for now it's here since we need drawing for debug
+				_app_render3d()
+				player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
 				gun_update()
 				_bullet_updateBufAndRender()
 			rl.EndMode3D()
@@ -103,7 +104,7 @@ main :: proc() {
 				)
 			rl.EndShaderMode()
 
-			_render2d()
+			_app_render2d()
 		rl.EndDrawing()
 
 
@@ -116,11 +117,12 @@ main :: proc() {
 
 
 
+
 //
 // APP
 //
 
-_init :: proc() {
+_app_init :: proc() {
 	rl.InitWindow(WINDOW_X, WINDOW_Y, "miniquake")
 	rl.SetWindowState({
 		rl.ConfigFlag.WINDOW_TOPMOST,
@@ -161,12 +163,12 @@ _init :: proc() {
 	//map_debugPrint()
 }
 
-_update :: proc() {
+_app_update :: proc() {
 	if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do debugIsEnabled = !debugIsEnabled
 }
 
 _debugtext_y : i32 = 0
-_render2d :: proc() {
+_app_render2d :: proc() {
 	rl.DrawFPS(0, 0)
 	_debugtext_y = 2
 
@@ -180,18 +182,14 @@ _render2d :: proc() {
 	rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
 
 	gunindex := cast(i32)gun_equipped
+
 	// draw ammo
 	{
-		WIDTH :: 6
-		HEIGHT :: 16
-		BOUND :: 2
-		for i : i32 = 0; i < gun_ammoCounts[gunindex]; i += 1 {
-			rl.DrawRectangle(i*(WIDTH + BOUND) + BOUND*2, WINDOW_Y - HEIGHT - BOUND*2, WIDTH, HEIGHT, rl.Color{247, 186, 45, 200})
-		}
+		ui_drawText({WINDOW_X - 150, WINDOW_Y - 50}, 20, rl.Color{255,200,50,255}, fmt.tprint("ammo: ", gun_ammoCounts[gunindex]))
 	}
 
 	if debugIsEnabled {
-		debugtext :: proc(args: ..any) {
+		debugtext :: proc(args : ..any) {
 			tstr := fmt.tprint(args=args)
 			cstr := str.clone_to_cstring(tstr, context.temp_allocator)
 			rl.DrawText(cstr, 6, _debugtext_y * 12, 10, rl.Fade(rl.WHITE, 0.8))
@@ -211,7 +209,7 @@ _render2d :: proc() {
 	}
 }
 
-_render3d :: proc() {
+_app_render3d :: proc() {
 	when false {
 		if debugIsEnabled {
 			LEN :: 100
@@ -222,42 +220,11 @@ _render3d :: proc() {
 			rl.DrawCube(vec3{0, 0, 0}, WID,WID,WID, rl.RAYWHITE)
 		}
 	}
+
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
 	rl.SetShaderValue(tileShader, tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
 	map_drawTilemap()
-}
-
-
-
-// temp alloc
-assetPathCstr :: proc(subdir : string, path : string) -> cstring {
-	return str.clone_to_cstring(
-		fmt.tprint(
-			args = {loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
-			sep="",
-		),
-		context.temp_allocator)
-}
-
-loadTexture :: proc(path : string) -> rl.Texture {
-	fullpath := assetPathCstr("textures", path)
-	println("! loading texture: ", fullpath)
-	return rl.LoadTexture(fullpath)
-}
-
-loadShader :: proc(vertpath : string, fragpath : string) -> rl.Shader {
-	vertfullpath := assetPathCstr("shaders", vertpath)
-	fragfullpath := assetPathCstr("shaders", fragpath)
-	println("! loading shader: vert: ", vertfullpath, "frag:", fragfullpath)
-	return rl.LoadShader(vertfullpath, fragfullpath)
-}
-
-// uses default vertex shader
-loadFragShader :: proc(path : string) -> rl.Shader {
-	fullpath := assetPathCstr("shaders", path)
-	println("! loading shader: ", fullpath)
-	return rl.LoadShader(nil, fullpath)
 }
 
 
@@ -304,6 +271,7 @@ tilemap : struct {
 
 
 
+// @returns: 2d tile position from 3d worldspace 'p'
 map_worldToTile :: proc(p : vec3) -> ivec2 {
 	return ivec2{cast(i32)((p.x / TILE_WIDTH)), cast(i32)((p.z / TILE_WIDTH))}
 }
@@ -320,6 +288,63 @@ map_isTilePosValid :: proc(coord : ivec2) -> bool {
 map_tilePosClamp :: proc(coord : ivec2) -> ivec2 {
 	return ivec2{clamp(coord.x, 0, tilemap.bounds.x), clamp(coord.y, 0, tilemap.bounds.y)}
 }
+
+
+
+// fills input buffer with axis-aligned boxes for a given tile
+// @returns: number of boxes for the tile
+map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
+	tileKind := tilemap.tiles[coord[0]][coord[1]]
+
+	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> phy_box_t {
+		return phy_box_t{
+			vec3{posxz.x, posy*TILE_WIDTH, posxz.y},
+			vec3{TILE_WIDTH, sizey * TILE_WIDTH, TILE_WIDTH} / 2,
+		}
+	}
+
+	posxz := vec2{cast(f32)coord[0]+0.5, cast(f32)coord[1]+0.5}*TILE_WIDTH
+
+	#partial switch tileKind {
+		case map_tileKind_t.WALL:
+			boxbuf[0] = phy_box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
+			return 1
+
+		case map_tileKind_t.EMPTY:
+			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
+			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
+			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
+			return 2
+		
+		case map_tileKind_t.WALL_MID:
+			boxbuf[0] = phy_calcBox(posxz, -1.5, 4)
+			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
+			return 2
+
+		case map_tileKind_t.PLATFORM:
+			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[2] = phy_calcBox(posxz, 0, 1)
+			return 3
+		
+		case map_tileKind_t.CEILING:
+			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[1] = phy_calcBox(posxz, 1.5, 4)
+			return 2
+		
+		case map_tileKind_t.ELEVATOR:
+			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
+			height, ok := tilemap.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
+			if !ok do height = 0.0
+			y0 : f32 = (-4.5)*TILE_WIDTH //-TILE_HEIGHT/2 - TILE_WIDTH
+			y1 : f32 = (-1.5)*TILE_WIDTH
+			boxbuf[0] = {vec3{posxz[0], math.lerp(y0, y1, height), posxz[1]}, vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2}
+			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
+			return 2
+	}
+	return 0
+}
+
 
 
 map_clearAll :: proc() {
@@ -430,7 +455,7 @@ map_drawTilemap :: proc() {
 			
 			checker := cast(bool)((x%2) ~ (y%2))
 			boxbuf : [PHY_MAX_TILE_BOXES]phy_box_t = {}
-			boxcount := phy_getTileBoxes({x, y}, boxbuf[0:])
+			boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
 			for i : i32 = 0; i < boxcount; i += 1 {
 				map_drawTileBox(boxbuf[i].pos, boxbuf[i].size*2)
 			}
@@ -444,6 +469,9 @@ map_drawTilemap :: proc() {
 
 //
 // PLAYER
+//
+// mainly player movement code
+// also handles elevators etc.
 //
 
 player_lookRotEuler : vec3 = {}
@@ -515,7 +543,7 @@ player_update :: proc() {
 	phy_vec, phy_norm, phy_hit := phy_boxCastTilemap(player_position, wishpos, PLAYER_SIZE)
 	
 	println("pos", player_position, "vel", player_velocity)
-	println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
+	//println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
 	
 	player_position = phy_vec
 	if phy_hit do player_position += phy_norm*PHY_BOXCAST_EPS*2.0
@@ -609,7 +637,8 @@ player_update :: proc() {
 
 //
 // GUNS
-// (for the player, not for the enemies)
+//
+// (guns for the player, not for the enemies)
 //
 
 GUN_SCALE :: 0.7
@@ -687,6 +716,8 @@ gun_update :: proc() {
 		}
 	}
 }
+
+
 
 
 
@@ -774,8 +805,24 @@ _bullet_updateBufAndRender :: proc() {
 
 
 
+
+//
+// MENU UI
+//
+
+ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
+	cstr := str.clone_to_cstring(text, context.temp_allocator)
+	rl.DrawText(cstr, cast(c.int)pos.x, cast(c.int)pos.y, cast(c.int)size, color)
+}
+
+
+
+
+
 //
 // PHYSICS
+//
+// for raycasting the tilemap etc.
 //
 
 PHY_MAX_TILE_BOXES :: 4
@@ -804,59 +851,6 @@ phy_getTileBox :: proc(coord : ivec2, pos : vec3) -> (phy_box_t, bool) {
 	}
 	return phy_box_t{}, false
 }
-
-phy_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
-	tileKind := tilemap.tiles[coord[0]][coord[1]]
-
-	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> phy_box_t {
-		return phy_box_t{
-			vec3{posxz.x, posy*TILE_WIDTH, posxz.y},
-			vec3{TILE_WIDTH, sizey * TILE_WIDTH, TILE_WIDTH} / 2,
-		}
-	}
-
-	posxz := vec2{cast(f32)coord[0]+0.5, cast(f32)coord[1]+0.5}*TILE_WIDTH
-
-	#partial switch tileKind {
-		case map_tileKind_t.WALL:
-			boxbuf[0] = phy_box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
-			return 1
-
-		case map_tileKind_t.EMPTY:
-			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
-			return 2
-		
-		case map_tileKind_t.WALL_MID:
-			boxbuf[0] = phy_calcBox(posxz, -1.5, 4)
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
-			return 2
-
-		case map_tileKind_t.PLATFORM:
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
-			boxbuf[2] = phy_calcBox(posxz, 0, 1)
-			return 3
-		
-		case map_tileKind_t.CEILING:
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
-			boxbuf[1] = phy_calcBox(posxz, 1.5, 4)
-			return 2
-		
-		case map_tileKind_t.ELEVATOR:
-			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
-			height, ok := tilemap.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
-			if !ok do height = 0.0
-			y0 : f32 = (-4.5)*TILE_WIDTH //-TILE_HEIGHT/2 - TILE_WIDTH
-			y1 : f32 = (-1.5)*TILE_WIDTH
-			boxbuf[0] = {vec3{posxz[0], math.lerp(y0, y1, height), posxz[1]}, vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
-			return 2
-	}
-	return 0
-}
-
 
 
 // @returns: offset vector
@@ -957,7 +951,11 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 
 	ctx.pos		= pos
 	ctx.dirsign	= vec3{sign(dir.x), sign(dir.y), sign(dir.z)}
-	ctx.dirinv	= vec3{1,1,1}/dir
+	ctx.dirinv	= vec3{
+		dir.x==0.0?1e6:1.0/dir.x,
+		dir.y==0.0?1e6:1.0/dir.y,
+		dir.z==0.0?1e6:1.0/dir.z,
+	}//vec3{1,1,1}/dir
 	ctx.dirinvabs	= vec3{abs(ctx.dirinv.x), abs(ctx.dirinv.y), abs(ctx.dirinv.z)}
 	ctx.boxoffs	= boxsize - {PHY_BOXCAST_EPS, PHY_BOXCAST_EPS, PHY_BOXCAST_EPS}
 	ctx.tmin	= linelen
@@ -1014,7 +1012,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 	// @returns : clipped pos
 	phy_boxCastTilemapTile :: proc(coord : ivec2, ctx : ^phy_boxCastContext_t) {
 		boxbuf : [PHY_MAX_TILE_BOXES]phy_box_t = {}
-		boxcount := phy_getTileBoxes(coord, boxbuf[0:])
+		boxcount := map_getTileBoxes(coord, boxbuf[0:])
 
 		for i : i32 = 0; i < boxcount; i += 1 {
 			box := boxbuf[i]
@@ -1028,14 +1026,22 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 			tn := max(max(t1.x, t1.y), t1.z)
 			tf := min(min(t2.x, t2.y), t2.z)
 
-			if tn>tf || tf<0.0 do continue // no intersection
-			if tn>ctx.tmin || tf<PHY_BOXCAST_EPS || (tn<-PHY_BOXCAST_EPS && tf<PHY_BOXCAST_EPS) {
-				continue
-			}
+			println("tn", tn, "tf", tf)
+
+			if tn>tf || tf<0.0 do continue // no intersection (inside counts as intersection)
+			if tn>ctx.tmin do continue // this hit is worse than the one we already have
+			//if tn>ctx.tmin || tf<PHY_BOXCAST_EPS || (tn<-PHY_BOXCAST_EPS && tf<PHY_BOXCAST_EPS) {
+			//	continue
+			//}
+
+			if math.is_nan(tn) || math.is_nan(tf) || math.is_inf(tn) || math.is_inf(tf) do continue
+
+			println("ok")
 		
 			ctx.tmin = tn
 			ctx.normal = -ctx.dirsign * cast(vec3)(glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))
 			ctx.hit = true
+
 		}
 	}
 	
@@ -1044,3 +1050,42 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 	return pos + dir*ctx.tmin, ctx.normal, ctx.hit
 }
 
+
+
+
+
+
+//
+// HELPER PROCEDURES
+//
+
+// temp alloc
+assetPathCstr :: proc(subdir : string, path : string) -> cstring {
+	return str.clone_to_cstring(
+		fmt.tprint(
+			args = {loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
+			sep="",
+		),
+		context.temp_allocator,
+	)
+}
+
+loadTexture :: proc(path : string) -> rl.Texture {
+	fullpath := assetPathCstr("textures", path)
+	println("! loading texture: ", fullpath)
+	return rl.LoadTexture(fullpath)
+}
+
+loadShader :: proc(vertpath : string, fragpath : string) -> rl.Shader {
+	vertfullpath := assetPathCstr("shaders", vertpath)
+	fragfullpath := assetPathCstr("shaders", fragpath)
+	println("! loading shader: vert: ", vertfullpath, "frag:", fragfullpath)
+	return rl.LoadShader(vertfullpath, fragfullpath)
+}
+
+// uses default vertex shader
+loadFragShader :: proc(path : string) -> rl.Shader {
+	fullpath := assetPathCstr("shaders", path)
+	println("! loading shader: ", fullpath)
+	return rl.LoadShader(nil, fullpath)
+}
