@@ -10,8 +10,6 @@ in vec4 vertexColor;
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
-uniform vec3 modPos;
-uniform vec3 modSize;
 
 // Output vertex attributes (to fragment shader)
 out vec3 fragPosition;
@@ -21,13 +19,20 @@ out vec3 fragNormal;
 
 // NOTE: Add here your custom variables
 
-void main()
-{
-	// Send vertex attributes to fragment shader
-	fragPosition = vertexPosition; //(matModel * vec4(vertexPosition, 1.0)).xyz; //vec3(modPos + (vertexPosition*modSize));
+vec2 triplanarMax(vec3 p, vec3 n) {
+	float x = abs(n.x);
+	float y = abs(n.y);
+	float z = abs(n.z);
+	return (x>y ? (x>z ? vec2(p.y, p.z) : vec2(p.x, p.y)) : (y>z ? vec2(p.x, p.z) : vec2(p.x, p.y)));
+}
+
+void main() {
+	vec3 modPos = matModel[3].xyz;
+	fragPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;
 	fragTexCoord = vertexTexCoord;
+	fragNormal = normalize((matNormal * vec4(vertexNormal, 1.0)).xyz);
+	fragTexCoord = triplanarMax((fragPosition - modPos) / 30.0 + vec3(0.5), fragNormal);
 	fragColor = vertexColor;
-	fragNormal = normalize(vec3(matNormal*vec4(vertexNormal, 1.0)));
 
 	// Calculate final vertex position
 	gl_Position = mvp*vec4(vertexPosition, 1.0);

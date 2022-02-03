@@ -5,8 +5,10 @@ package miniquake
 import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
+import "core:math/rand"
 import "core:fmt"
 import "core:c"
+import "core:time"
 //RAYLIB_USE_LINALG :: true
 import rl "vendor:raylib"
 import "core:os"
@@ -43,6 +45,9 @@ rendertextureMain : rl.RenderTexture2D
 postprocessShader : rl.Shader
 tileShader : rl.Shader
 tileShaderCamPosUniformIndex : rl.ShaderLocationIndex
+cubeModel : rl.Model
+randData : rand.Rand
+
 
 // gameplay entity
 // TODO
@@ -84,7 +89,8 @@ main :: proc() {
 				_app_render3d()
 				player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
 				gun_update()
-				_bullet_updateBufAndRender()
+				_enemy_updateDataAndRender()
+				_bullet_updateDataAndRender()
 			rl.EndMode3D()
 
 			rl.BeginMode3D(viewmodelCamera)
@@ -140,6 +146,14 @@ _app_init :: proc() {
 	tileShader = loadShader("tile.vert", "tile.frag")
 	tileShaderCamPosUniformIndex  = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(tileShader, "camPos")
 
+	map_basetexture = loadTexture("metal.png")
+
+	cubeModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
+	cubeModel.materials[0].shader = tileShader
+	rl.SetMaterialTexture(&cubeModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_basetexture)
+
+	rand.init(&randData, cast(u64)time.now()._nsec)
+
 	camera.position = {0, 3, 0}
 	camera.target = {}
 	camera.up = vec3{0.0, 1.0, 0.0}
@@ -157,14 +171,29 @@ _app_init :: proc() {
 	entityBuf = make(type_of(entityBuf))
 
 	map_clearAll()
-	tilemap.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
-	map_loadFromFile("test.mqm")
-	map_basetexture = loadTexture("test2.png")
+	map_data.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
+	if os.is_file(appendToAssetPath("maps", "_quickload.mqm")) {
+		map_loadFromFile("_quickload.mqm")
+	} else {
+		map_loadFromFile("test.mqm")
+	}
 	//map_debugPrint()
+
+	player_startGame()
 }
 
 _app_update :: proc() {
 	if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do debugIsEnabled = !debugIsEnabled
+
+	// pull elevators down
+	{
+		playerTilePos := map_worldToTile(player_position)
+		c := [2]u8{cast(u8)playerTilePos.x, cast(u8)playerTilePos.y}
+		for key, val in map_data.elevatorHeights {
+			if key == c do continue
+			map_data.elevatorHeights[key] = clamp(val - (TILE_ELEVATOR_MOVE_FACTOR * deltatime), 0.0, 1.0)
+		}
+	}
 }
 
 _debugtext_y : i32 = 0
@@ -201,11 +230,13 @@ _app_render2d :: proc() {
 		debugtext("    vel", player_velocity)
 		debugtext("    onground", player_isOnGround)
 		debugtext("map")
-		debugtext("    bounds", tilemap.bounds)
+		debugtext("    bounds", map_data.bounds)
 		debugtext("gun")
 		debugtext("    equipped", gun_equipped)
 		debugtext("    timer", gun_timer)
 		debugtext("    ammo counts", gun_ammoCounts)
+		debugtext("bullets")
+		debugtext("    linear effect count", bullet_data.linearEffectsCount)
 	}
 }
 
@@ -231,6 +262,7 @@ _app_render3d :: proc() {
 
 
 
+
 //
 // MAP
 //
@@ -242,30 +274,38 @@ TILEMAP_Y_TILES		:: 7
 TILE_HEIGHT		:: TILE_WIDTH * TILEMAP_Y_TILES
 TILEMAP_MID		:: 4
 
-TILE_ELEVATOR_SPEED	:: 0.7
+TILE_ELEVATOR_MOVE_FACTOR	:: 0.55
+TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
+TILE_ELEVATOR_Y1		:: cast(f32)-1.5*TILE_WIDTH - 2.0
+TILE_ELEVATOR_SPEED		:: (TILE_ELEVATOR_Y1 - TILE_ELEVATOR_Y0) * TILE_ELEVATOR_MOVE_FACTOR
+
+MAP_TILE_FINISH_SIZE :: vec3{16, 30, 16}
 
 map_basetexture : rl.Texture2D
 
 
 
 map_tileKind_t :: enum u8 {
-	EMPTY		= ' ',
-	WALL		= '#',
-	WALL_MID	= 'w',
-	CEILING		= 'c',
-	START_LOWER	= 's', // translated
-	START_UPPER	= 'S', // translated
-	FINISH_LOWER	= 'f', // translated
-	FINISH_UPPER	= 'F', // translated
-	PLATFORM	= 'p',
-	ELEVATOR	= 'e',
+	EMPTY			= ' ',
+	WALL			= '#',
+	WALL_MID		= 'w',
+	CEILING			= 'c',
+	START_LOWER		= 's', // translated
+	START_UPPER		= 'S', // translated
+	FINISH_LOWER		= 'f', // translated
+	FINISH_UPPER		= 'F', // translated
+	PLATFORM		= 'p',
+	ELEVATOR		= 'e',
+	ENEMY_GRUNT_LOWER	= 'g', // translated
+	ENEMY_GRUNT_UPPER	= 'G', // translated
 }
 
-tilemap : struct {
+
+map_data : struct {
 	tiles		: [TILEMAP_MAX_WIDTH][TILEMAP_MAX_WIDTH]map_tileKind_t,
 	bounds		: ivec2,
-	start		: ivec2,
-	finish		: ivec2,
+	startPos	: vec3,
+	finishPos	: vec3,
 	elevatorHeights	: map[[2]u8]f32,
 }
 
@@ -281,12 +321,16 @@ map_tileToWorld :: proc(p : ivec2) -> vec3 {
 	return vec3{((cast(f32)p.x) + 0.5) * TILE_WIDTH, 0.0, ((cast(f32)p.y) + 0.5) * TILE_WIDTH}
 }
 
+map_isTilePosInBufferBounds :: proc(coord : ivec2) -> bool {
+	return coord.x >= 0 && coord.y >= 0 && coord.x < TILEMAP_MAX_WIDTH && coord.y < TILEMAP_MAX_WIDTH
+}
+
 map_isTilePosValid :: proc(coord : ivec2) -> bool {
-	return coord.x >= 0 && coord.y >= 0 && coord.x < TILEMAP_MAX_WIDTH && coord.y < TILEMAP_MAX_WIDTH && coord.x < tilemap.bounds.x && coord.y < tilemap.bounds.y
+	return map_isTilePosInBufferBounds(coord) && coord.x < map_data.bounds.x && coord.y < map_data.bounds.y
 }
 
 map_tilePosClamp :: proc(coord : ivec2) -> ivec2 {
-	return ivec2{clamp(coord.x, 0, tilemap.bounds.x), clamp(coord.y, 0, tilemap.bounds.y)}
+	return ivec2{clamp(coord.x, 0, map_data.bounds.x), clamp(coord.y, 0, map_data.bounds.y)}
 }
 
 
@@ -294,7 +338,7 @@ map_tilePosClamp :: proc(coord : ivec2) -> ivec2 {
 // fills input buffer with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
 map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
-	tileKind := tilemap.tiles[coord[0]][coord[1]]
+	tileKind := map_data.tiles[coord[0]][coord[1]]
 
 	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> phy_box_t {
 		return phy_box_t{
@@ -317,7 +361,7 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			return 2
 		
 		case map_tileKind_t.WALL_MID:
-			boxbuf[0] = phy_calcBox(posxz, -1.5, 4)
+			boxbuf[0] = phy_calcBox(posxz, -2, 5)
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
 			return 2
 
@@ -329,16 +373,14 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 		
 		case map_tileKind_t.CEILING:
 			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
-			boxbuf[1] = phy_calcBox(posxz, 1.5, 4)
+			boxbuf[1] = phy_calcBox(posxz, 2, 5)
 			return 2
 		
 		case map_tileKind_t.ELEVATOR:
 			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
-			height, ok := tilemap.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
+			height, ok := map_data.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
 			if !ok do height = 0.0
-			y0 : f32 = (-4.5)*TILE_WIDTH //-TILE_HEIGHT/2 - TILE_WIDTH
-			y1 : f32 = (-1.5)*TILE_WIDTH
-			boxbuf[0] = {vec3{posxz[0], math.lerp(y0, y1, height), posxz[1]}, vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2}
+			boxbuf[0] = {vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]}, vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2}
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
 			return 2
 	}
@@ -348,14 +390,14 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 
 
 map_clearAll :: proc() {
-	tilemap.bounds[0] = 0
-	tilemap.bounds[1] = 0
+	map_data.bounds[0] = 0
+	map_data.bounds[1] = 0
 
-	delete(tilemap.elevatorHeights)
+	delete(map_data.elevatorHeights)
 
 	for x : u32 = 0; x < TILEMAP_MAX_WIDTH; x += 1 {
 		for y : u32 = 0; y < TILEMAP_MAX_WIDTH; y += 1 {
-			tilemap.tiles[x][y] = map_tileKind_t.EMPTY
+			map_data.tiles[x][y] = map_tileKind_t.EMPTY
 		}
 	}
 }
@@ -374,7 +416,7 @@ map_loadFromFile :: proc(name: string) {
 
 	map_clearAll()
 
-	tilemap.elevatorHeights = make(type_of(tilemap.elevatorHeights))
+	map_data.elevatorHeights = make(type_of(map_data.elevatorHeights))
 
 
 	index : i32 = 0
@@ -391,8 +433,8 @@ map_loadFromFile :: proc(name: string) {
 			case '\n':
 				println("\\n")
 				y += 1
-				tilemap.bounds[0] = max(tilemap.bounds[0], x)
-				tilemap.bounds[1] = max(tilemap.bounds[1], y)
+				map_data.bounds[0] = max(map_data.bounds[0], x)
+				map_data.bounds[1] = max(map_data.bounds[1], y)
 				x = 0
 				continue dataloop
 			case '\r':
@@ -402,41 +444,58 @@ map_loadFromFile :: proc(name: string) {
 	
 		tile := cast(map_tileKind_t)ch
 		
-		println("pre ", tile)
-		#partial switch tile {
-			case map_tileKind_t.START_LOWER:
-				player_position = map_tileToWorld({x, y})
-				tile = map_tileKind_t.EMPTY
-			case map_tileKind_t.START_UPPER:
-				player_position = map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH, 0}
-				tile = map_tileKind_t.WALL_MID
+		if map_isTilePosInBufferBounds({x, y}) {
+			println("pre ", tile)
+			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/4 - TILE_WIDTH, 0}
+			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH, 0}
+		
+			// tile translation
+			#partial switch tile {
+				case map_tileKind_t.START_LOWER:
+					map_data.startPos = map_tileToWorld({x, y}) //- vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/4 - TILE_WIDTH, 0}
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.START_UPPER:
+					map_data.startPos = highpos
+					tile = map_tileKind_t.WALL_MID
 
-			case map_tileKind_t.FINISH_LOWER: tile = map_tileKind_t.EMPTY
-			case map_tileKind_t.FINISH_UPPER: tile = map_tileKind_t.WALL_MID
+				case map_tileKind_t.FINISH_LOWER:
+					map_data.finishPos = lowpos
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.FINISH_UPPER:
+					map_data.finishPos = highpos
+					tile = map_tileKind_t.WALL_MID
 
-			case map_tileKind_t.ELEVATOR: tilemap.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
+				case map_tileKind_t.ELEVATOR: map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
+
+				case map_tileKind_t.ENEMY_GRUNT_LOWER:
+					enemy_spawnGrunt(lowpos)
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.ENEMY_GRUNT_UPPER:
+					enemy_spawnGrunt(highpos)
+					tile = map_tileKind_t.WALL_MID
+			}
+
+			map_data.tiles[x][y] = tile
+			println("post", tile)
 		}
-
-		tilemap.tiles[x][y] = tile
-		println("post", tile)
 
 		x += 1
 
 		//println(cast(map_tileKind_t)ch)
 	}
 
-	tilemap.bounds[1] += 1
+	map_data.bounds[1] += 1
 	println("end")
 
-	println("bounds[0]", tilemap.bounds[0], "bounds[1]", tilemap.bounds[1])
+	println("bounds[0]", map_data.bounds[0], "bounds[1]", map_data.bounds[1])
 
 	free(&data[0])
 }
 
 map_debugPrint :: proc() {
-	for x : i32 = 0; x < tilemap.bounds[0]; x += 1 {
-		for y : i32 = 0; y < tilemap.bounds[1]; y += 1 {
-			fmt.print(tilemap.tiles[x][y] == map_tileKind_t.WALL ? "#" : " ")
+	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
+		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
+			fmt.print(map_data.tiles[x][y] == map_tileKind_t.WALL ? "#" : " ")
 		}
 		println("")
 	}
@@ -444,12 +503,13 @@ map_debugPrint :: proc() {
 
 map_drawTilemap :: proc() {
 	map_drawTileBox :: proc(pos : vec3, size : vec3) {
-		rl.DrawCubeTexture(map_basetexture, pos, size.x, size.y, size.z, rl.WHITE)
+		//rl.DrawCubeTexture(map_basetexture, pos, size.x, size.y, size.z, rl.WHITE)
+		rl.DrawModelEx(cubeModel, pos, {0,1,0}, 0.0, size, rl.WHITE)
 	}
 	
 	rl.BeginShaderMode(tileShader)
-	for x : i32 = 0; x < tilemap.bounds[0]; x += 1 {
-		for y : i32 = 0; y < tilemap.bounds[1]; y += 1 {
+	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
+		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
 			posxz : vec2 = {(cast(f32)x) * TILE_WIDTH, (cast(f32)y) * TILE_WIDTH} + vec2{TILE_WIDTH/2.0, TILE_WIDTH/2.0}
 			//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
 			
@@ -461,6 +521,10 @@ map_drawTilemap :: proc() {
 			}
 		}
 	}
+
+	// draw finish
+	rl.DrawCube(map_data.finishPos, MAP_TILE_FINISH_SIZE.x, MAP_TILE_FINISH_SIZE.y, MAP_TILE_FINISH_SIZE.z, rl.PINK)
+
 	rl.EndShaderMode()
 }
 
@@ -480,28 +544,47 @@ player_isOnGround : bool
 player_velocity : vec3 = {0,0.1,0.6}
 player_lookdir : vec3 = {0,0,1}
 
-PLAYER_RADIUS			:: 1.0
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
 PLAYER_LOOK_SENSITIVITY		:: 0.004
 PLAYER_FOV			:: 120
 PLAYER_VIEWMODEL_FOV		:: 120
-PLAYER_SIZE			:: vec3{1,1,1}
+PLAYER_SIZE			:: vec3{1,2,1}
 
 PLAYER_GRAVITY			:: 200 // 800
-PLAYER_SPEED			:: 100 // 320
-PLAYER_GROUND_ACCELERATION	:: 10 // 10
+PLAYER_SPEED			:: 105 // 320
+PLAYER_GROUND_ACCELERATION	:: 6 // 10
 PLAYER_GROUND_FRICTION		:: 6 // 6
 PLAYER_AIR_ACCELERATION		:: 0.7 // 0.7
 PLAYER_AIR_FRICTION		:: 0 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
+PLAYER_NOISE_SPEED :: 7.0
+
+PLAYER_KEY_JUMP :: rl.KeyboardKey.SPACE
+
+player_data : struct {
+	cameraShakeStrength	: f32,
+	rotImpulse		: vec3,
+}
 
 
 player_update :: proc() {
 	oldpos := player_position
 
-	player_lookRotMatrix3 := linalg.matrix3_from_yaw_pitch_roll(player_lookRotEuler.y, player_lookRotEuler.x, player_lookRotEuler.z)
+	camSinNoise := vec3{
+		+math.sin(+timepassed*PLAYER_NOISE_SPEED*2.51) - math.sin(-timepassed*PLAYER_NOISE_SPEED*3.82) - math.sin(+timepassed*39.212)*0.2,
+		+math.cos(+timepassed*PLAYER_NOISE_SPEED*1.77) + math.cos(+timepassed*PLAYER_NOISE_SPEED*6.71) - math.sin(-timepassed*42.873)*0.2,
+		-math.sin(-timepassed*PLAYER_NOISE_SPEED*3.12) - math.cos(-timepassed*PLAYER_NOISE_SPEED*4.02) + math.sin(-timepassed*46.124)*0.2,
+	} * (math.sin(timepassed*PLAYER_NOISE_SPEED*3.551) + 2.0) * player_data.cameraShakeStrength * 0.05
+
+	player_data.cameraShakeStrength = math.lerp(player_data.cameraShakeStrength, 0.0, clamp(deltatime * 5.5, 0.0, 1.0))
+
+	player_lookRotMatrix3 := linalg.matrix3_from_yaw_pitch_roll(
+		player_lookRotEuler.y + camSinNoise.y,
+		player_lookRotEuler.x + camSinNoise.x,
+		player_lookRotEuler.z + camSinNoise.z,
+	)
 
 	forw  := linalg.vector_normalize(linalg.matrix_mul_vector(player_lookRotMatrix3, vec3{0, 0, 1}) * vec3{1, 0, 1})
 	right := linalg.vector_normalize(linalg.matrix_mul_vector(player_lookRotMatrix3, vec3{1, 0, 0}) * vec3{1, 0, 1})
@@ -515,14 +598,18 @@ player_update :: proc() {
 
 	tilepos := map_worldToTile(player_position)
 	c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
-	isInElevatorTile := c in tilemap.elevatorHeights
-
-	if rl.IsKeyPressed(rl.KeyboardKey.SPACE) && (player_isOnGround || isInElevatorTile) {
-		player_velocity.y = PLAYER_JUMP_SPEED
-		if isInElevatorTile do player_position.y += 0.01
-	}
+	isInElevatorTile := c in map_data.elevatorHeights
 
 	player_velocity.y -= PLAYER_GRAVITY * deltatime // * (player_isOnGround ? 0.25 : 1.0)
+
+	jumped := rl.IsKeyPressed(PLAYER_KEY_JUMP) && player_isOnGround
+	if jumped {
+		player_velocity.y = PLAYER_JUMP_SPEED
+		if isInElevatorTile do player_position.y += 0.05 * PLAYER_SIZE.y
+		player_isOnGround = false
+		player_data.cameraShakeStrength += 0.01
+	}
+
 
 	player_accelerate :: proc(dir : vec3, wishspeed : f32, accel : f32) {
 		currentspeed := linalg.dot(player_velocity, dir)
@@ -548,7 +635,57 @@ player_update :: proc() {
 	player_position = phy_vec
 	if phy_hit do player_position += phy_norm*PHY_BOXCAST_EPS*2.0
 
-	player_isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
+	prevIsOnGround := player_isOnGround
+	player_isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y && !jumped
+
+	// landed
+	if !prevIsOnGround && player_isOnGround {
+		player_data.cameraShakeStrength = 0.01
+	}
+
+
+
+	// elevator update
+	elevatorIsMoving := false
+	{
+		tilepos = map_worldToTile(player_position)
+		c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
+		isInElevatorTile = c in map_data.elevatorHeights
+
+		if isInElevatorTile {
+			height := map_data.elevatorHeights[c]
+			elevatorIsMoving := false
+
+			y := math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
+
+			if player_position.y - PLAYER_SIZE.y - 0.02 < y {
+				height += TILE_ELEVATOR_MOVE_FACTOR * deltatime
+				elevatorIsMoving = true
+			}
+
+			if height > 1.0 {
+				height = 1.0
+				elevatorIsMoving = false
+			} else if height < 0.0 {
+				height = 0.0
+				elevatorIsMoving = false
+			}
+			map_data.elevatorHeights[c] = height
+
+			if player_position.y - 0.005 < y && elevatorIsMoving {
+				player_position.y = y + TILE_ELEVATOR_SPEED*deltatime //TILE_ELEVATOR_MOVE_FACTOR*deltatime*3.0*TILE_WIDTH
+				//if !player_isOnGround do player_velocity = player_friction(player_velocity, PLAYER_GROUND_FRICTION * 0.3)
+				player_velocity.y = PLAYER_GRAVITY * deltatime
+			}
+
+			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
+				player_velocity.y += TILE_ELEVATOR_SPEED * 0.5
+			}
+		}
+	}
+
+	player_isOnGround |= elevatorIsMoving
+
 
 
 	if phy_hit do player_velocity = player_clipVelocity(player_velocity, phy_norm, !player_isOnGround && phy_hit ? 1.5 : 0.98)
@@ -575,35 +712,8 @@ player_update :: proc() {
 		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_lookRotEuler.z*1.3, cam_forw), vec3{0,1.0,0}))
 	}
 
-	tilepos = map_worldToTile(player_position)
-	c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
-	isInElevatorTile = c in tilemap.elevatorHeights
 
-	if isInElevatorTile {
-		height := tilemap.elevatorHeights[c]
-		moving := true
-		height += TILE_ELEVATOR_SPEED * deltatime
-		if height > 1.0 {
-			height = 1.0
-			moving = false
-		} else if height < 0.0 {
-			height = 0.0
-			moving = false
-		}
-		
-		tilemap.elevatorHeights[c] = height
-	
-		y0 : f32 = (-4.5)*TILE_WIDTH
-		y1 : f32 = (-1.5)*TILE_WIDTH
-		y := math.lerp(y0, y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
-		if player_position.y - 0.01 < y && moving {
-			player_position.y = y
-			//if !player_isOnGround do player_velocity = player_friction(player_velocity, PLAYER_GROUND_FRICTION * 0.3)
-			player_velocity.y = PLAYER_GRAVITY * deltatime
-		}
-	}
-
-	{
+	if debugIsEnabled {
 		size := vec3{1,1,1}
 		pos, normal, tmin := phy_boxCastTilemap(
 			camera.position, camera.position + cam_forw*1000.0, size*0.5)
@@ -627,9 +737,23 @@ player_update :: proc() {
 		drop := len * friction * deltatime
 		return (len == 0.0 ? {} : vel / len) * (len - drop)
 	}
-
 }
 
+
+
+player_startGame :: proc() {
+	println("player started game")
+	player_position = map_data.startPos
+}
+
+player_die :: proc() {
+	println("player died")
+	player_startGame()
+}
+
+player_finishGame :: proc() {
+	println("player finished game")
+}
 
 
 
@@ -653,6 +777,11 @@ gun_kind_t :: enum {
 	ROCKETLAUNCHER	= 2,
 }
 
+GUN_SHOTGUN_SPREAD :: 0.1
+GUN_MACHINEGUN_SPREAD :: 0.015
+
+
+
 gun_equipped : gun_kind_t = gun_kind_t.SHOTGUN
 gun_timer : f32 = 0.0
 gun_ammoCounts : [GUN_COUNT]i32 = {24, 86, 12}
@@ -660,7 +789,8 @@ gun_ammoCounts : [GUN_COUNT]i32 = {24, 86, 12}
 gun_calcViewportPos :: proc() -> vec3 {
 	s := math.sin(timepassed * math.PI * 3.0) * clamp(linalg.length(player_velocity) * 0.01, 0.0, 1.0) *
 		0.04 * (player_isOnGround ? 1.0 : 0.05)
-	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2 + s, 0.2}
+	kick := clamp(gun_timer*0.5, 0.0, 1.0)*0.5
+	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2 + s + kick*0.2, 0.2 - kick}
 }
 
 gun_calcMuzzlePos :: proc() {
@@ -701,16 +831,40 @@ gun_update :: proc() {
 	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) && gun_timer < 0.0 && gun_ammoCounts[gunindex] > 0 {
 		switch gun_equipped {
 			case gun_kind_t.SHOTGUN:
-				bullet_shootRaycast(player_position, player_lookdir, 1.0, 0.6, {1,0.5,0,0.5}, 1.2)
+				right := linalg.cross(player_lookdir, camera.up)
+				up := camera.up
+				RAD :: 0.5
+				COL :: vec4{1,0.7,0.3,0.3}
+				DUR :: 0.8
+				cl := bullet_shootRaycast(player_position, player_lookdir,							1.0, DUR, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*right),		1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*up),			1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*right),		1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*up),			1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	1.0, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	1.0, RAD, COL, DUR)
+
+				player_velocity -= player_lookdir*cast(f32)(cl < PLAYER_SIZE.y ? 55.0 : 2.0)
+				player_data.cameraShakeStrength = 0.1
 			case gun_kind_t.MACHINEGUN:
-				bullet_shootRaycast(player_position, player_lookdir, 1.0, 0.5, {0.6,0.7,0.8, 0.5}, 1.0)
+				rnd := vec3{
+					rand.float32_range(-1.0, 1.0, &randData),
+					rand.float32_range(-1.0, 1.0, &randData),
+					rand.float32_range(-1.0, 1.0, &randData),
+				}
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + rnd*GUN_MACHINEGUN_SPREAD), 1.0, 0.5, {0.6,0.7,0.8, 0.2}, 2.0)
+				if !player_isOnGround do player_velocity -= player_lookdir * 6.0
+				player_data.cameraShakeStrength = 0.05
 			case gun_kind_t.ROCKETLAUNCHER:
-				bullet_shootRaycast(player_position, player_lookdir, 1.0, 1.0, {1,0.5,0, 0.5}, 2.0)
+				bullet_shootRaycast(player_position, player_lookdir, 1.0, 1.0, {1,0.3,0.2, 0.5}, 2.0)
+				player_velocity /= 2.0
 		}
 		gun_ammoCounts[gunindex] -= 1
 
 		switch gun_equipped {
-			case gun_kind_t.SHOTGUN:	gun_timer = 0.6
+			case gun_kind_t.SHOTGUN:	gun_timer = 0.5
 			case gun_kind_t.MACHINEGUN:	gun_timer = 0.15
 			case gun_kind_t.ROCKETLAUNCHER:	gun_timer = 1.0
 		}
@@ -723,18 +877,104 @@ gun_update :: proc() {
 
 
 //
+// ENEMIES
+//
+
+ENEMY_KNIGHT_MAX_COUNT :: 32
+ENEMY_GRUNT_MAX_COUNT :: 32
+
+ENEMY_KNIGHT_SIZE :: vec3{1.2, 3, 1.2}
+ENEMY_GRUNT_SIZE  :: vec3{3, 6, 3}
+
+
+enemy_data : struct {
+	knightCount : i32,
+	knights : [ENEMY_KNIGHT_MAX_COUNT]struct {
+		pos		: vec3,
+		target		: vec3,
+		attackTimer	: f32,
+	},
+
+	gruntCount : i32,
+	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
+		pos		: vec3,
+		target		: vec3,
+		attackTimer	: f32,
+	},
+}
+
+
+
+// guy with a sword
+enemy_spawnKnight :: proc(pos : vec3) {
+	index := enemy_data.knightCount
+	if index + 1 >= ENEMY_KNIGHT_MAX_COUNT do return
+	enemy_data.knightCount += 1
+	enemy_data.knights[index] = {}
+	enemy_data.knights[index].pos = pos
+}
+
+// guy with a gun
+enemy_spawnGrunt :: proc(pos : vec3) {
+	index := enemy_data.gruntCount
+	if index + 1 >= ENEMY_GRUNT_MAX_COUNT do return
+	enemy_data.gruntCount += 1
+	enemy_data.grunts[index] = {}
+	enemy_data.grunts[index].pos = pos
+}
+
+
+
+_enemy_updateDataAndRender :: proc() {
+	assert(enemy_data.knightCount >= 0)
+	assert(enemy_data.gruntCount  >= 0)
+	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
+	assert(enemy_data.gruntCount  < ENEMY_GRUNT_MAX_COUNT)
+
+	// update knights
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+
+	}
+
+	// update grunts
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+
+	}
+
+
+
+	// render knights
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+		rl.DrawCube(enemy_data.knights[i].pos, 1, 2, 1, rl.PINK)
+	}
+
+	// render grunts
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+		rl.DrawCube(enemy_data.grunts[i].pos, 1, 2, 1, rl.RED)
+	}
+}
+
+
+
+
+
+
+
+//
 // BULLETS
 //
 
 BULLET_LINEAR_EFFECT_MAX_COUNT :: 64
-BULLET_LINEAR_EFFECT_MESH_QUALITY :: 4 // equal to cylinder slices
+BULLET_LINEAR_EFFECT_MESH_QUALITY :: 3 // equal to cylinder slices
+
+BULLET_REMOVE_THRESHOLD :: 0.04
 
 bullet_ammoInfo_t :: struct {
 	damage : f32,
 	knockback : f32,
 }
 
-bulletBuf : struct {
+bullet_data : struct {
 	linearEffectsCount : i32,
 	linearEffects : [BULLET_LINEAR_EFFECT_MAX_COUNT]struct {
 		start		: vec3,
@@ -748,53 +988,58 @@ bulletBuf : struct {
 
 // @param timeToLive: in seconds
 bullet_createLinearEffect :: proc(start : vec3, end : vec3, rad : f32, col : vec4, duration : f32) {
-	if bulletBuf.linearEffectsCount >= BULLET_LINEAR_EFFECT_MAX_COUNT do return
-	if duration <= 0.0 do return
-	index := bulletBuf.linearEffectsCount
-	bulletBuf.linearEffectsCount += 1
-	bulletBuf.linearEffects[index].start		= start
-	bulletBuf.linearEffects[index].timeToLive	= duration
-	bulletBuf.linearEffects[index].end		= end
-	bulletBuf.linearEffects[index].radius		= rad
-	bulletBuf.linearEffects[index].color		= col
-	bulletBuf.linearEffects[index].duration		= duration
+	if duration <= BULLET_REMOVE_THRESHOLD do return
+	index := bullet_data.linearEffectsCount
+	if index + 1 >= BULLET_LINEAR_EFFECT_MAX_COUNT do return
+	bullet_data.linearEffectsCount += 1
+	bullet_data.linearEffects[index] = {}
+	bullet_data.linearEffects[index].start		= start
+	bullet_data.linearEffects[index].timeToLive	= duration
+	bullet_data.linearEffects[index].end		= end
+	bullet_data.linearEffects[index].radius		= rad
+	bullet_data.linearEffects[index].color		= col
+	bullet_data.linearEffects[index].duration	= duration
 }
 
-bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) {
+bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) -> f32 {
 	phy_vec, phy_norm, phy_hit := phy_boxCastTilemap(start, start + dir*1e6, vec3{rad,rad,rad})
 	bullet_createLinearEffect(start, phy_vec, rad, col, effectDuration)
+	return linalg.length(phy_vec - start)
 }
 
 bullet_shootProjectile :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4) {
 
 }
 
-_bullet_updateBufAndRender :: proc() {
-	assert(bulletBuf.linearEffectsCount >= 0)
-	assert(bulletBuf.linearEffectsCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
+_bullet_updateDataAndRender :: proc() {
+	println("bullet_data.linearEffectsCount", bullet_data.linearEffectsCount, "/", BULLET_LINEAR_EFFECT_MAX_COUNT)
+
+	assert(bullet_data.linearEffectsCount >= 0)
+	assert(bullet_data.linearEffectsCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
 
 	// remove old
-	loopremove : for i : i32 = 0; i < bulletBuf.linearEffectsCount; i += 1 {
-		bulletBuf.linearEffects[i].timeToLive -= deltatime
-		if bulletBuf.linearEffects[i].timeToLive <= 0.0 { // needs to be removed
-			if i + 1 >= bulletBuf.linearEffectsCount { // we're on the last one
-				bulletBuf.linearEffectsCount -= 1
+	loopremove : for i : i32 = 0; i < bullet_data.linearEffectsCount; i += 1 {
+		bullet_data.linearEffects[i].timeToLive -= deltatime
+		if bullet_data.linearEffects[i].timeToLive <= BULLET_REMOVE_THRESHOLD { // needs to be removed
+			if i + 1 >= bullet_data.linearEffectsCount { // we're on the last one
+				bullet_data.linearEffectsCount -= 1
 				break loopremove
 			}
-			lastindex := bulletBuf.linearEffectsCount - 1
-			bulletBuf.linearEffects[i] = bulletBuf.linearEffects[lastindex]
+			bullet_data.linearEffectsCount -= 1
+			lastindex := bullet_data.linearEffectsCount
+			bullet_data.linearEffects[i] = bullet_data.linearEffects[lastindex]
 		}
 	}
 
 	// draw
-	for i : i32 = 0; i < bulletBuf.linearEffectsCount; i += 1 {
-		fade := bulletBuf.linearEffects[i].timeToLive / bulletBuf.linearEffects[i].duration
-		col := bulletBuf.linearEffects[i].color
+	for i : i32 = 0; i < bullet_data.linearEffectsCount; i += 1 {
+		fade := bullet_data.linearEffects[i].timeToLive / bullet_data.linearEffects[i].duration
+		col := bullet_data.linearEffects[i].color
 		rl.DrawCylinderEx(
-			bulletBuf.linearEffects[i].start,
-			bulletBuf.linearEffects[i].end,
-			fade * bulletBuf.linearEffects[i].radius * bulletBuf.linearEffects[i].radius * 0.5,
-			fade * bulletBuf.linearEffects[i].radius,
+			linalg.lerp(bullet_data.linearEffects[i].start, bullet_data.linearEffects[i].end, 0.0),
+			bullet_data.linearEffects[i].end,
+			fade * bullet_data.linearEffects[i].radius * bullet_data.linearEffects[i].radius * 0.5,
+			fade * bullet_data.linearEffects[i].radius,
 			BULLET_LINEAR_EFFECT_MESH_QUALITY,
 			rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
 		)
@@ -822,7 +1067,7 @@ ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
 //
 // PHYSICS
 //
-// for raycasting the tilemap etc.
+// for raycasting the map_data etc.
 //
 
 PHY_MAX_TILE_BOXES :: 4
@@ -838,7 +1083,7 @@ phy_box_t :: struct {
 
 
 phy_getTileBox :: proc(coord : ivec2, pos : vec3) -> (phy_box_t, bool) {
-	tileKind := tilemap.tiles[coord[0]][coord[1]]
+	tileKind := map_data.tiles[coord[0]][coord[1]]
 	posxz := vec2{cast(f32)coord[0]+0.5, cast(f32)coord[1]+0.5}*TILE_WIDTH
 
 	#partial switch tileKind {
@@ -879,6 +1124,23 @@ phy_clipSphereWithBox :: proc(pos : vec3, rad : f32, boxSize : vec3) -> (vec3, v
 	return {}, {}, sd, false
 }
 
+// calculates near and far hit points with a box
+// @param pos: relative to box center
+phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : vec3) -> (f32, f32) {
+	n := dirinv * pos
+	k := dirinvabs * size
+	t1 := -n - k
+	t2 := -n + k
+	tn := max(max(t1.x, t1.y), t1.z)
+	tf := min(min(t2.x, t2.y), t2.z)
+	return tn, tf
+}
+
+// hit or inside
+phy_minmaxHit :: proc(tn : f32, tf : f32) -> bool {
+	return tn<tf && tf>0
+}
+
 // NOTE: assumes small radius when iterating close tiles
 // @returns: offset, normal, true if hit anything
 phy_clipSphereWithTilemap :: proc(pos : vec3, rad : f32) -> (vec3, vec3, bool) {
@@ -917,7 +1179,7 @@ phy_clipSphereWithTilemap :: proc(pos : vec3, rad : f32) -> (vec3, vec3, bool) {
 
 
 
-// "linecast" box through the tilemap
+// "linecast" box through the map_data
 // ! boxsize < TILE_WIDTH
 // @returns: newpos, normal, tmin
 phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3, vec3, bool) {
@@ -1017,7 +1279,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 		for i : i32 = 0; i < boxcount; i += 1 {
 			box := boxbuf[i]
 
-			//rl.DrawCube(box.pos, box.size.x*2, box.size.y*2, box.size.z*2, rl.Fade(rl.GREEN, 0.1))
+			// if debugIsEnabled do rl.DrawCube(box.pos, box.size.x*2+0.2, box.size.y*2+0.2, box.size.z*2+0.2, rl.Fade(rl.GREEN, 0.1))
 
 			n := ctx.dirinv * (ctx.pos - box.pos)
 			k := ctx.dirinvabs * (box.size + ctx.boxoffs)
@@ -1026,17 +1288,14 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 			tn := max(max(t1.x, t1.y), t1.z)
 			tf := min(min(t2.x, t2.y), t2.z)
 
-			println("tn", tn, "tf", tf)
+			//println("tn", tn, "tf", tf)
 
 			if tn>tf || tf<0.0 do continue // no intersection (inside counts as intersection)
 			if tn>ctx.tmin do continue // this hit is worse than the one we already have
-			//if tn>ctx.tmin || tf<PHY_BOXCAST_EPS || (tn<-PHY_BOXCAST_EPS && tf<PHY_BOXCAST_EPS) {
-			//	continue
-			//}
 
 			if math.is_nan(tn) || math.is_nan(tf) || math.is_inf(tn) || math.is_inf(tf) do continue
 
-			println("ok")
+			//println("ok")
 		
 			ctx.tmin = tn
 			ctx.normal = -ctx.dirsign * cast(vec3)(glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))
@@ -1059,33 +1318,34 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 // HELPER PROCEDURES
 //
 
-// temp alloc
-assetPathCstr :: proc(subdir : string, path : string) -> cstring {
-	return str.clone_to_cstring(
-		fmt.tprint(
-			args = {loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
-			sep="",
-		),
-		context.temp_allocator,
+appendToAssetPath :: proc(subdir : string, path : string) -> string {
+	return fmt.tprint(
+		args={loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
+		sep="",
 	)
 }
 
+// temp alloc
+appendToAssetPathCstr :: proc(subdir : string, path : string) -> cstring {
+	return str.clone_to_cstring(appendToAssetPath(subdir, path), context.temp_allocator)
+}
+
 loadTexture :: proc(path : string) -> rl.Texture {
-	fullpath := assetPathCstr("textures", path)
+	fullpath := appendToAssetPathCstr("textures", path)
 	println("! loading texture: ", fullpath)
 	return rl.LoadTexture(fullpath)
 }
 
 loadShader :: proc(vertpath : string, fragpath : string) -> rl.Shader {
-	vertfullpath := assetPathCstr("shaders", vertpath)
-	fragfullpath := assetPathCstr("shaders", fragpath)
+	vertfullpath := appendToAssetPathCstr("shaders", vertpath)
+	fragfullpath := appendToAssetPathCstr("shaders", fragpath)
 	println("! loading shader: vert: ", vertfullpath, "frag:", fragfullpath)
 	return rl.LoadShader(vertfullpath, fragfullpath)
 }
 
 // uses default vertex shader
 loadFragShader :: proc(path : string) -> rl.Shader {
-	fullpath := assetPathCstr("shaders", path)
+	fullpath := appendToAssetPathCstr("shaders", path)
 	println("! loading shader: ", fullpath)
 	return rl.LoadShader(nil, fullpath)
 }

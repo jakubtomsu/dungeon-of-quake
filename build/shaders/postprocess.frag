@@ -149,8 +149,8 @@ void main() {
 
 	//col = pow(col, vec3(1.0 / screengamma)); // gamma correction
 
-	col += dither(gl_FragCoord.xy)*0.3;
-	col = posterize(col, 8, 0.6);
+	col += dither(gl_FragCoord.xy)*0.25;
+	col = posterize(col, 12, 1.0);
 	//col = gameboyColor(col);
 
 	//col = tonemapACES(col);
