@@ -48,19 +48,10 @@ tileShaderCamPosUniformIndex : rl.ShaderLocationIndex
 cubeModel : rl.Model
 randData : rand.Rand
 
+normalFont : rl.Font
 
-// gameplay entity
-// TODO
-entity_t :: struct {
-	pos : vec3,
-	rot : rl.Quaternion,
-}
-
-entId_t :: distinct u16
-entityBuf : map[entId_t]entity_t
-
-
-
+gameIsPlaying : bool
+gameIsRendered : bool
 
 
 
@@ -84,7 +75,6 @@ main :: proc() {
 
 		rl.BeginTextureMode(rendertextureMain)
 			rl.ClearBackground(rl.BLACK)
-
 			rl.BeginMode3D(camera)
 				_app_render3d()
 				_player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
@@ -92,12 +82,11 @@ main :: proc() {
 				_enemy_updateDataAndRender()
 				_bullet_updateDataAndRender()
 			rl.EndMode3D()
-
 			rl.BeginMode3D(viewmodelCamera)
 				gun_drawModel(gun_calcViewportPos())
 			rl.EndMode3D()
 		rl.EndTextureMode()
-		
+
 		rl.BeginDrawing()
 			rl.ClearBackground(rl.PINK)
 			rl.BeginShaderMode(postprocessShader)
@@ -109,7 +98,6 @@ main :: proc() {
 					rl.WHITE,
 				)
 			rl.EndShaderMode()
-
 			_app_render2d()
 		rl.EndDrawing()
 
@@ -146,11 +134,13 @@ _app_init :: proc() {
 	tileShader = loadShader("tile.vert", "tile.frag")
 	tileShaderCamPosUniformIndex  = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(tileShader, "camPos")
 
-	map_basetexture = loadTexture("metal.png")
+	map_data.wallTexture		= loadTexture("tile0.png")
+	map_data.portalTexture		= loadTexture("portal.png")
+	map_data.elevatorTexture	= loadTexture("metal.png")
 
 	cubeModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
 	cubeModel.materials[0].shader = tileShader
-	rl.SetMaterialTexture(&cubeModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_basetexture)
+	rl.SetMaterialTexture(&cubeModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 
@@ -168,7 +158,8 @@ _app_init :: proc() {
 	viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
-	entityBuf = make(type_of(entityBuf))
+	normalFont = loadFont("metalord.ttf")
+	
 
 	map_clearAll()
 	map_data.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
@@ -187,7 +178,7 @@ _app_update :: proc() {
 
 	// pull elevators down
 	{
-		playerTilePos := map_worldToTile(player_position)
+		playerTilePos := map_worldToTile(player_data.pos)
 		c := [2]u8{cast(u8)playerTilePos.x, cast(u8)playerTilePos.y}
 		for key, val in map_data.elevatorHeights {
 			if key == c do continue
@@ -207,7 +198,8 @@ _app_render2d :: proc() {
 	gunindex := cast(i32)gun_equipped
 
 	// draw ammo
-	ui_drawText({WINDOW_X - 150, WINDOW_Y - 50}, 20, rl.Color{255,200,50,255}, fmt.tprint("ammo: ", gun_ammoCounts[gunindex]))
+	ui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_ammoCounts[gunindex]))
+	ui_drawText({30, WINDOW_Y - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("health: ", player_data.health))
 
 	if debugIsEnabled {
 		rl.DrawFPS(0, 0)
@@ -219,9 +211,9 @@ _app_render2d :: proc() {
 		}
 
 		debugtext("player")
-		debugtext("    pos", player_position)
-		debugtext("    vel", player_velocity)
-		debugtext("    onground", player_isOnGround)
+		debugtext("    pos", player_data.pos)
+		debugtext("    vel", player_data.vel)
+		debugtext("    onground", player_data.isOnGround)
 		debugtext("map")
 		debugtext("    bounds", map_data.bounds)
 		debugtext("gun")
@@ -277,8 +269,6 @@ TILE_ELEVATOR_SPEED		:: (TILE_ELEVATOR_Y1 - TILE_ELEVATOR_Y0) * TILE_ELEVATOR_MO
 
 MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
 
-map_basetexture : rl.Texture2D
-
 
 
 map_tileKind_t :: enum u8 {
@@ -306,6 +296,9 @@ map_data : struct {
 	startPos	: vec3,
 	finishPos	: vec3,
 	elevatorHeights	: map[[2]u8]f32,
+	wallTexture	: rl.Texture2D,
+	portalTexture	: rl.Texture2D,
+	elevatorTexture : rl.Texture2D,
 }
 
 
@@ -512,7 +505,7 @@ map_debugPrint :: proc() {
 
 map_drawTilemap :: proc() {
 	map_drawTileBox :: proc(pos : vec3, size : vec3) {
-		//rl.DrawCubeTexture(map_basetexture, pos, size.x, size.y, size.z, rl.WHITE)
+		//rl.DrawCubeTexture(map_data.wallTexture, pos, size.x, size.y, size.z, rl.WHITE)
 		rl.DrawModelEx(cubeModel, pos, {0,1,0}, 0.0, size, rl.WHITE)
 	}
 	
@@ -530,11 +523,10 @@ map_drawTilemap :: proc() {
 			}
 		}
 	}
+	rl.EndShaderMode()
 
 	// draw finish
-	rl.DrawCube(map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.PINK)
-
-	rl.EndShaderMode()
+	rl.DrawCubeTexture(map_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
 }
 
 
@@ -546,12 +538,6 @@ map_drawTilemap :: proc() {
 // mainly player movement code
 // also handles elevators etc.
 //
-
-player_lookRotEuler : vec3 = {}
-player_position : vec3 = {TILE_WIDTH/2, 0, TILE_WIDTH/2}
-player_isOnGround : bool
-player_velocity : vec3 = {0,0.1,0.6}
-player_lookdir : vec3 = {0,0,1}
 
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
 PLAYER_LOOK_SENSITIVITY		:: 0.004
@@ -568,37 +554,49 @@ PLAYER_AIR_FRICTION		:: 0 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
+PLAYER_START_HEALTH	:: 10.0
 PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT
-
-PLAYER_NOISE_SPEED :: 7.0
 
 PLAYER_KEY_JUMP :: rl.KeyboardKey.SPACE
 
 player_data : struct {
 	rotImpulse	: vec3,
+	health		: f32,
+	lookRotEuler	: vec3,
+	pos		: vec3,
+	isOnGround	: bool,
+	vel		: vec3,
+	lookDir		: vec3,
 }
 
 
 
 _player_update :: proc() {
-	oldpos := player_position
+	oldpos := player_data.pos
 
-	if player_position.y < PLAYER_FALL_DEATH_Y {
+	if player_data.pos.y < PLAYER_FALL_DEATH_Y {
 		player_die()
 		return
 	}
 
-	if phy_boxVsBox(player_position, PLAYER_SIZE * 0.3, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
+	if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
 		player_finishMap()
 		return
 	}
 
+	if player_data.health <= 0.0 {
+		player_die()
+		return
+	}
+
+
+
 	player_data.rotImpulse = linalg.lerp(player_data.rotImpulse, vec3{0,0,0}, clamp(deltatime * 6.0, 0.0, 1.0))
 
 	player_lookRotMatrix3 := linalg.matrix3_from_yaw_pitch_roll(
-		player_lookRotEuler.y + player_data.rotImpulse.y,
-		player_lookRotEuler.x + player_data.rotImpulse.x,
-		player_lookRotEuler.z + player_data.rotImpulse.z,
+		player_data.lookRotEuler.y + player_data.rotImpulse.y,
+		player_data.lookRotEuler.x + player_data.rotImpulse.x,
+		player_data.lookRotEuler.z + player_data.rotImpulse.z,
 	)
 
 	forw  := linalg.vector_normalize(linalg.matrix_mul_vector(player_lookRotMatrix3, vec3{0, 0, 1}) * vec3{1, 0, 1})
@@ -609,56 +607,56 @@ _player_update :: proc() {
 	if rl.IsKeyDown(rl.KeyboardKey.A)	do movedir.x += 1.0
 	if rl.IsKeyDown(rl.KeyboardKey.S)	do movedir.y -= 1.0
 	if rl.IsKeyDown(rl.KeyboardKey.D)	do movedir.x -= 1.0
-	//if rl.IsKeyPressed(rl.KeyboardKey.C)do player_position.y -= 2.0
+	//if rl.IsKeyPressed(rl.KeyboardKey.C)do player_data.pos.y -= 2.0
 
-	tilepos := map_worldToTile(player_position)
+	tilepos := map_worldToTile(player_data.pos)
 	c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
 	isInElevatorTile := c in map_data.elevatorHeights
 
-	player_velocity.y -= PLAYER_GRAVITY * deltatime // * (player_isOnGround ? 0.25 : 1.0)
+	player_data.vel.y -= PLAYER_GRAVITY * deltatime // * (player_data.isOnGround ? 0.25 : 1.0)
 
-	jumped := rl.IsKeyPressed(PLAYER_KEY_JUMP) && player_isOnGround
+	jumped := rl.IsKeyPressed(PLAYER_KEY_JUMP) && player_data.isOnGround
 	if jumped {
-		player_velocity.y = PLAYER_JUMP_SPEED
-		if isInElevatorTile do player_position.y += 0.05 * PLAYER_SIZE.y
-		player_isOnGround = false
+		player_data.vel.y = PLAYER_JUMP_SPEED
+		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
+		player_data.isOnGround = false
 	}
 
 
 	player_accelerate :: proc(dir : vec3, wishspeed : f32, accel : f32) {
-		currentspeed := linalg.dot(player_velocity, dir)
+		currentspeed := linalg.dot(player_data.vel, dir)
 		addspeed := wishspeed - currentspeed
 		if addspeed < 0.0 do return
 
 		accelspeed := accel * wishspeed * deltatime
 		if accelspeed > addspeed do accelspeed = addspeed
 
-		player_velocity += dir * accelspeed
+		player_data.vel += dir * accelspeed
 	}
 
 	player_accelerate(forw*movedir.y + right*movedir.x, PLAYER_SPEED,
-		player_isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
+		player_data.isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
 
-	wishpos := player_position + player_velocity * deltatime
+	wishpos := player_data.pos + player_data.vel * deltatime
 	
-	phy_tn, phy_norm, phy_hit := phy_boxCastTilemap(player_position, wishpos, PLAYER_SIZE)
-	phy_vec := player_position + linalg.normalize(player_velocity)*phy_tn
+	phy_tn, phy_norm, phy_hit := phy_boxCastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
+	phy_vec := player_data.pos + linalg.normalize(player_data.vel)*phy_tn
 	
-	println("pos", player_position, "vel", player_velocity)
+	println("pos", player_data.pos, "vel", player_data.vel)
 	//println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
 	
-	player_position = phy_vec
-	if phy_hit do player_position += phy_norm*PHY_BOXCAST_EPS*2.0
+	player_data.pos = phy_vec
+	if phy_hit do player_data.pos += phy_norm*PHY_BOXCAST_EPS*2.0
 
-	prevIsOnGround := player_isOnGround
-	player_isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y && !jumped
+	prevIsOnGround := player_data.isOnGround
+	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y && !jumped
 
 
 
 	// elevator update
 	elevatorIsMoving := false
 	{
-		tilepos = map_worldToTile(player_position)
+		tilepos = map_worldToTile(player_data.pos)
 		c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
 		isInElevatorTile = c in map_data.elevatorHeights
 
@@ -668,7 +666,7 @@ _player_update :: proc() {
 
 			y := math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
 
-			if player_position.y - PLAYER_SIZE.y - 0.02 < y {
+			if player_data.pos.y - PLAYER_SIZE.y - 0.02 < y {
 				height += TILE_ELEVATOR_MOVE_FACTOR * deltatime
 				elevatorIsMoving = true
 			}
@@ -682,43 +680,43 @@ _player_update :: proc() {
 			}
 			map_data.elevatorHeights[c] = height
 
-			if player_position.y - 0.005 < y && elevatorIsMoving {
-				player_position.y = y + TILE_ELEVATOR_SPEED*deltatime
-				player_velocity.y = PLAYER_GRAVITY * deltatime
+			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
+				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
+				player_data.vel.y = PLAYER_GRAVITY * deltatime
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
-				player_velocity.y += TILE_ELEVATOR_SPEED * 0.5
+				player_data.vel.y += TILE_ELEVATOR_SPEED * 0.5
 			}
 		}
 	}
 
-	player_isOnGround |= elevatorIsMoving
+	player_data.isOnGround |= elevatorIsMoving
 
 
 
-	if phy_hit do player_velocity = phy_clipVelocity(player_velocity, phy_norm, !player_isOnGround && phy_hit ? 1.5 : 0.98)
+	if phy_hit do player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.2 : 0.98)
 
-	player_velocity = phy_applyFrictionToVelocity(player_velocity, player_isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)
+	player_data.vel = phy_applyFrictionToVelocity(player_data.vel, player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)
 
 
 
 	cam_forw := linalg.matrix_mul_vector(player_lookRotMatrix3, vec3{0, 0, 1})
-	player_lookdir = cam_forw // TODO: update after the new rotation has been set
+	player_data.lookDir = cam_forw // TODO: update after the new rotation has been set
 
 	// camera
 	{
-		player_lookRotEuler.y += -rl.GetMouseDelta().x * PLAYER_LOOK_SENSITIVITY
-		player_lookRotEuler.x += rl.GetMouseDelta().y * PLAYER_LOOK_SENSITIVITY
-		player_lookRotEuler.x = clamp(player_lookRotEuler.x, -0.48 * math.PI, 0.48 * math.PI)
-		player_lookRotEuler.z = math.lerp(player_lookRotEuler.z, 0.0, clamp(deltatime * 7.5, 0.0, 1.0))
-		player_lookRotEuler.z -= movedir.x*deltatime*0.75
-		player_lookRotEuler.z = clamp(player_lookRotEuler.z, -math.PI*0.3, math.PI*0.3)
+		player_data.lookRotEuler.y += -rl.GetMouseDelta().x * PLAYER_LOOK_SENSITIVITY
+		player_data.lookRotEuler.x += rl.GetMouseDelta().y * PLAYER_LOOK_SENSITIVITY
+		player_data.lookRotEuler.x = clamp(player_data.lookRotEuler.x, -0.48 * math.PI, 0.48 * math.PI)
+		player_data.lookRotEuler.z = math.lerp(player_data.lookRotEuler.z, 0.0, clamp(deltatime * 7.5, 0.0, 1.0))
+		player_data.lookRotEuler.z -= movedir.x*deltatime*0.75
+		player_data.lookRotEuler.z = clamp(player_data.lookRotEuler.z, -math.PI*0.3, math.PI*0.3)
 
 		cam_y : f32 = PLAYER_HEAD_CENTER_OFFSET
-		camera.position = player_position + camera.up * cam_y
+		camera.position = player_data.pos + camera.up * cam_y
 		camera.target = camera.position + cam_forw
-		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_lookRotEuler.z*1.3, cam_forw), vec3{0,1.0,0}))
+		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_data.lookRotEuler.z*1.3, cam_forw), vec3{0,1.0,0}))
 	}
 
 
@@ -740,19 +738,23 @@ _player_update :: proc() {
 
 player_startMap :: proc() {
 	println("player started game")
-	player_position = map_data.startPos
+	player_data.pos = map_data.startPos
+	player_initData()
 }
 
-player_reset :: proc() {
+player_initData :: proc() {
 	player_data.rotImpulse = {}
-	player_velocity = {}
+	player_data.vel = {}
 	gun_timer = 0
+	player_data.health = PLAYER_START_HEALTH
+	player_data.vel = {0, 0.1, 0}
+	player_data.lookDir = {0,0,1}
 }
 
 player_die :: proc() {
 	println("player died")
 	player_startMap()
-	player_reset()
+	player_initData()
 }
 
 player_finishMap :: proc() {
@@ -776,10 +778,10 @@ GUN_COUNT :: 3
 gun_kind_t :: enum {
 	SHOTGUN		= 0,
 	MACHINEGUN	= 1,
-	RAILGUN	= 2,
+	RAILGUN		= 2,
 }
 
-GUN_SHOTGUN_SPREAD		:: 0.12
+GUN_SHOTGUN_SPREAD		:: 0.15
 GUN_SHOTGUN_DAMAGE		:: 0.1
 GUN_MACHINEGUN_SPREAD		:: 0.02
 GUN_MACHINEGUN_DAMAGE		:: 0.1
@@ -790,11 +792,13 @@ gun_timer : f32 = 0.0
 // GUN_LEVEL_START_AMMO_COUNTS : [GUN_COUNT]i32{24, 0, 0} // TODO
 gun_ammoCounts : [GUN_COUNT]i32 = {24, 86, 12}
 
+
+
 gun_calcViewportPos :: proc() -> vec3 {
-	s := math.sin(timepassed * math.PI * 3.0) * clamp(linalg.length(player_velocity) * 0.01, 0.0, 1.0) *
-		0.04 * (player_isOnGround ? 1.0 : 0.05)
+	s := math.sin(timepassed * math.PI * 3.0) * clamp(linalg.length(player_data.vel) * 0.01, 0.0, 1.0) *
+		0.04 * (player_data.isOnGround ? 1.0 : 0.05)
 	kick := clamp(gun_timer*0.5, 0.0, 1.0)*0.8
-	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.2 - kick}
+	return vec3{-GUN_POS_X + player_data.lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.2 - kick}
 }
 
 gun_calcMuzzlePos :: proc() {
@@ -835,22 +839,22 @@ _gun_update :: proc() {
 	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) && gun_timer < 0.0 && gun_ammoCounts[gunindex] > 0 {
 		switch gun_equipped {
 			case gun_kind_t.SHOTGUN:
-				right := linalg.cross(player_lookdir, camera.up)
+				right := linalg.cross(player_data.lookDir, camera.up)
 				up := camera.up
 				RAD :: 0.5
-				COL :: vec4{1,0.7,0.3,0.3}
+				COL :: vec4{1,0.7,0.3,0.2}
 				DUR :: 0.8
-				cl := bullet_shootRaycast(player_position, player_lookdir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				cl := bullet_shootRaycast(player_data.pos, player_data.lookDir,								GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*right),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
-				player_velocity -= player_lookdir*cast(f32)(cl < PLAYER_SIZE.y ? 55.0 : 2.0)
+				player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*1.5 ? 55.0 : 2.0)
 				player_data.rotImpulse.x -= 0.15
 			case gun_kind_t.MACHINEGUN:
 				rnd := vec3{
@@ -858,13 +862,13 @@ _gun_update :: proc() {
 					rand.float32_range(-1.0, 1.0, &randData),
 					rand.float32_range(-1.0, 1.0, &randData),
 				}
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 0.5, {0.6,0.7,0.8, 0.2}, 2.0)
-				if !player_isOnGround do player_velocity -= player_lookdir * 6.0
+				bullet_shootRaycast(player_data.pos, linalg.normalize(player_data.lookDir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 0.5, {0.6,0.7,0.8, 0.2}, 2.0)
+				if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 6.0
 				player_data.rotImpulse.x -= 0.035
 				player_data.rotImpulse -= rnd * 0.01
 			case gun_kind_t.RAILGUN:
-				bullet_shootRaycast(player_position, player_lookdir, GUN_ROCKETLAUNCHER_DAMAGE, 1.0, {1,0.3,0.2, 0.5}, 2.0)
-				player_velocity /= 2.0
+				bullet_shootRaycast(player_data.pos, player_data.lookDir, GUN_ROCKETLAUNCHER_DAMAGE, 1.0, {1,0.3,0.2, 0.2}, 2.0)
+				player_data.vel /= 2.0
 				player_data.rotImpulse.x -= 0.2
 				player_data.rotImpulse.y += 0.04
 		}
@@ -989,13 +993,23 @@ _bullet_updateDataAndRender :: proc() {
 ENEMY_GRUNT_MAX_COUNT :: 32
 ENEMY_KNIGHT_MAX_COUNT :: 32
 
-ENEMY_HEALTH_MULTIPLIER :: 4
+ENEMY_HEALTH_MULTIPLIER :: 2
 
-ENEMY_GRUNT_SIZE  :: vec3{3, 6, 3}
-ENEMY_GRUNT_ACCELERATION :: 80.0
-ENEMY_GRUNT_MAX_SPEED :: 300.0
-ENEMY_GRUNT_FRICTION :: 1
-ENEMY_KNIGHT_SIZE :: vec3{1.2, 3, 1.2}
+ENEMY_GRUNT_SIZE		:: vec3{2, 4, 2}
+ENEMY_GRUNT_ACCELERATION	:: 180
+ENEMY_GRUNT_MAX_SPEED		:: 100
+ENEMY_GRUNT_FRICTION		:: 7
+ENEMY_GRUNT_MIN_GOOD_DIST	:: 30
+ENEMY_GRUNT_MAX_GOOD_DIST	:: 60
+ENEMY_GRUNT_ATTACK_TIME		:: 1.0
+ENEMY_GRUNT_DAMAGE		:: 1.0
+
+ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
+ENEMY_KNIGHT_ACCELERATION	:: 180
+ENEMY_KNIGHT_MAX_SPEED		:: 170
+ENEMY_KNIGHT_FRICTION		:: 3.5
+ENEMY_KNIGHT_DAMAGE		:: 0.8
+ENEMY_KNIGHT_ATTACK_TIME	:: 0.4
 
 enemy_kind_t :: enum u8 {
 	NONE = 0,
@@ -1006,19 +1020,24 @@ enemy_kind_t :: enum u8 {
 enemy_data : struct {
 	gruntCount : i32,
 	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
-		pos		: vec3,
-		attackTimer	: f32,
-		target		: vec3,
-		health		: f32,
-		vel		: vec3,
+		spawnPos		: vec3,
+		attackTimer		: f32,
+		pos			: vec3,
+		health			: f32,
+		target			: vec3,
+		isMoving		: bool,
+		vel			: vec3,
+		attackSinceStopped	: u16,
 	},
 
 	knightCount : i32,
 	knights : [ENEMY_KNIGHT_MAX_COUNT]struct {
+		spawnPos	: vec3,
+		health		: f32,
 		pos		: vec3,
 		attackTimer	: f32,
+		vel		: vec3,
 		target		: vec3,
-		health		: f32,
 	},
 }
 
@@ -1031,6 +1050,7 @@ enemy_spawnGrunt :: proc(pos : vec3) {
 	enemy_data.gruntCount += 1
 	enemy_data.grunts[index] = {}
 	enemy_data.grunts[index].pos = pos
+	enemy_data.grunts[index].target = pos
 	enemy_data.grunts[index].health = 1.0 * ENEMY_HEALTH_MULTIPLIER
 }
 
@@ -1041,6 +1061,7 @@ enemy_spawnKnight :: proc(pos : vec3) {
 	enemy_data.knightCount += 1
 	enemy_data.knights[index] = {}
 	enemy_data.knights[index].pos = pos
+	enemy_data.knights[index].target = pos
 	enemy_data.knights[index].health = 1.3 * ENEMY_HEALTH_MULTIPLIER
 }
 
@@ -1077,20 +1098,35 @@ _enemy_updateDataAndRender :: proc() {
 	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 		EPS :: -1.0
 		pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
-		dir := linalg.normalize(player_position - pos)
+		dir := linalg.normalize(player_data.pos - pos)
 		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
 		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
 		seeplayer := p_tn < t_tn && p_hit
-		flatdir := linalg.normalize(dir * vec3{1,0,1})
 
-		println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
+		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 	
-		if seeplayer {
+		enemy_data.grunts[i].attackTimer -= deltatime
+
+
+		if seeplayer do enemy_data.grunts[i].target = player_data.pos
+
+
+		flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
+		if p_tn < ENEMY_GRUNT_MIN_GOOD_DIST {
+			enemy_data.grunts[i].vel -= flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+		} else if p_tn > ENEMY_GRUNT_MAX_GOOD_DIST {
 			enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
 		}
 
-		if p_hit && p_tn < 3.0 { // push player back
-			player_velocity = flatdir*10.0
+		if seeplayer {
+			if enemy_data.grunts[i].attackTimer < 0.0 { // attack
+				enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
+
+				bullet_createLinearEffect(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
+				player_data.health -= ENEMY_GRUNT_DAMAGE
+			}
+		} else {
+			enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
 		}
 	
 		enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
@@ -1101,7 +1137,38 @@ _enemy_updateDataAndRender :: proc() {
 
 	// update knights
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
-		
+		pos := enemy_data.knights[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
+		dir := linalg.normalize(player_data.pos - pos)
+		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
+		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
+		seeplayer := p_tn < t_tn && p_hit
+		flatdir := linalg.normalize(dir * vec3{1,0,1})
+
+		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
+	
+		if seeplayer {
+			enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
+		}
+
+		enemy_data.knights[i].attackTimer -= deltatime
+
+		if p_hit {
+			if p_tn < 4.5 && enemy_data.knights[i].attackTimer < 0.0 {
+				player_data.vel = flatdir*50.0
+				player_data.vel.y += 20.0
+				enemy_data.knights[i].vel = {}
+				player_data.health -= ENEMY_KNIGHT_DAMAGE
+				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
+			}
+		} else {
+			enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
+		}
+
+	
+		enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
+		speed := linalg.length(enemy_data.knights[i].vel)
+		enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
+		enemy_data.knights[i].pos += enemy_data.knights[i].vel * deltatime
 	}
 
 
@@ -1127,8 +1194,11 @@ _enemy_updateDataAndRender :: proc() {
 
 ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
 	cstr := str.clone_to_cstring(text, context.temp_allocator)
-	rl.DrawText(cstr, cast(c.int)pos.x, cast(c.int)pos.y, cast(c.int)size, color)
+	rl.DrawTextEx(normalFont, cstr, pos, size, 0.0, color)
 }
+
+
+
 
 
 
@@ -1143,8 +1213,6 @@ ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
 PHY_MAX_TILE_BOXES :: 4
 PHY_BOXCAST_EPS :: 1e-2
 
-
-
 phy_box_t :: struct {
 	pos  : vec3,
 	size : vec3,
@@ -1156,49 +1224,6 @@ phy_boxVsBox :: proc(pos0 : vec3, size0 : vec3, pos1 : vec3, size1 : vec3) -> bo
 	return  (pos0.x + size0.x > pos1.x - size1.x && pos0.x - size0.x < pos1.x + size1.x) &&
 		(pos0.y + size0.y > pos1.y - size1.y && pos0.y - size0.y < pos1.y + size1.y) &&
 		(pos0.z + size0.z > pos1.z - size1.z && pos0.z - size0.z < pos1.z + size1.z)
-}
-
-
-phy_getTileBox :: proc(coord : ivec2, pos : vec3) -> (phy_box_t, bool) {
-	tileKind := map_data.tiles[coord[0]][coord[1]]
-	posxz := vec2{cast(f32)coord[0]+0.5, cast(f32)coord[1]+0.5}*TILE_WIDTH
-
-	#partial switch tileKind {
-		case map_tileKind_t.WALL: return phy_box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}, true
-		case map_tileKind_t.EMPTY:
-			box : phy_box_t
-			box.size = vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
-			box.pos = pos.y < 0.0 ? vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]} : vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}
-			return box, true
-	}
-	return phy_box_t{}, false
-}
-
-
-// @returns: offset vector
-phy_clipSphereWithBox :: proc(pos : vec3, rad : f32, boxSize : vec3) -> (vec3, vec3, f32, bool) {
-	using math
-	a := vec3{abs(pos.x), abs(pos.y), abs(pos.z)}
-	q := a - boxSize
-	au := a / boxSize
-	possign := vec3{sign(pos.x), sign(pos.y), sign(pos.z)}
-	outdir := vec3{max(0.0, q.x), max(0.0, q.y), max(0.0, q.z)}
-	indir : vec3 = au.x > au.y ? (au.x > au.z ? {possign.x,0,0} : {0,0,possign.z}) : (au.y > au.z ? {0,possign.y,0} : {0,0,possign.z})
-	outdir_len := linalg.length(outdir)
-	sd := outdir_len + min(max(q.x, max(q.y, q.z)), 0.0)
-	//isCenterInside := (q.x < 0 && q.y < 0 && q.z < 0)
-	isCenterInside := sd < 0.0
-	
-	if sd < rad {
-		//outdir /= sd == 0.0 ? 1.0 : sd
-		outdir = outdir_len == 0.0 ? {} : outdir / outdir_len
-		outdir *= possign
-		// norm := isCenterInside ? indir : outdir
-		norm := indir
-		offs := isCenterInside ? indir*(-q+vec3{rad,rad,rad}) : outdir*(rad-sd)
-		return offs, norm, sd, true
-	}
-	return {}, {}, sd, false
 }
 
 // calculates near and far hit points with a box
@@ -1216,42 +1241,6 @@ phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : ve
 // hit or inside
 phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 	return tn<tf && tf>0
-}
-
-// NOTE: assumes small radius when iterating close tiles
-// @returns: offset, normal, true if hit anything
-phy_clipSphereWithTilemap :: proc(pos : vec3, rad : f32) -> (vec3, vec3, bool) {
-	lowerleft := map_worldToTile(pos)
-
-	res_offs := vec3{0,0,0}
-	res_norm := vec3{-1,0,0}
-	minsd : f32 = 1e10
-	
-	hit := false
-
-	for x : i32 = 0; x <= 1; x += 1 {
-		for z : i32 = 0; z <= 1; z += 1 {
-			coord := lowerleft + ivec2{x, z}
-			if !map_isTilePosValid(coord) do continue
-
-			box, isfull := phy_getTileBox(coord, pos)
-			if isfull {
-				//rl.DrawCube(box.pos, box.size.x, box.size.y, box.size.z, rl.WHITE)
-				offs, norm, sd, boxhit := phy_clipSphereWithBox(pos - box.pos, rad, box.size) // TODO: res - box.pos ?
-				if boxhit {
-					hit = true
-					if sd < minsd {
-						res_norm = norm
-						sd = minsd
-						res_offs = offs
-					}
-					// res_offs = res_offs + offs
-				}
-			}
-		}
-	}
-
-	return res_offs, res_norm, hit
 }
 
 
@@ -1437,7 +1426,7 @@ phy_boxCastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool)
 		dir.z==0.0?1e6:1.0/dir.z,
 	}
 	dirinvabs := vec3{abs(dirinv.x), abs(dirinv.y), abs(dirinv.z)}
-	tn, tf := phy_rayBoxNearFar(pos - player_position, dirinv, dirinvabs, PLAYER_SIZE + boxsize)
+	tn, tf := phy_rayBoxNearFar(pos - player_data.pos, dirinv, dirinvabs, PLAYER_SIZE + boxsize)
 	return tn, phy_nearFarHit(tn, tf)
 }
 
@@ -1494,7 +1483,7 @@ appendToAssetPath :: proc(subdir : string, path : string) -> string {
 	)
 }
 
-// temp alloc
+// ctx temp alloc
 appendToAssetPathCstr :: proc(subdir : string, path : string) -> cstring {
 	return str.clone_to_cstring(appendToAssetPath(subdir, path), context.temp_allocator)
 }
@@ -1503,6 +1492,24 @@ loadTexture :: proc(path : string) -> rl.Texture {
 	fullpath := appendToAssetPathCstr("textures", path)
 	println("! loading texture: ", fullpath)
 	return rl.LoadTexture(fullpath)
+}
+
+loadSound :: proc(path : string) -> rl.Sound {
+	fullpath := appendToAssetPathCstr("audio", path)
+	println("! loading sound: ", fullpath)
+	return rl.LoadSound(fullpath)
+}
+
+loadMusic :: proc(path : string) -> rl.Music {
+	fullpath := appendToAssetPathCstr("audio", path)
+	println("! loading music: ", fullpath)
+	return rl.LoadMusicStream(fullpath)
+}
+
+loadFont :: proc(path : string) -> rl.Font {
+	fullpath := appendToAssetPathCstr("fonts", path)
+	println("! loading font: ", fullpath)
+	return rl.LoadFont(fullpath)
 }
 
 loadShader :: proc(vertpath : string, fragpath : string) -> rl.Shader {

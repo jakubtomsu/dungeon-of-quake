@@ -23,7 +23,7 @@ vec2 triplanarMax(vec3 p, vec3 n) {
 	float x = abs(n.x);
 	float y = abs(n.y);
 	float z = abs(n.z);
-	return (x>y ? (x>z ? vec2(p.y, p.z) : vec2(p.x, p.y)) : (y>z ? vec2(p.x, p.z) : vec2(p.x, p.y)));
+	return (x>y ? (x>z ? vec2(p.z*sign(p.x), p.y) : vec2(p.x*sign(p.z), p.y)) : (y>z ? vec2(p.x, p.z) : vec2(p.x*sign(p.z), p.y)));
 }
 
 void main() {

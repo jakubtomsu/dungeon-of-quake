@@ -29,7 +29,7 @@ void main() {
 	// Convert texel color to grayscale using NTSC conversion weights
 	//col = vec3(dot(col, vec3(0.299, 0.587, 0.114)));
 
-	col = mix(col, vec3(0.85, 0.8, 0.9)*0.5, clamp(pow(dist, 0.8) * 0.007, 0.0, 1.0));
+	col = mix(col, vec3(0.85, 0.8, 0.9)*0.5, clamp(pow(dist, 0.5) * 0.03, 0.0, 1.0));
 	
 	//col = fragNormal/2.0 + vec3(0.5);
 
