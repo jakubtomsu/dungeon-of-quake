@@ -21,6 +21,8 @@ w : mid-height wall
 c : lower ceiling
 p : platform between 1st and 2nd floor
 e : elevator that takes you to the 2nd floor
+<space> : empty space with floor and ceiling
+\ : completely empty tile
 
 
 

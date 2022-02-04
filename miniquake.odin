@@ -87,8 +87,8 @@ main :: proc() {
 
 			rl.BeginMode3D(camera)
 				_app_render3d()
-				player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
-				gun_update()
+				_player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
+				_gun_update()
 				_enemy_updateDataAndRender()
 				_bullet_updateDataAndRender()
 			rl.EndMode3D()
@@ -179,7 +179,7 @@ _app_init :: proc() {
 	}
 	//map_debugPrint()
 
-	player_startGame()
+	player_startMap()
 }
 
 _app_update :: proc() {
@@ -198,26 +198,19 @@ _app_update :: proc() {
 
 _debugtext_y : i32 = 0
 _app_render2d :: proc() {
-	rl.DrawFPS(0, 0)
 	_debugtext_y = 2
 
-	//rl.DrawRectangle(10, 10, 220, 70, rl.Fade(rl.SKYBLUE, 0.5))
-	//rl.DrawRectangleLines(10, 10, 220, 70, rl.BLUE)
-	//rl.DrawText("First person camera default controls:", 20, 20, 10, rl.BLACK)
-	//rl.DrawText("- Move with keys: W, A, S, D",	40, 40, 10, rl.DARKGRAY)
-	//rl.DrawText("- Mouse move to look around",	40, 60, 10, rl.DARKGRAY)
-
-	rl.DrawRectangle(WINDOW_X/2 - 3, WINDOW_Y/2 - 3, 6, 6, rl.Fade(rl.BLACK, 0.5))
-	rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
+	// cursor
+	//rl.DrawRectangle(WINDOW_X/2 - 3, WINDOW_Y/2 - 3, 6, 6, rl.Fade(rl.BLACK, 0.5))
+	//rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
 
 	gunindex := cast(i32)gun_equipped
 
 	// draw ammo
-	{
-		ui_drawText({WINDOW_X - 150, WINDOW_Y - 50}, 20, rl.Color{255,200,50,255}, fmt.tprint("ammo: ", gun_ammoCounts[gunindex]))
-	}
+	ui_drawText({WINDOW_X - 150, WINDOW_Y - 50}, 20, rl.Color{255,200,50,255}, fmt.tprint("ammo: ", gun_ammoCounts[gunindex]))
 
 	if debugIsEnabled {
+		rl.DrawFPS(0, 0)
 		debugtext :: proc(args : ..any) {
 			tstr := fmt.tprint(args=args)
 			cstr := str.clone_to_cstring(tstr, context.temp_allocator)
@@ -237,6 +230,9 @@ _app_render2d :: proc() {
 		debugtext("    ammo counts", gun_ammoCounts)
 		debugtext("bullets")
 		debugtext("    linear effect count", bullet_data.linearEffectsCount)
+		debugtext("enemies")
+		debugtext("    grunt count", enemy_data.gruntCount)
+		debugtext("    knight count", enemy_data.knightCount)
 	}
 }
 
@@ -279,13 +275,14 @@ TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
 TILE_ELEVATOR_Y1		:: cast(f32)-1.5*TILE_WIDTH - 2.0
 TILE_ELEVATOR_SPEED		:: (TILE_ELEVATOR_Y1 - TILE_ELEVATOR_Y0) * TILE_ELEVATOR_MOVE_FACTOR
 
-MAP_TILE_FINISH_SIZE :: vec3{16, 30, 16}
+MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
 
 map_basetexture : rl.Texture2D
 
 
 
 map_tileKind_t :: enum u8 {
+	NONE			= '\\',
 	EMPTY			= ' ',
 	WALL			= '#',
 	WALL_MID		= 'w',
@@ -296,6 +293,8 @@ map_tileKind_t :: enum u8 {
 	FINISH_UPPER		= 'F', // translated
 	PLATFORM		= 'p',
 	ELEVATOR		= 'e',
+	ENEMY_KNIGHT_LOWER	= 'k', // translated
+	ENEMY_KNIGHT_UPPER	= 'K', // translated
 	ENEMY_GRUNT_LOWER	= 'g', // translated
 	ENEMY_GRUNT_UPPER	= 'G', // translated
 }
@@ -350,6 +349,9 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 	posxz := vec2{cast(f32)coord[0]+0.5, cast(f32)coord[1]+0.5}*TILE_WIDTH
 
 	#partial switch tileKind {
+		case map_tileKind_t.NONE:
+			return 0
+
 		case map_tileKind_t.WALL:
 			boxbuf[0] = phy_box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
 			return 1
@@ -413,6 +415,7 @@ map_loadFromFile :: proc(name: string) {
 		return
 	}
 
+	defer free(&data[0])
 
 	map_clearAll()
 
@@ -441,37 +444,44 @@ map_loadFromFile :: proc(name: string) {
 				println("\\r")
 				continue dataloop
 		}
-	
+
 		tile := cast(map_tileKind_t)ch
 		
 		if map_isTilePosInBufferBounds({x, y}) {
 			println("pre ", tile)
-			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/4 - TILE_WIDTH, 0}
-			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH, 0}
+			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/2 - TILE_WIDTH, 0}
+			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH*0.5, 0}
 		
 			// tile translation
 			#partial switch tile {
 				case map_tileKind_t.START_LOWER:
-					map_data.startPos = map_tileToWorld({x, y}) //- vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/4 - TILE_WIDTH, 0}
+					map_data.startPos = lowpos + vec3{0, PLAYER_SIZE.y*2, 0}
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.START_UPPER:
-					map_data.startPos = highpos
+					map_data.startPos = highpos + vec3{0, PLAYER_SIZE.y*2, 0}
 					tile = map_tileKind_t.WALL_MID
 
 				case map_tileKind_t.FINISH_LOWER:
-					map_data.finishPos = lowpos
+					map_data.finishPos = lowpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.FINISH_UPPER:
-					map_data.finishPos = highpos
+					map_data.finishPos = highpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
 					tile = map_tileKind_t.WALL_MID
 
 				case map_tileKind_t.ELEVATOR: map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
 
 				case map_tileKind_t.ENEMY_GRUNT_LOWER:
-					enemy_spawnGrunt(lowpos)
+					enemy_spawnGrunt(lowpos + vec3{0, 0, 0})
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.ENEMY_GRUNT_UPPER:
-					enemy_spawnGrunt(highpos)
+					enemy_spawnGrunt(highpos + vec3{0, ENEMY_GRUNT_SIZE.y*1.2, 0})
+					tile = map_tileKind_t.WALL_MID
+
+				case map_tileKind_t.ENEMY_KNIGHT_LOWER:
+					enemy_spawnKnight(lowpos + vec3{0, ENEMY_KNIGHT_SIZE.y*1.2, 0})
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.ENEMY_KNIGHT_UPPER:
+					enemy_spawnKnight(highpos + vec3{0, ENEMY_KNIGHT_SIZE.y*1.2, 0})
 					tile = map_tileKind_t.WALL_MID
 			}
 
@@ -489,7 +499,6 @@ map_loadFromFile :: proc(name: string) {
 
 	println("bounds[0]", map_data.bounds[0], "bounds[1]", map_data.bounds[1])
 
-	free(&data[0])
 }
 
 map_debugPrint :: proc() {
@@ -523,7 +532,7 @@ map_drawTilemap :: proc() {
 	}
 
 	// draw finish
-	rl.DrawCube(map_data.finishPos, MAP_TILE_FINISH_SIZE.x, MAP_TILE_FINISH_SIZE.y, MAP_TILE_FINISH_SIZE.z, rl.PINK)
+	rl.DrawCube(map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.PINK)
 
 	rl.EndShaderMode()
 }
@@ -559,31 +568,37 @@ PLAYER_AIR_FRICTION		:: 0 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
+PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT
+
 PLAYER_NOISE_SPEED :: 7.0
 
 PLAYER_KEY_JUMP :: rl.KeyboardKey.SPACE
 
 player_data : struct {
-	cameraShakeStrength	: f32,
-	rotImpulse		: vec3,
+	rotImpulse	: vec3,
 }
 
 
-player_update :: proc() {
+
+_player_update :: proc() {
 	oldpos := player_position
 
-	camSinNoise := vec3{
-		+math.sin(+timepassed*PLAYER_NOISE_SPEED*2.51) - math.sin(-timepassed*PLAYER_NOISE_SPEED*3.82) - math.sin(+timepassed*39.212)*0.2,
-		+math.cos(+timepassed*PLAYER_NOISE_SPEED*1.77) + math.cos(+timepassed*PLAYER_NOISE_SPEED*6.71) - math.sin(-timepassed*42.873)*0.2,
-		-math.sin(-timepassed*PLAYER_NOISE_SPEED*3.12) - math.cos(-timepassed*PLAYER_NOISE_SPEED*4.02) + math.sin(-timepassed*46.124)*0.2,
-	} * (math.sin(timepassed*PLAYER_NOISE_SPEED*3.551) + 2.0) * player_data.cameraShakeStrength * 0.05
+	if player_position.y < PLAYER_FALL_DEATH_Y {
+		player_die()
+		return
+	}
 
-	player_data.cameraShakeStrength = math.lerp(player_data.cameraShakeStrength, 0.0, clamp(deltatime * 5.5, 0.0, 1.0))
+	if phy_boxVsBox(player_position, PLAYER_SIZE * 0.3, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
+		player_finishMap()
+		return
+	}
+
+	player_data.rotImpulse = linalg.lerp(player_data.rotImpulse, vec3{0,0,0}, clamp(deltatime * 6.0, 0.0, 1.0))
 
 	player_lookRotMatrix3 := linalg.matrix3_from_yaw_pitch_roll(
-		player_lookRotEuler.y + camSinNoise.y,
-		player_lookRotEuler.x + camSinNoise.x,
-		player_lookRotEuler.z + camSinNoise.z,
+		player_lookRotEuler.y + player_data.rotImpulse.y,
+		player_lookRotEuler.x + player_data.rotImpulse.x,
+		player_lookRotEuler.z + player_data.rotImpulse.z,
 	)
 
 	forw  := linalg.vector_normalize(linalg.matrix_mul_vector(player_lookRotMatrix3, vec3{0, 0, 1}) * vec3{1, 0, 1})
@@ -594,7 +609,7 @@ player_update :: proc() {
 	if rl.IsKeyDown(rl.KeyboardKey.A)	do movedir.x += 1.0
 	if rl.IsKeyDown(rl.KeyboardKey.S)	do movedir.y -= 1.0
 	if rl.IsKeyDown(rl.KeyboardKey.D)	do movedir.x -= 1.0
-	if rl.IsKeyPressed(rl.KeyboardKey.C)do player_position.y -= 2.0
+	//if rl.IsKeyPressed(rl.KeyboardKey.C)do player_position.y -= 2.0
 
 	tilepos := map_worldToTile(player_position)
 	c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
@@ -607,7 +622,6 @@ player_update :: proc() {
 		player_velocity.y = PLAYER_JUMP_SPEED
 		if isInElevatorTile do player_position.y += 0.05 * PLAYER_SIZE.y
 		player_isOnGround = false
-		player_data.cameraShakeStrength += 0.01
 	}
 
 
@@ -627,7 +641,8 @@ player_update :: proc() {
 
 	wishpos := player_position + player_velocity * deltatime
 	
-	phy_vec, phy_norm, phy_hit := phy_boxCastTilemap(player_position, wishpos, PLAYER_SIZE)
+	phy_tn, phy_norm, phy_hit := phy_boxCastTilemap(player_position, wishpos, PLAYER_SIZE)
+	phy_vec := player_position + linalg.normalize(player_velocity)*phy_tn
 	
 	println("pos", player_position, "vel", player_velocity)
 	//println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
@@ -637,11 +652,6 @@ player_update :: proc() {
 
 	prevIsOnGround := player_isOnGround
 	player_isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y && !jumped
-
-	// landed
-	if !prevIsOnGround && player_isOnGround {
-		player_data.cameraShakeStrength = 0.01
-	}
 
 
 
@@ -673,8 +683,7 @@ player_update :: proc() {
 			map_data.elevatorHeights[c] = height
 
 			if player_position.y - 0.005 < y && elevatorIsMoving {
-				player_position.y = y + TILE_ELEVATOR_SPEED*deltatime //TILE_ELEVATOR_MOVE_FACTOR*deltatime*3.0*TILE_WIDTH
-				//if !player_isOnGround do player_velocity = player_friction(player_velocity, PLAYER_GROUND_FRICTION * 0.3)
+				player_position.y = y + TILE_ELEVATOR_SPEED*deltatime
 				player_velocity.y = PLAYER_GRAVITY * deltatime
 			}
 
@@ -688,9 +697,9 @@ player_update :: proc() {
 
 
 
-	if phy_hit do player_velocity = player_clipVelocity(player_velocity, phy_norm, !player_isOnGround && phy_hit ? 1.5 : 0.98)
+	if phy_hit do player_velocity = phy_clipVelocity(player_velocity, phy_norm, !player_isOnGround && phy_hit ? 1.5 : 0.98)
 
-	player_velocity = player_friction(player_velocity, player_isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)
+	player_velocity = phy_applyFrictionToVelocity(player_velocity, player_isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)
 
 
 
@@ -715,43 +724,38 @@ player_update :: proc() {
 
 	if debugIsEnabled {
 		size := vec3{1,1,1}
-		pos, normal, tmin := phy_boxCastTilemap(
-			camera.position, camera.position + cam_forw*1000.0, size*0.5)
-		rl.DrawCube(pos, size.x, size.y, size.z, rl.YELLOW)
-		rl.DrawLine3D(pos, pos + normal*4, rl.ORANGE)
+		tn, normal, hit := phy_boxCastTilemap(camera.position, camera.position + cam_forw*1000.0, size*0.5)
+		hitpos := camera.position + cam_forw*tn
+		rl.DrawCube(hitpos, size.x, size.y, size.z, rl.YELLOW)
+		rl.DrawLine3D(hitpos, hitpos + normal*4, rl.ORANGE)
 	}
 
 
 	if debugIsEnabled {
 		rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, {0,255,0,100})
 	}
-
-	player_clipVelocity :: proc(vel : vec3, normal : vec3, overbounce : f32) -> vec3 {
-		backoff := linalg.vector_dot(vel, normal) * overbounce
-		change := normal*backoff
-		return vel - change
-	}
-
-	player_friction :: proc(vel : vec3, friction : f32) -> vec3 {
-		len := linalg.vector_length(vel)
-		drop := len * friction * deltatime
-		return (len == 0.0 ? {} : vel / len) * (len - drop)
-	}
 }
 
 
 
-player_startGame :: proc() {
+player_startMap :: proc() {
 	println("player started game")
 	player_position = map_data.startPos
 }
 
-player_die :: proc() {
-	println("player died")
-	player_startGame()
+player_reset :: proc() {
+	player_data.rotImpulse = {}
+	player_velocity = {}
+	gun_timer = 0
 }
 
-player_finishGame :: proc() {
+player_die :: proc() {
+	println("player died")
+	player_startMap()
+	player_reset()
+}
+
+player_finishMap :: proc() {
 	println("player finished game")
 }
 
@@ -768,33 +772,33 @@ player_finishGame :: proc() {
 GUN_SCALE :: 0.7
 GUN_POS_X :: 0.1
 
-
-
 GUN_COUNT :: 3
 gun_kind_t :: enum {
 	SHOTGUN		= 0,
 	MACHINEGUN	= 1,
-	ROCKETLAUNCHER	= 2,
+	RAILGUN	= 2,
 }
 
-GUN_SHOTGUN_SPREAD :: 0.1
-GUN_MACHINEGUN_SPREAD :: 0.015
-
-
+GUN_SHOTGUN_SPREAD		:: 0.12
+GUN_SHOTGUN_DAMAGE		:: 0.1
+GUN_MACHINEGUN_SPREAD		:: 0.02
+GUN_MACHINEGUN_DAMAGE		:: 0.1
+GUN_ROCKETLAUNCHER_DAMAGE	:: 2.0
 
 gun_equipped : gun_kind_t = gun_kind_t.SHOTGUN
 gun_timer : f32 = 0.0
+// GUN_LEVEL_START_AMMO_COUNTS : [GUN_COUNT]i32{24, 0, 0} // TODO
 gun_ammoCounts : [GUN_COUNT]i32 = {24, 86, 12}
 
 gun_calcViewportPos :: proc() -> vec3 {
 	s := math.sin(timepassed * math.PI * 3.0) * clamp(linalg.length(player_velocity) * 0.01, 0.0, 1.0) *
 		0.04 * (player_isOnGround ? 1.0 : 0.05)
-	kick := clamp(gun_timer*0.5, 0.0, 1.0)*0.5
-	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2 + s + kick*0.2, 0.2 - kick}
+	kick := clamp(gun_timer*0.5, 0.0, 1.0)*0.8
+	return vec3{-GUN_POS_X + player_lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.2 - kick}
 }
 
 gun_calcMuzzlePos :: proc() {
-
+	// TODO
 }
 
 gun_drawModel :: proc(pos : vec3) {
@@ -808,12 +812,12 @@ gun_drawModel :: proc(pos : vec3) {
 			rl.DrawCube(pos + {0,0,0.1}, 0.04*GUN_SCALE, 0.04*GUN_SCALE,0.4*GUN_SCALE, rl.Color{30,30,30,255})
 			rl.DrawCube(pos, 0.2*GUN_SCALE,0.1*GUN_SCALE,0.15*GUN_SCALE, rl.GRAY)
 			rl.DrawCube(pos + {0,0,0.1}, 0.05*GUN_SCALE,0.2*GUN_SCALE,0.15*GUN_SCALE, rl.GRAY)
-		case gun_kind_t.ROCKETLAUNCHER:
+		case gun_kind_t.RAILGUN:
 			rl.DrawCube(pos, 0.2*GUN_SCALE, 0.2*GUN_SCALE,0.4*GUN_SCALE, rl.Color{120, 50, 16, 255})
 	}
 }
 
-gun_update :: proc() {
+_gun_update :: proc() {
 	// scrool wheel gun switching
 	if rl.GetMouseWheelMove() > 0.5 {
 		gun_equipped = cast(gun_kind_t)((cast(u32)gun_equipped + 1) % GUN_COUNT)
@@ -822,7 +826,7 @@ gun_update :: proc() {
 	} // keyboard gun switching
 	else if rl.IsKeyPressed(rl.KeyboardKey.ONE)	do gun_equipped = gun_kind_t.SHOTGUN
 	else if rl.IsKeyPressed(rl.KeyboardKey.TWO)	do gun_equipped = gun_kind_t.MACHINEGUN
-	else if rl.IsKeyPressed(rl.KeyboardKey.THREE)	do gun_equipped = gun_kind_t.ROCKETLAUNCHER
+	else if rl.IsKeyPressed(rl.KeyboardKey.THREE)	do gun_equipped = gun_kind_t.RAILGUN
 
 	gun_timer -= deltatime
 
@@ -836,121 +840,41 @@ gun_update :: proc() {
 				RAD :: 0.5
 				COL :: vec4{1,0.7,0.3,0.3}
 				DUR :: 0.8
-				cl := bullet_shootRaycast(player_position, player_lookdir,							1.0, DUR, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*right),		1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*up),			1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*right),		1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*up),			1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	1.0, RAD, COL, DUR)
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	1.0, RAD, COL, DUR)
+				cl := bullet_shootRaycast(player_position, player_lookdir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
 				player_velocity -= player_lookdir*cast(f32)(cl < PLAYER_SIZE.y ? 55.0 : 2.0)
-				player_data.cameraShakeStrength = 0.1
+				player_data.rotImpulse.x -= 0.15
 			case gun_kind_t.MACHINEGUN:
 				rnd := vec3{
 					rand.float32_range(-1.0, 1.0, &randData),
 					rand.float32_range(-1.0, 1.0, &randData),
 					rand.float32_range(-1.0, 1.0, &randData),
 				}
-				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + rnd*GUN_MACHINEGUN_SPREAD), 1.0, 0.5, {0.6,0.7,0.8, 0.2}, 2.0)
+				bullet_shootRaycast(player_position, linalg.normalize(player_lookdir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 0.5, {0.6,0.7,0.8, 0.2}, 2.0)
 				if !player_isOnGround do player_velocity -= player_lookdir * 6.0
-				player_data.cameraShakeStrength = 0.05
-			case gun_kind_t.ROCKETLAUNCHER:
-				bullet_shootRaycast(player_position, player_lookdir, 1.0, 1.0, {1,0.3,0.2, 0.5}, 2.0)
+				player_data.rotImpulse.x -= 0.035
+				player_data.rotImpulse -= rnd * 0.01
+			case gun_kind_t.RAILGUN:
+				bullet_shootRaycast(player_position, player_lookdir, GUN_ROCKETLAUNCHER_DAMAGE, 1.0, {1,0.3,0.2, 0.5}, 2.0)
 				player_velocity /= 2.0
+				player_data.rotImpulse.x -= 0.2
+				player_data.rotImpulse.y += 0.04
 		}
 		gun_ammoCounts[gunindex] -= 1
 
 		switch gun_equipped {
 			case gun_kind_t.SHOTGUN:	gun_timer = 0.5
 			case gun_kind_t.MACHINEGUN:	gun_timer = 0.15
-			case gun_kind_t.ROCKETLAUNCHER:	gun_timer = 1.0
+			case gun_kind_t.RAILGUN:	gun_timer = 1.0
 		}
-	}
-}
-
-
-
-
-
-
-//
-// ENEMIES
-//
-
-ENEMY_KNIGHT_MAX_COUNT :: 32
-ENEMY_GRUNT_MAX_COUNT :: 32
-
-ENEMY_KNIGHT_SIZE :: vec3{1.2, 3, 1.2}
-ENEMY_GRUNT_SIZE  :: vec3{3, 6, 3}
-
-
-enemy_data : struct {
-	knightCount : i32,
-	knights : [ENEMY_KNIGHT_MAX_COUNT]struct {
-		pos		: vec3,
-		target		: vec3,
-		attackTimer	: f32,
-	},
-
-	gruntCount : i32,
-	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
-		pos		: vec3,
-		target		: vec3,
-		attackTimer	: f32,
-	},
-}
-
-
-
-// guy with a sword
-enemy_spawnKnight :: proc(pos : vec3) {
-	index := enemy_data.knightCount
-	if index + 1 >= ENEMY_KNIGHT_MAX_COUNT do return
-	enemy_data.knightCount += 1
-	enemy_data.knights[index] = {}
-	enemy_data.knights[index].pos = pos
-}
-
-// guy with a gun
-enemy_spawnGrunt :: proc(pos : vec3) {
-	index := enemy_data.gruntCount
-	if index + 1 >= ENEMY_GRUNT_MAX_COUNT do return
-	enemy_data.gruntCount += 1
-	enemy_data.grunts[index] = {}
-	enemy_data.grunts[index].pos = pos
-}
-
-
-
-_enemy_updateDataAndRender :: proc() {
-	assert(enemy_data.knightCount >= 0)
-	assert(enemy_data.gruntCount  >= 0)
-	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
-	assert(enemy_data.gruntCount  < ENEMY_GRUNT_MAX_COUNT)
-
-	// update knights
-	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
-
-	}
-
-	// update grunts
-	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
-
-	}
-
-
-
-	// render knights
-	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
-		rl.DrawCube(enemy_data.knights[i].pos, 1, 2, 1, rl.PINK)
-	}
-
-	// render grunts
-	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
-		rl.DrawCube(enemy_data.grunts[i].pos, 1, 2, 1, rl.RED)
 	}
 }
 
@@ -1002,9 +926,18 @@ bullet_createLinearEffect :: proc(start : vec3, end : vec3, rad : f32, col : vec
 }
 
 bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) -> f32 {
-	phy_vec, phy_norm, phy_hit := phy_boxCastTilemap(start, start + dir*1e6, vec3{rad,rad,rad})
-	bullet_createLinearEffect(start, phy_vec, rad, col, effectDuration)
-	return linalg.length(phy_vec - start)
+	tn, hit, enemykind, enemyindex := phy_boxCastWorld(start, start + dir*1e6, vec3{rad,rad,rad})
+	bullet_createLinearEffect(start, start+dir*tn, rad, col, effectDuration)
+	if hit {
+		switch enemykind {
+			case enemy_kind_t.NONE:
+			case enemy_kind_t.GRUNT:
+				enemy_data.grunts[enemyindex].health -= damage
+			case enemy_kind_t.KNIGHT:
+				enemy_data.knights[enemyindex].health -= damage
+		}
+	}
+	return tn
 }
 
 bullet_shootProjectile :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4) {
@@ -1012,8 +945,6 @@ bullet_shootProjectile :: proc(start : vec3, dir : vec3, damage : f32, rad : f32
 }
 
 _bullet_updateDataAndRender :: proc() {
-	println("bullet_data.linearEffectsCount", bullet_data.linearEffectsCount, "/", BULLET_LINEAR_EFFECT_MAX_COUNT)
-
 	assert(bullet_data.linearEffectsCount >= 0)
 	assert(bullet_data.linearEffectsCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
 
@@ -1052,6 +983,145 @@ _bullet_updateDataAndRender :: proc() {
 
 
 //
+// ENEMIES
+//
+
+ENEMY_GRUNT_MAX_COUNT :: 32
+ENEMY_KNIGHT_MAX_COUNT :: 32
+
+ENEMY_HEALTH_MULTIPLIER :: 4
+
+ENEMY_GRUNT_SIZE  :: vec3{3, 6, 3}
+ENEMY_GRUNT_ACCELERATION :: 80.0
+ENEMY_GRUNT_MAX_SPEED :: 300.0
+ENEMY_GRUNT_FRICTION :: 1
+ENEMY_KNIGHT_SIZE :: vec3{1.2, 3, 1.2}
+
+enemy_kind_t :: enum u8 {
+	NONE = 0,
+	GRUNT,
+	KNIGHT,
+}
+
+enemy_data : struct {
+	gruntCount : i32,
+	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
+		pos		: vec3,
+		attackTimer	: f32,
+		target		: vec3,
+		health		: f32,
+		vel		: vec3,
+	},
+
+	knightCount : i32,
+	knights : [ENEMY_KNIGHT_MAX_COUNT]struct {
+		pos		: vec3,
+		attackTimer	: f32,
+		target		: vec3,
+		health		: f32,
+	},
+}
+
+
+
+// guy with a gun
+enemy_spawnGrunt :: proc(pos : vec3) {
+	index := enemy_data.gruntCount
+	if index + 1 >= ENEMY_GRUNT_MAX_COUNT do return
+	enemy_data.gruntCount += 1
+	enemy_data.grunts[index] = {}
+	enemy_data.grunts[index].pos = pos
+	enemy_data.grunts[index].health = 1.0 * ENEMY_HEALTH_MULTIPLIER
+}
+
+// guy with a sword
+enemy_spawnKnight :: proc(pos : vec3) {
+	index := enemy_data.knightCount
+	if index + 1 >= ENEMY_KNIGHT_MAX_COUNT do return
+	enemy_data.knightCount += 1
+	enemy_data.knights[index] = {}
+	enemy_data.knights[index].pos = pos
+	enemy_data.knights[index].health = 1.3 * ENEMY_HEALTH_MULTIPLIER
+}
+
+
+
+_enemy_updateDataAndRender :: proc() {
+	assert(enemy_data.gruntCount  >= 0)
+	assert(enemy_data.knightCount >= 0)
+	assert(enemy_data.gruntCount  < ENEMY_GRUNT_MAX_COUNT)
+	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
+
+	// remove dead grunts
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+		if enemy_data.grunts[i].health <= 0.0 {
+			enemy_data.gruntCount -= 1
+			lastindex :=  enemy_data.gruntCount
+			if lastindex == i || lastindex == 0 do return
+			enemy_data.grunts[i] = enemy_data.grunts[lastindex]
+		}
+	}
+
+	// remove dead knights
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+		if enemy_data.knights[i].health <= 0.0 {
+			enemy_data.knightCount -= 1
+			lastindex :=  enemy_data.knightCount
+			if lastindex == i || lastindex == 0 do return
+			enemy_data.knights[i] = enemy_data.knights[lastindex]
+		}
+	}
+
+
+	// update grunts
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+		EPS :: -1.0
+		pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
+		dir := linalg.normalize(player_position - pos)
+		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
+		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
+		seeplayer := p_tn < t_tn && p_hit
+		flatdir := linalg.normalize(dir * vec3{1,0,1})
+
+		println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
+	
+		if seeplayer {
+			enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+		}
+
+		if p_hit && p_tn < 3.0 { // push player back
+			player_velocity = flatdir*10.0
+		}
+	
+		enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
+		speed := linalg.length(enemy_data.grunts[i].vel)
+		enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
+		enemy_data.grunts[i].pos += enemy_data.grunts[i].vel * deltatime
+	}
+
+	// update knights
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+		
+	}
+
+
+	// render grunts
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+		rl.DrawCube(enemy_data.grunts[i].pos, ENEMY_GRUNT_SIZE.x*2, ENEMY_GRUNT_SIZE.y*2, ENEMY_GRUNT_SIZE.z*2, rl.PINK)
+	}
+
+	// render knights
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+		rl.DrawCube(enemy_data.knights[i].pos, ENEMY_KNIGHT_SIZE.x*2, ENEMY_KNIGHT_SIZE.y*2, ENEMY_KNIGHT_SIZE.z*2, rl.PINK)
+	}
+}
+
+
+
+
+
+
+//
 // MENU UI
 //
 
@@ -1080,6 +1150,13 @@ phy_box_t :: struct {
 	size : vec3,
 }
 
+
+
+phy_boxVsBox :: proc(pos0 : vec3, size0 : vec3, pos1 : vec3, size1 : vec3) -> bool {
+	return  (pos0.x + size0.x > pos1.x - size1.x && pos0.x - size0.x < pos1.x + size1.x) &&
+		(pos0.y + size0.y > pos1.y - size1.y && pos0.y - size0.y < pos1.y + size1.y) &&
+		(pos0.z + size0.z > pos1.z - size1.z && pos0.z - size0.z < pos1.z + size1.z)
+}
 
 
 phy_getTileBox :: proc(coord : ivec2, pos : vec3) -> (phy_box_t, bool) {
@@ -1137,7 +1214,7 @@ phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : ve
 }
 
 // hit or inside
-phy_minmaxHit :: proc(tn : f32, tf : f32) -> bool {
+phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 	return tn<tf && tf>0
 }
 
@@ -1182,17 +1259,17 @@ phy_clipSphereWithTilemap :: proc(pos : vec3, rad : f32) -> (vec3, vec3, bool) {
 // "linecast" box through the map_data
 // ! boxsize < TILE_WIDTH
 // @returns: newpos, normal, tmin
-phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3, vec3, bool) {
+phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, vec3, bool) {
 	using math
 	posxz := vec2{pos.x, pos.z}
 	dir := wishpos - pos
-	if !map_isTilePosValid(map_worldToTile(pos)) do return wishpos, {0,0.1,0}, false
+	linelen := linalg.length(dir)
+	if !map_isTilePosValid(map_worldToTile(pos)) do return linelen, {0,0.1,0}, false
 	lowerleft := map_tilePosClamp(map_worldToTile(pos - vec3{dir.x>0.0 ? 1.0:-1.0, 0.0, dir.z>0.0 ? 1.0:-1.0}*TILE_WIDTH))
 	tilepos := lowerleft
 	tileposw3 : vec3 = map_tileToWorld(lowerleft)
 	tileposw : vec2 = vec2{tileposw3.x, tileposw3.z}
 
-	linelen := linalg.length(dir)
 	dir = linelen == 0.0 ? {0,-1,0} : dir / linelen
 	ddadir := linalg.normalize(vec2{dir.x, dir.z})
 
@@ -1306,7 +1383,99 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (vec3,
 	
 	ctx.tmin = clamp(ctx.tmin, -TILEMAP_MAX_WIDTH*TILE_WIDTH, TILEMAP_MAX_WIDTH*TILE_WIDTH)
 
-	return pos + dir*ctx.tmin, ctx.normal, ctx.hit
+	//return pos + dir*ctx.tmin, ctx.normal, ctx.hit
+	return ctx.tmin, ctx.normal, ctx.hit
+}
+
+
+
+// O(n), n = number of enemies
+phy_boxCastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
+	using math
+
+	dir := wishpos - pos
+	dirlen := linalg.length(dir)
+	dir = dirlen == 0.0 ? {0,-1,0} : dir/dirlen
+	dirinv := vec3{
+		dir.x==0.0?1e6:1.0/dir.x,
+		dir.y==0.0?1e6:1.0/dir.y,
+		dir.z==0.0?1e6:1.0/dir.z,
+	}
+	dirinvabs := vec3{abs(dirinv.x), abs(dirinv.y), abs(dirinv.z)}
+
+	tnear : f32 = dirlen
+
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+		tn, tf := phy_rayBoxNearFar(pos - enemy_data.knights[i].pos, dirinv, dirinvabs, ENEMY_KNIGHT_SIZE + boxsize)
+		if phy_nearFarHit(tn, tf) && tn < tnear {
+			tnear = tn
+			res_hit = true
+			res_enemykind = enemy_kind_t.KNIGHT
+			res_enemyindex = i
+		}
+	}
+
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+		tn, tf := phy_rayBoxNearFar(pos - enemy_data.grunts[i].pos, dirinv, dirinvabs, ENEMY_GRUNT_SIZE + boxsize)
+		if phy_nearFarHit(tn, tf) && tn < tnear {
+			tnear = tn
+			res_hit = true
+			res_enemykind = enemy_kind_t.GRUNT
+			res_enemyindex = i
+		}
+	}
+
+	res_tn = tnear
+	return
+}
+
+
+phy_boxCastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool) {
+	dirinv := vec3{
+		dir.x==0.0?1e6:1.0/dir.x,
+		dir.y==0.0?1e6:1.0/dir.y,
+		dir.z==0.0?1e6:1.0/dir.z,
+	}
+	dirinvabs := vec3{abs(dirinv.x), abs(dirinv.y), abs(dirinv.z)}
+	tn, tf := phy_rayBoxNearFar(pos - player_position, dirinv, dirinvabs, PLAYER_SIZE + boxsize)
+	return tn, phy_nearFarHit(tn, tf)
+}
+
+
+phy_boxCastWorldRes_t :: struct {
+	newpos	: vec3,
+	hit	: bool,
+}
+
+phy_boxCastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
+	e_tn, e_hit, e_enemykind, e_enemyindex := phy_boxCastEnemies(pos, wishpos, boxsize)
+	t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, wishpos, boxsize)
+
+	if e_tn < t_tn {
+		res_tn		= e_tn
+		res_hit		= e_hit
+		res_enemykind	= e_enemykind
+		res_enemyindex	= e_enemyindex
+	} else {
+		res_tn		= t_tn
+		res_hit		= t_hit
+		res_enemykind	= enemy_kind_t.NONE
+	}
+	return
+}
+
+
+phy_clipVelocity :: proc(vel : vec3, normal : vec3, overbounce : f32) -> vec3 {
+	backoff := linalg.vector_dot(vel, normal) * overbounce
+	change := normal*backoff
+	return vel - change
+}
+
+
+phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32) -> vec3 {
+	len := linalg.vector_length(vel)
+	drop := len * friction * deltatime
+	return (len == 0.0 ? {} : vel / len) * (len - drop)
 }
 
 
