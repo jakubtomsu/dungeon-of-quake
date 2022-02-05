@@ -1,5 +1,7 @@
-<img src="/build/textures/dungeon_of_quake_logo.png" width="400" align="center">  
-
+<p align="center">
+  <img src="/build/textures/dungeon_of_quake_logo.png" width="400">  
+</p>
+  
 ### **Dungeon of Quake** is a simple first person shooter, inspired by the Quake franchise
 work in progress!
 
