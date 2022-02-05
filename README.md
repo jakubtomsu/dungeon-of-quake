@@ -1,5 +1,5 @@
-# MINIQUAKE
-### miniquake is a very simple Quake-like first person shooter experiment
+# DUNGEON OF QUAKE
+### **Dungeon of Quake** is a simple first person shooter, inspired by the Quake franchise
 still work in progress!
 
 # how to build
