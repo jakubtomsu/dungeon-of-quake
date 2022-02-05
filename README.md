@@ -1,6 +1,6 @@
-# DUNGEON OF QUAKE
+[doq_logo](/build/textures/dungeon_of_quake.png)
 ### **Dungeon of Quake** is a simple first person shooter, inspired by the Quake franchise
-still work in progress!
+work in progress!
 
 # how to build
 use `.\build.bat` command to build the game  
