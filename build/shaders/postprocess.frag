@@ -139,13 +139,45 @@ vec3 posterize(vec3 col, int numcolors, float gamma) {
 	return col;
 }
 
+float toGrayscale(vec3 col) {
+	return dot(col, vec3(0.299, 0.587, 0.114));
+}
+
+const vec2 size = vec2(800, 450);   // Framebuffer size
+const float bloomSamples = 10.0;          // Pixels per axis; higher = bigger glow, worse performance
+const float bloomQuality = 2.5;          // Defines size factor: Lower = smaller glow, better quality
+const float bloomThreshold = 0.4;
 
 void main() {
 	// Texel color fetching from texture sampler
 	vec2 uv = fragTexCoord.xy;
-	vec3 origColor = texture(texture0, uv).rgb;
-	vec3 col = origColor;
+	vec4 origColor = texture(texture0, uv);
+	vec3 col = origColor.rgb;
 
+
+	// bloom
+	/*
+	{
+
+		vec4 sum = vec4(0);
+		vec2 sizeFactor = vec2(1)/size*bloomQuality;
+
+		// Texel color fetching from texture sampler
+		vec4 source = origColor;
+
+		const int range = int((bloomSamples - 1.0) * 1.5 / 2.0);
+
+		for(int x = -range; x <= range; x++) {
+			for(int y = -range; y <= range; y++) {
+				vec4 val = texture(texture0, fragTexCoord + vec2(x, y)*sizeFactor);
+				sum += toGrayscale(val.rgb) > bloomThreshold ? val : vec4(0.0);
+			}
+		}
+
+		// Calculate final fragment color
+		col = mix(col, (((sum/(bloomSamples*bloomSamples)) + source)*colDiffuse).rgb, 0.2);
+	}
+	*/
 
 	//col = pow(col, vec3(1.0 / screengamma)); // gamma correction
 
@@ -155,6 +187,6 @@ void main() {
 
 	//col = tonemapACES(col);
 
-	if(gl_FragCoord.x < 10 && gl_FragCoord.y < 10) col = vec3(1,0,0);
+	if(gl_FragCoord.x < 30 && gl_FragCoord.y < 30) col = vec3(1,0,1);
 	finalColor = vec4(col, 1.0);
 }
