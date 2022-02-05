@@ -108,6 +108,7 @@ main :: proc() {
 	}
 
 	rl.CloseWindow()
+	rl.CloseAudioDevice()
 }
 
 
@@ -125,6 +126,7 @@ _app_init :: proc() {
 		rl.ConfigFlag.WINDOW_HIGHDPI,
 		rl.ConfigFlag.VSYNC_HINT,
 	})
+	rl.InitAudioDevice()
 
 	rl.SetTargetFPS(75)
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
@@ -138,6 +140,29 @@ _app_init :: proc() {
 	map_data.wallTexture		= loadTexture("tile0.png")
 	map_data.portalTexture		= loadTexture("portal.png")
 	map_data.elevatorTexture	= loadTexture("metal.png")
+
+	map_data.backgroundMusic	= loadMusic("music0.wav")
+	map_data.ambientMusic		= loadMusic("wind.wav")
+	//rl.PlayMusicStream(map_data.backgroundMusic)
+	rl.PlayMusicStream(map_data.ambientMusic)
+	rl.SetMasterVolume(0.5)
+
+	gun_data.shotgunSound		= loadSound("shotgun.wav")
+	gun_data.machinegunSound	= loadSound("machinegun.wav")
+	gun_data.laserrifleSound	= loadSound("laserrifle.wav")
+	gun_data.headshotSound		= loadSound("headshot.wav")
+	gun_data.emptyMagSound		= loadSound("emptymag.wav")
+
+	player_data.jumpSound		= loadSound("jump.wav")
+	player_data.footstepSound	= loadSound("footstep1.wav")
+	player_data.landSound		= loadSound("footstep0.wav")
+	player_data.damageSound		= loadSound("death0.wav")
+	player_data.swooshSound		= loadSound("swoosh.wav")
+
+	gun_data.shotgunModel		= loadModel("shotgun.glb")
+	gun_data.machinegunModel	= loadModel("machinegun.glb")
+	gun_data.laserrifleModel	= loadModel("laserrifle.glb")
+	gun_data.flareModel		= loadModel("flare.glb")
 
 	cubeModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
 	cubeModel.materials[0].shader = tileShader
@@ -161,11 +186,6 @@ _app_init :: proc() {
 
 	normalFont = loadFont("metalord.ttf")
 	
-	gun_data.shotgunModel		= loadModel("shotgun.glb")
-	gun_data.machinegunModel	= loadModel("machinegun.glb")
-	gun_data.laserrifleModel	= loadModel("laserrifle.glb")
-	gun_data.flareModel		= loadModel("flare.glb")
-
 	map_clearAll()
 	map_data.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
 	if os.is_file(appendToAssetPath("maps", "_quickload.doqm")) {
@@ -179,6 +199,10 @@ _app_init :: proc() {
 }
 
 _app_update :: proc() {
+	//rl.UpdateMusicStream(map_data.backgroundMusic)
+	//rl.UpdateMusicStream(map_data.ambientMusic)
+	//rl.SetMusicVolume(player_data.swooshMusic, clamp(linalg.length(player_data.vel * 0.05), 0.0, 1.0))
+
 	if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do debugIsEnabled = !debugIsEnabled
 
 	// pull elevators down
@@ -268,6 +292,32 @@ _app_render3d :: proc() {
 
 
 
+world_reset :: proc() {
+	player_initData()
+
+	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+		enemy_data.grunts[i].pos = enemy_data.grunts[i].spawnPos
+		enemy_data.grunts[i].health = ENEMY_GRUNT_HEALTH
+		enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
+		enemy_data.grunts[i].vel = {}
+		enemy_data.grunts[i].target = {}
+		enemy_data.grunts[i].isMoving = false
+	}
+
+	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+		enemy_data.knights[i].pos = enemy_data.knights[i].spawnPos
+		enemy_data.knights[i].health = ENEMY_KNIGHT_HEALTH
+		enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
+		enemy_data.knights[i].vel = {}
+		enemy_data.knights[i].target = {}
+		enemy_data.knights[i].isMoving = false
+	}
+}
+
+
+
+
+
 //
 // MAP
 //
@@ -315,7 +365,9 @@ map_data : struct {
 	elevatorHeights	: map[[2]u8]f32,
 	wallTexture	: rl.Texture2D,
 	portalTexture	: rl.Texture2D,
-	elevatorTexture : rl.Texture2D,
+	elevatorTexture	: rl.Texture2D,
+	backgroundMusic	: rl.Music,
+	ambientMusic	: rl.Music,
 }
 
 
@@ -481,7 +533,7 @@ map_loadFromFile :: proc(name: string) {
 				case map_tileKind_t.ELEVATOR: map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
 
 				case map_tileKind_t.ENEMY_GRUNT_LOWER:
-					enemy_spawnGrunt(lowpos + vec3{0, 0, 0})
+					enemy_spawnGrunt(lowpos + vec3{0, ENEMY_GRUNT_SIZE.y*1.2, 0})
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.ENEMY_GRUNT_UPPER:
 					enemy_spawnGrunt(highpos + vec3{0, ENEMY_GRUNT_SIZE.y*1.2, 0})
@@ -561,6 +613,7 @@ PLAYER_LOOK_SENSITIVITY		:: 0.004
 PLAYER_FOV			:: 120
 PLAYER_VIEWMODEL_FOV		:: 90
 PLAYER_SIZE			:: vec3{1,2,1}
+PLAYER_HEAD_SIN_TIME		::  math.PI * 5.0
 
 PLAYER_GRAVITY			:: 200 // 800
 PLAYER_SPEED			:: 105 // 320
@@ -585,9 +638,23 @@ player_data : struct {
 	vel		: vec3,
 	lookDir		: vec3,
 	lookRotMat3	: mat3,
+	stepTimer	: f32,
+
+	jumpSound	: rl.Sound,
+	footstepSound	: rl.Sound,
+	landSound	: rl.Sound,
+	damageSound	: rl.Sound,
+	swooshSound	: rl.Sound,
+
+	swooshStrength	: f32,
 }
 
 
+
+player_damage :: proc(damage : f32) {
+	player_data.health -= damage
+	rl.PlaySoundMulti(player_data.damageSound)
+}
 
 _player_update :: proc() {
 	oldpos := player_data.pos
@@ -607,7 +674,23 @@ _player_update :: proc() {
 		return
 	}
 
+	vellen := linalg.length(player_data.vel)
+	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 2.0, 0.0, 1.0))
 
+	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.005, 2.0), 0.0, 1.0) * 0.1)
+	if !rl.IsSoundPlaying(player_data.swooshSound) {
+		rl.PlaySound(player_data.swooshSound)
+	}
+
+	if player_data.isOnGround && vellen > 5.0 {
+		player_data.stepTimer += deltatime * PLAYER_HEAD_SIN_TIME
+		if player_data.stepTimer > math.PI*2.0 {
+			player_data.stepTimer = 0.0
+			//rl.PlaySoundMulti(player_data.footstepSound)
+		}
+	} else {
+		player_data.stepTimer = 0.0
+	}
 
 	player_data.rotImpulse = linalg.lerp(player_data.rotImpulse, vec3{0,0,0}, clamp(deltatime * 6.0, 0.0, 1.0))
 
@@ -638,6 +721,7 @@ _player_update :: proc() {
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		player_data.isOnGround = false
+		rl.PlaySoundMulti(player_data.jumpSound)
 	}
 
 
@@ -767,6 +851,8 @@ player_initData :: proc() {
 	player_data.health = PLAYER_START_HEALTH
 	player_data.vel = {0, 0.1, 0}
 	player_data.lookDir = {0,0,1}
+
+	gun_ammoCounts = GUN_START_AMMO_COUNTS
 }
 
 player_die :: proc() {
@@ -790,7 +876,7 @@ player_finishMap :: proc() {
 //
 
 GUN_SCALE :: 1.0
-GUN_POS_X :: 0.2
+GUN_POS_X :: 0.1
 
 GUN_COUNT :: 3
 gun_kind_t :: enum {
@@ -807,8 +893,8 @@ GUN_LASERRIFLE_DAMAGE		:: 1.0
 
 gun_equipped : gun_kind_t = gun_kind_t.SHOTGUN
 gun_timer : f32 = 0.0
-// GUN_LEVEL_START_AMMO_COUNTS : [GUN_COUNT]i32{24, 0, 0} // TODO
-gun_ammoCounts : [GUN_COUNT]i32 = {24, 86, 12}
+GUN_START_AMMO_COUNTS :: [GUN_COUNT]i32{24, 86, 12}
+gun_ammoCounts : [GUN_COUNT]i32
 
 gun_shootTimes : [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
 
@@ -817,12 +903,18 @@ gun_data : struct {
 	machinegunModel	: rl.Model,
 	laserrifleModel	: rl.Model,
 	flareModel	: rl.Model,
+
+	shotgunSound	: rl.Sound,
+	machinegunSound	: rl.Sound,
+	laserrifleSound	: rl.Sound,
+	headshotSound	: rl.Sound,
+	emptyMagSound	: rl.Sound,
 }
 
 
 
 gun_calcViewportPos :: proc() -> vec3 {
-	s := math.sin(timepassed * math.PI * 3.0) * clamp(linalg.length(player_data.vel) * 0.01, 0.1, 1.0) *
+	s := (math.sin(player_data.stepTimer) + 1.0) * clamp(linalg.length(player_data.vel) * 0.01, 0.1, 1.0) *
 		0.04 * (player_data.isOnGround ? 1.0 : 0.05)
 	kick := clamp(gun_timer*0.5, 0.0, 1.0)*0.8
 	return vec3{-GUN_POS_X + player_data.lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.2 - kick}
@@ -852,7 +944,7 @@ gun_drawModel :: proc(pos : vec3) {
 	}
 
 	// flare
-	FADETIME :: 0.15
+	FADETIME :: 0.2
 	fade := (gun_timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME
 	if fade > 0.0 {
 		rnd := vec3{
@@ -887,50 +979,61 @@ _gun_update :: proc() {
 	gunindex = cast(i32)gun_equipped
 
 
-	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) && gun_timer < 0.0 && gun_ammoCounts[gunindex] > 0 {
-		muzzlepos := gun_calcMuzzlePos()
-		switch gun_equipped {
-			case gun_kind_t.SHOTGUN:
-				right := linalg.cross(player_data.lookDir, camera.up)
-				up := camera.up
-				RAD :: 0.5
-				COL :: vec4{1,0.7,0.2,1.0}
-				DUR :: 0.5
-				cl := bullet_shootRaycast(muzzlepos, player_data.lookDir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) && gun_timer < 0.0 {
+		if gun_ammoCounts[gunindex] > 0 {
+			muzzlepos := gun_calcMuzzlePos()
+			switch gun_equipped {
+				case gun_kind_t.SHOTGUN:
+					right := linalg.cross(player_data.lookDir, camera.up)
+					up := camera.up
+					RAD :: 0.5
+					COL :: vec4{1,0.7,0.2,1.0}
+					DUR :: 0.5
+					cl := bullet_shootRaycast(muzzlepos, player_data.lookDir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
-				player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 55.0 : 2.0)
-				player_data.rotImpulse.x -= 0.15
-			case gun_kind_t.MACHINEGUN:
-				rnd := vec3{
-					rand.float32_range(-1.0, 1.0, &randData),
-					rand.float32_range(-1.0, 1.0, &randData),
-					rand.float32_range(-1.0, 1.0, &randData),
-				}
-				bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 0.5, {0.6,0.7,0.8, 0.8}, 0.5)
-				if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 6.0
-				player_data.rotImpulse.x -= 0.035
-				player_data.rotImpulse -= rnd * 0.01
-			case gun_kind_t.LASERRIFLE:
-				bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 0.5, {1,0.3,0.2, 0.6}, 2.0)
-				player_data.vel /= 1.5
-				player_data.vel -= player_data.lookDir * 50
-				player_data.rotImpulse.x -= 0.2
-				player_data.rotImpulse.y += 0.04
-		}
-		gun_ammoCounts[gunindex] -= 1
+					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 55.0 : 2.0)
+					player_data.rotImpulse.x -= 0.15
+					rl.PlaySoundMulti(gun_data.shotgunSound)
 
-		switch gun_equipped {
-			case gun_kind_t.SHOTGUN:	gun_timer = gun_shootTimes[gunindex]
-			case gun_kind_t.MACHINEGUN:	gun_timer = gun_shootTimes[gunindex]
-			case gun_kind_t.LASERRIFLE:	gun_timer = gun_shootTimes[gunindex]
+				case gun_kind_t.MACHINEGUN:
+					rnd := vec3{
+						rand.float32_range(-1.0, 1.0, &randData),
+						rand.float32_range(-1.0, 1.0, &randData),
+						rand.float32_range(-1.0, 1.0, &randData),
+					}
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 0.5, {0.6,0.7,0.8, 0.8}, 0.5)
+					if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 6.0
+					player_data.rotImpulse.x -= 0.035
+					player_data.rotImpulse -= rnd * 0.01
+					rl.PlaySoundMulti(gun_data.machinegunSound)
+
+				case gun_kind_t.LASERRIFLE:
+					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 0.5, {1,0.3,0.2, 0.6}, 2.0)
+					player_data.vel /= 1.5
+					player_data.vel -= player_data.lookDir * 50
+					player_data.rotImpulse.x -= 0.2
+					player_data.rotImpulse.y += 0.04
+					rl.PlaySoundMulti(gun_data.laserrifleSound)
+
+			}
+
+			gun_ammoCounts[gunindex] -= 1
+
+			switch gun_equipped {
+				case gun_kind_t.SHOTGUN:	gun_timer = gun_shootTimes[gunindex]
+				case gun_kind_t.MACHINEGUN:	gun_timer = gun_shootTimes[gunindex]
+				case gun_kind_t.LASERRIFLE:	gun_timer = gun_shootTimes[gunindex]
+			}
+		} else if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+			rl.PlaySoundMulti(gun_data.emptyMagSound)
 		}
 	}
 }
@@ -1065,6 +1168,7 @@ ENEMY_GRUNT_MIN_GOOD_DIST	:: 30
 ENEMY_GRUNT_MAX_GOOD_DIST	:: 60
 ENEMY_GRUNT_ATTACK_TIME		:: 1.5
 ENEMY_GRUNT_DAMAGE		:: 1.0
+ENEMY_GRUNT_HEALTH		:: 1.0
 
 ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
 ENEMY_KNIGHT_ACCELERATION	:: 180
@@ -1072,6 +1176,8 @@ ENEMY_KNIGHT_MAX_SPEED		:: 170
 ENEMY_KNIGHT_FRICTION		:: 3.5
 ENEMY_KNIGHT_DAMAGE		:: 0.8
 ENEMY_KNIGHT_ATTACK_TIME	:: 0.6
+ENEMY_KNIGHT_HEALTH		:: 1.0
+
 
 enemy_kind_t :: enum u8 {
 	NONE = 0,
@@ -1099,6 +1205,7 @@ enemy_data : struct {
 		pos		: vec3,
 		attackTimer	: f32,
 		vel		: vec3,
+		isMoving	: bool,
 		target		: vec3,
 	},
 }
@@ -1114,7 +1221,7 @@ enemy_spawnGrunt :: proc(pos : vec3) {
 	enemy_data.grunts[index].spawnPos = pos
 	enemy_data.grunts[index].pos = pos
 	enemy_data.grunts[index].target = pos
-	enemy_data.grunts[index].health = 1.0 * ENEMY_HEALTH_MULTIPLIER
+	enemy_data.grunts[index].health = ENEMY_GRUNT_HEALTH * ENEMY_HEALTH_MULTIPLIER
 }
 
 // guy with a sword
@@ -1126,7 +1233,7 @@ enemy_spawnKnight :: proc(pos : vec3) {
 	enemy_data.knights[index].spawnPos = pos
 	enemy_data.knights[index].pos = pos
 	enemy_data.knights[index].target = pos
-	enemy_data.knights[index].health = 1.3 * ENEMY_HEALTH_MULTIPLIER
+	enemy_data.knights[index].health = ENEMY_KNIGHT_HEALTH * ENEMY_HEALTH_MULTIPLIER
 }
 
 
@@ -1177,7 +1284,7 @@ _enemy_updateDataAndRender :: proc() {
 				enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
 
 				bullet_createLinearEffect(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
-				player_data.health -= ENEMY_GRUNT_DAMAGE
+				player_damage(ENEMY_GRUNT_DAMAGE)
 			}
 		} else {
 			enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
@@ -1223,7 +1330,7 @@ _enemy_updateDataAndRender :: proc() {
 				player_data.vel = flatdir*50.0
 				player_data.vel.y += 20.0
 				enemy_data.knights[i].vel = {}
-				player_data.health -= ENEMY_KNIGHT_DAMAGE
+				player_damage(ENEMY_KNIGHT_DAMAGE)
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
 			}
 		} else {

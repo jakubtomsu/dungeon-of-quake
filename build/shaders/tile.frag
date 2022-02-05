@@ -9,6 +9,8 @@ in vec3 fragNormal;
 
 // Input uniform values
 uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform sampler2D texture2;
 uniform vec4 colDiffuse;
 uniform vec3 camPos;
 
