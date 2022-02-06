@@ -1,5 +1,7 @@
-package miniquake
+package dungeon_of_quake
 
+// 'Dungeon of Quake' is a simple first person shooter, heavily inspired by the Quake franchise
+// using raylib
 
 
 import "core:math"
@@ -7,14 +9,15 @@ import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:math/rand"
 import "core:fmt"
-import "core:c"
 import "core:time"
 //RAYLIB_USE_LINALG :: true
 import rl "vendor:raylib"
 import "core:os"
 import "core:path/filepath"
-import str "core:strings"
+import "core:strings"
+import "core:strconv"
 //import win32 "core:sys/win32"
+
 
 
 
@@ -44,9 +47,6 @@ loadpath : string
 
 rendertextureMain : rl.RenderTexture2D
 postprocessShader : rl.Shader
-tileShader : rl.Shader
-tileShaderCamPosUniformIndex : rl.ShaderLocationIndex
-cubeModel : rl.Model
 randData : rand.Rand
 
 normalFont : rl.Font
@@ -78,8 +78,8 @@ main :: proc() {
 			rl.ClearBackground(rl.BLACK)
 			rl.BeginMode3D(camera)
 				_app_render3d()
-				_player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
 				_gun_update()
+				_player_update() // TODO: update player after _app_update() call. for now it's here since we need drawing for debug
 				_enemy_updateDataAndRender()
 				_bullet_updateDataAndRender()
 			rl.EndMode3D()
@@ -119,7 +119,7 @@ main :: proc() {
 //
 
 _app_init :: proc() {
-	rl.InitWindow(WINDOW_X, WINDOW_Y, "miniquake")
+	rl.InitWindow(WINDOW_X, WINDOW_Y, "dungeon of quake")
 	rl.SetWindowState({
 		rl.ConfigFlag.WINDOW_TOPMOST,
 		rl.ConfigFlag.WINDOW_HIGHDPI,
@@ -132,10 +132,15 @@ _app_init :: proc() {
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
 	println("loadpath", loadpath)
 
-	rendertextureMain = rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
-	postprocessShader = loadFragShader("postprocess.frag")
-	tileShader = loadShader("tile.vert", "tile.frag")
-	tileShaderCamPosUniformIndex  = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(tileShader, "camPos")
+	rl.SetExitKey(rl.KeyboardKey.NULL)
+
+	rendertextureMain	= rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
+	postprocessShader	= loadFragShader("postprocess.frag")
+	map_data.tileShader	= loadShader("tile.vert", "tile.frag")
+	map_data.portalShader	= loadShader("portal.vert", "portal.frag")
+	map_data.tileShaderCamPosUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "camPos")
+	bullet_data.linearEffectShader = loadShader("bulletLinearEffect.vert", "bulletLinearEffect.frag")
+
 
 	map_data.wallTexture		= loadTexture("tile0.png")
 	map_data.portalTexture		= loadTexture("portal.png")
@@ -143,6 +148,9 @@ _app_init :: proc() {
 
 	map_data.backgroundMusic	= loadMusic("music0.wav")
 	map_data.ambientMusic		= loadMusic("wind.wav")
+	map_data.elevatorSound		= loadSound("elevator.wav")
+	map_data.elevatorEndSound	= loadSound("elevator_end0.wav")
+	rl.SetSoundVolume(map_data.elevatorSound, 0.1)
 	//rl.PlayMusicStream(map_data.backgroundMusic)
 	rl.PlayMusicStream(map_data.ambientMusic)
 	rl.SetMasterVolume(0.5)
@@ -152,23 +160,42 @@ _app_init :: proc() {
 	gun_data.laserrifleSound	= loadSound("laserrifle.wav")
 	gun_data.headshotSound		= loadSound("headshot.wav")
 	gun_data.emptyMagSound		= loadSound("emptymag.wav")
+	gun_data.ammoPickupSound	= loadSound("ammo_pickup.wav")
+	rl.SetSoundVolume(gun_data.headshotSound, 0.85)
+	rl.SetSoundPitch (gun_data.headshotSound, 0.85)
+	rl.SetSoundVolume(gun_data.shotgunSound, 0.55)
+	rl.SetSoundPitch (gun_data.shotgunSound, 1.1)
+	rl.SetSoundVolume(gun_data.laserrifleSound, 0.2)
+	rl.SetSoundPitch(gun_data.laserrifleSound, 0.8)
+	rl.SetSoundVolume(gun_data.emptyMagSound, 0.6)
+	rl.SetSoundVolume(gun_data.ammoPickupSound, 1.2)
 
 	player_data.jumpSound		= loadSound("jump.wav")
-	player_data.footstepSound	= loadSound("footstep1.wav")
-	player_data.landSound		= loadSound("footstep0.wav")
+	player_data.footstepSound	= loadSound("footstep.wav")
+	player_data.landSound		= loadSound("land.wav")
 	player_data.damageSound		= loadSound("death0.wav")
 	player_data.swooshSound		= loadSound("swoosh.wav")
+	rl.SetSoundVolume(player_data.landSound, 0.45)
+	rl.SetSoundPitch (player_data.landSound, 0.8)
 
-	gun_data.shotgunModel		= loadModel("shotgun.glb")
-	gun_data.machinegunModel	= loadModel("machinegun.glb")
-	gun_data.laserrifleModel	= loadModel("laserrifle.glb")
+	gun_data.gunModels[cast(i32)gun_kind_t.SHOTGUN]		= loadModel("shotgun.glb")
+	gun_data.gunModels[cast(i32)gun_kind_t.MACHINEGUN]	= loadModel("machinegun.glb")
+	gun_data.gunModels[cast(i32)gun_kind_t.LASERRIFLE]	= loadModel("laserrifle.glb")
 	gun_data.flareModel		= loadModel("flare.glb")
 
-	cubeModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
-	cubeModel.materials[0].shader = tileShader
-	rl.SetMaterialTexture(&cubeModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
+	map_data.tileModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
+	map_data.tileModel.materials[0].shader = map_data.tileShader
+	rl.SetMaterialTexture(&map_data.tileModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
+	map_data.elevatorModel = loadModel("elevator.glb")
+	map_data.elevatorModel.materials[0].shader = map_data.tileShader
+	rl.SetMaterialTexture(&map_data.elevatorModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.elevatorTexture)
 
-	rand.init(&randData, cast(u64)time.now()._nsec)
+	enemy_data.gruntHitSound	= loadSound("death2.wav")
+	enemy_data.gruntDeathSound	= enemy_data.gruntHitSound
+	enemy_data.knightHitSound	= enemy_data.gruntHitSound
+	enemy_data.knightDeathSound	= enemy_data.gruntHitSound
+
+
 
 	camera.position = {0, 3, 0}
 	camera.target = {}
@@ -185,6 +212,8 @@ _app_init :: proc() {
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
 	normalFont = loadFont("metalord.ttf")
+
+	rand.init(&randData, cast(u64)time.now()._nsec)
 	
 	map_clearAll()
 	map_data.bounds = {TILEMAP_MAX_WIDTH, TILEMAP_MAX_WIDTH}
@@ -196,6 +225,7 @@ _app_init :: proc() {
 	//map_debugPrint()
 
 	player_startMap()
+
 }
 
 _app_update :: proc() {
@@ -224,29 +254,29 @@ _app_render2d :: proc() {
 	//rl.DrawRectangle(WINDOW_X/2 - 3, WINDOW_Y/2 - 3, 6, 6, rl.Fade(rl.BLACK, 0.5))
 	//rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
 
-	gunindex := cast(i32)gun_equipped
+	gunindex := cast(i32)gun_data.equipped
 
 	// draw ammo
-	ui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_ammoCounts[gunindex]))
+	ui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_data.ammoCounts[gunindex]))
 	ui_drawText({30, WINDOW_Y - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("health: ", player_data.health))
 
 	for i : i32 = 0; i < GUN_COUNT; i += 1 {
 		LINE :: 40
 		TEXTHEIGHT :: LINE*0.5
 		pos := vec2{WINDOW_X - 120, WINDOW_Y*0.5 + GUN_COUNT*LINE*0.5 - cast(f32)i*LINE}
-		if i == cast(i32)gun_equipped {
+		if i == cast(i32)gun_data.equipped {
 			W :: 8
 			rl.DrawRectangle(cast(i32)pos.x-W, cast(i32)pos.y-W, 120, TEXTHEIGHT+W*2, {150,150,150,100})
 		}
 
-		ui_drawText(pos, TEXTHEIGHT, gun_ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
+		ui_drawText(pos, TEXTHEIGHT, gun_data.ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
 	}
 
 	if debugIsEnabled {
 		rl.DrawFPS(0, 0)
 		debugtext :: proc(args : ..any) {
 			tstr := fmt.tprint(args=args)
-			cstr := str.clone_to_cstring(tstr, context.temp_allocator)
+			cstr := strings.clone_to_cstring(tstr, context.temp_allocator)
 			rl.DrawText(cstr, 6, _debugtext_y * 12, 10, rl.Fade(rl.WHITE, 0.8))
 			_debugtext_y += 1
 		}
@@ -257,10 +287,13 @@ _app_render2d :: proc() {
 		debugtext("    onground", player_data.isOnGround)
 		debugtext("map")
 		debugtext("    bounds", map_data.bounds)
+		debugtext("    mapName", map_data.mapName)
+		debugtext("    nextMapName", map_data.nextMapName)
+		debugtext("    startPlayerDir", map_data.startPlayerDir)
 		debugtext("gun")
-		debugtext("    equipped", gun_equipped)
-		debugtext("    timer", gun_timer)
-		debugtext("    ammo counts", gun_ammoCounts)
+		debugtext("    equipped", gun_data.equipped)
+		debugtext("    timer", gun_data.timer)
+		debugtext("    ammo counts", gun_data.ammoCounts)
 		debugtext("bullets")
 		debugtext("    linear effect count", bullet_data.linearEffectsCount)
 		debugtext("enemies")
@@ -283,7 +316,15 @@ _app_render3d :: proc() {
 
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
-	rl.SetShaderValue(tileShader, tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
+	rl.SetShaderValue(map_data.tileShader, map_data.tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
+
+	rl.SetShaderValue(
+		map_data.portalShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.portalShader, "timePassed"),
+		&timepassed,
+		rl.ShaderUniformDataType.FLOAT,
+	)
+
 	map_drawTilemap()
 }
 
@@ -312,6 +353,9 @@ world_reset :: proc() {
 		enemy_data.knights[i].target = {}
 		enemy_data.knights[i].isMoving = false
 	}
+
+	map_data.gunPickupCount		= map_data.gunPickupSpawnCount
+	map_data.healthPickupCount	= map_data.healthPickupSpawnCount
 }
 
 
@@ -334,40 +378,88 @@ TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
 TILE_ELEVATOR_Y1		:: cast(f32)-1.5*TILE_WIDTH - 2.0
 TILE_ELEVATOR_SPEED		:: (TILE_ELEVATOR_Y1 - TILE_ELEVATOR_Y0) * TILE_ELEVATOR_MOVE_FACTOR
 
+MAP_GUN_PICKUP_MAX_COUNT	:: 32
+MAP_HEALTH_PICKUP_MAX_COUNT	:: 32
+
 MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
-
-
 
 map_tileKind_t :: enum u8 {
 	NONE			= '-',
 	EMPTY			= ' ',
-	WALL			= '#',
+	FULL			= '#',
 	WALL_MID		= 'w',
 	CEILING			= 'c',
 	START_LOWER		= 's', // translated
 	START_UPPER		= 'S', // translated
 	FINISH_LOWER		= 'f', // translated
 	FINISH_UPPER		= 'F', // translated
-	PLATFORM		= 'p',
+	PLATFORM_SMALL		= 'p',
+	PLATFORM_LARGE		= 'P',
 	ELEVATOR		= 'e',
+	OBSTACLE_LOWER		= 'o',
+	OBSTACLE_UPPER		= 'O',
+	JUMP_PAD_LOWER		= 'j',
+	JUMP_PAD_UPPER		= 'J',
+
+	PICKUP_HEALTH_LOWER	= 'h', // translated
+	PICKUP_HEALTH_UPPER	= 'H', // translated
+
+	GUN_SHOTGUN_LOWER	= 'd', // translated // as default
+	GUN_SHOTGUN_UPPER	= 'D', // translated
+	GUN_MACHINEGUN_LOWER	= 'm', // translated
+	GUN_MACHINEGUN_UPPER	= 'M', // translated
+	GUN_LASERRIFLE_LOWER	= 'l', // translated
+	GUN_LASERRIFLE_UPPER	= 'L', // translated
+
 	ENEMY_KNIGHT_LOWER	= 'k', // translated
 	ENEMY_KNIGHT_UPPER	= 'K', // translated
 	ENEMY_GRUNT_LOWER	= 'g', // translated
 	ENEMY_GRUNT_UPPER	= 'G', // translated
 }
 
-
 map_data : struct {
+	mapName		: string,
+	nextMapName	: string,
+	authorName	: string, // TODO
+	startMessage	: string, // TODO
+	startPlayerDir	: vec2,
+
 	tiles		: [TILEMAP_MAX_WIDTH][TILEMAP_MAX_WIDTH]map_tileKind_t,
 	bounds		: ivec2,
 	startPos	: vec3,
 	finishPos	: vec3,
-	elevatorHeights	: map[[2]u8]f32,
-	wallTexture	: rl.Texture2D,
-	portalTexture	: rl.Texture2D,
-	elevatorTexture	: rl.Texture2D,
-	backgroundMusic	: rl.Music,
-	ambientMusic	: rl.Music,
+
+	elevatorHeights		: map[[2]u8]f32,
+
+	shotgunPickupSpawnCount		: i32,
+	machinegunPickupSpawnCount	: i32,
+	laserriflePickupSpawnCount	: i32,
+	healthPickupSpawnCount		: i32,
+
+	gunPickupCount		: i32,
+	gunPickupSpawnCount	: i32,
+	gunPickups		: [MAP_GUN_PICKUP_MAX_COUNT]struct {
+		pos	: vec3,
+		kind	: gun_kind_t,
+	},
+
+	healthPickupCount	: i32,
+	healthPickups		: [MAP_HEALTH_PICKUP_MAX_COUNT]vec3,
+
+	tileShader			: rl.Shader,
+	tileShaderCamPosUniformIndex	: rl.ShaderLocationIndex,
+	portalShader			: rl.Shader,
+
+	wallTexture		: rl.Texture2D,
+	portalTexture		: rl.Texture2D,
+	elevatorTexture		: rl.Texture2D,
+	backgroundMusic		: rl.Music,
+	ambientMusic		: rl.Music,
+	elevatorSound		: rl.Sound,
+	elevatorEndSound	: rl.Sound,
+
+	tileModel	: rl.Model,
+	elevatorModel	: rl.Model,
 }
 
 
@@ -387,12 +479,30 @@ map_isTilePosInBufferBounds :: proc(coord : ivec2) -> bool {
 }
 
 map_isTilePosValid :: proc(coord : ivec2) -> bool {
-	return map_isTilePosInBufferBounds(coord) && coord.x < map_data.bounds.x && coord.y < map_data.bounds.y
+	return map_isTilePosInBufferBounds(coord) && coord.x <= map_data.bounds.x && coord.y <= map_data.bounds.y
 }
 
 map_tilePosClamp :: proc(coord : ivec2) -> ivec2 {
 	return ivec2{clamp(coord.x, 0, map_data.bounds.x), clamp(coord.y, 0, map_data.bounds.y)}
 }
+
+
+
+map_addGunPickup :: proc(pos : vec3, kind : gun_kind_t) {
+	if map_data.gunPickupCount + 1 >= MAP_GUN_PICKUP_MAX_COUNT do return
+	map_data.gunPickups[map_data.gunPickupCount].pos  = pos
+	map_data.gunPickups[map_data.gunPickupCount].kind = kind
+	map_data.gunPickupCount += 1
+	map_data.gunPickupSpawnCount = map_data.gunPickupCount
+}
+
+map_addHealthPickup :: proc(pos : vec3) {
+	if map_data.healthPickupCount + 1 >= MAP_HEALTH_PICKUP_MAX_COUNT do return
+	map_data.healthPickups[map_data.healthPickupCount] = pos
+	map_data.healthPickupCount += 1
+	map_data.healthPickupSpawnCount = map_data.healthPickupCount
+}
+
 
 
 
@@ -414,7 +524,7 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 		case map_tileKind_t.NONE:
 			return 0
 
-		case map_tileKind_t.WALL:
+		case map_tileKind_t.FULL:
 			boxbuf[0] = phy_box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
 			return 1
 
@@ -423,24 +533,24 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
 			return 2
-		
+
 		case map_tileKind_t.WALL_MID:
 			boxbuf[0] = phy_calcBox(posxz, -2, 5)
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
 			return 2
 
-		case map_tileKind_t.PLATFORM:
+		case map_tileKind_t.PLATFORM_SMALL:
 			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[2] = phy_calcBox(posxz, 0, 1)
 			return 3
-		
+
 		case map_tileKind_t.CEILING:
 			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[1] = phy_calcBox(posxz, 2, 5)
 			return 2
-		
-		case map_tileKind_t.ELEVATOR:
+
+		case map_tileKind_t.ELEVATOR: // the actual moving elevator box is at index 0
 			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
 			height, ok := map_data.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
 			if !ok do height = 0.0
@@ -448,6 +558,7 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
 			return 2
 	}
+
 	return 0
 }
 
@@ -461,13 +572,13 @@ map_clearAll :: proc() {
 
 	for x : u32 = 0; x < TILEMAP_MAX_WIDTH; x += 1 {
 		for y : u32 = 0; y < TILEMAP_MAX_WIDTH; y += 1 {
-			map_data.tiles[x][y] = map_tileKind_t.EMPTY
+			map_data.tiles[x][y] = map_tileKind_t.NONE
 		}
 	}
 }
 
 map_loadFromFile :: proc(name: string) {
-	fullpath := filepath.clean(str.concatenate({loadpath, filepath.SEPARATOR_STRING, "maps", filepath.SEPARATOR_STRING, name}))
+	fullpath := appendToAssetPath("maps", name)
 	println("! loading map: ", fullpath)
 	data, success := os.read_entire_file_from_filename(fullpath)
 
@@ -505,12 +616,29 @@ map_loadFromFile :: proc(name: string) {
 			case '\r':
 				println("\\r")
 				continue dataloop
+			case '{':
+				println("attributes")
+				for data[index] != '}' {
+					if !skipWhitespace(data, &index) do index += 1
+					println("index", index, "ch", cast(rune)data[index])
+					if attribMatch(data, &index, "test")		do println("test detected, ch", cast(rune)data[index], "val", readF32(data, &index))
+					if attribMatch(data, &index, "test1")		do println("test1 detected, ch", cast(rune)data[index], "val", readF32(data, &index))
+					if attribMatch(data, &index, "test3")		do println("test3 detected, ch", cast(rune)data[index], "val", readString(data, &index))
+					if attribMatch(data, &index, "test4")		do println("test4 detected, ch", cast(rune)data[index], "val", readI32(data, &index))
+					if attribMatch(data, &index, "mapName")		do map_data.mapName = readString(data, &index)
+					if attribMatch(data, &index, "nextMapName")	do map_data.nextMapName = readString(data, &index)
+					if attribMatch(data, &index, "startPlayerDir") {
+						map_data.startPlayerDir.x = readF32(data, &index)
+						map_data.startPlayerDir.y = readF32(data, &index)
+						map_data.startPlayerDir = linalg.normalize(map_data.startPlayerDir)
+					}
+				}
 		}
 
 		tile := cast(map_tileKind_t)ch
 		
 		if map_isTilePosInBufferBounds({x, y}) {
-			println("pre ", tile)
+			//println("pre ", tile)
 			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/2 - TILE_WIDTH, 0}
 			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH*0.5, 0}
 		
@@ -545,10 +673,38 @@ map_loadFromFile :: proc(name: string) {
 				case map_tileKind_t.ENEMY_KNIGHT_UPPER:
 					enemy_spawnKnight(highpos + vec3{0, ENEMY_KNIGHT_SIZE.y*1.2, 0})
 					tile = map_tileKind_t.WALL_MID
+
+				case map_tileKind_t.PICKUP_HEALTH_LOWER:
+					map_addHealthPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0})
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.PICKUP_HEALTH_UPPER:
+					map_addHealthPickup(highpos + vec3{0, PLAYER_SIZE.y, 0})
+					tile = map_tileKind_t.WALL_MID
+
+				case map_tileKind_t.GUN_SHOTGUN_LOWER:
+					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.GUN_SHOTGUN_UPPER:
+					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
+					tile = map_tileKind_t.WALL_MID
+
+				case map_tileKind_t.GUN_MACHINEGUN_LOWER:
+					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.GUN_MACHINEGUN_UPPER:
+					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
+					tile = map_tileKind_t.WALL_MID
+
+				case map_tileKind_t.GUN_LASERRIFLE_LOWER:
+					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.GUN_LASERRIFLE_UPPER:
+					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
+					tile = map_tileKind_t.WALL_MID
 			}
 
 			map_data.tiles[x][y] = tile
-			println("post", tile)
+			//println("post", tile)
 		}
 
 		x += 1
@@ -560,42 +716,142 @@ map_loadFromFile :: proc(name: string) {
 	println("end")
 
 	println("bounds[0]", map_data.bounds[0], "bounds[1]", map_data.bounds[1])
+	println("mapName", map_data.mapName)
+	println("nextMapName", map_data.nextMapName)
 
+	rl.SetShaderValue(
+		map_data.portalShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.portalShader, "portalPos"),
+		&map_data.finishPos,
+		rl.ShaderUniformDataType.VEC3,
+	)
+
+
+	attribMatch :: proc(buf : []u8, index : ^i32, name : string) -> bool {
+		//println("buf", buf, "index", index^, "name", name)
+		endindex : i32 = cast(i32)strings.index_byte(string(buf[index^:]), ':') + 1
+		if endindex <= 0 do return false
+		src : string = string(buf[index^:index^ + endindex])
+		checkstr := fmt.tprint(args={name, ":"}, sep="")
+		val := strings.compare(src, checkstr)
+		res := val == 0
+		if res {
+			index^ += cast(i32)len(name) + 1
+			skipWhitespace(buf, index)
+		}
+		return res
+	}
+
+	skipWhitespace :: proc(buf : []u8, index : ^i32) -> bool {
+		skipped := false
+		for strings.is_space(cast(rune)buf[index^]) || buf[index^]=='\n' || buf[index^]=='\r' {
+			index^ += 1
+			skipped = true
+		}
+		return skipped
+	}
+
+	readF32 :: proc(buf : []u8, index : ^i32) -> f32 {
+		skipWhitespace(buf, index)
+		str := string(buf[index^:])
+		val, ok := strconv.parse_f32(str)
+		_ = ok
+		skipToNextWhitespace(buf, index)
+		return val
+	}
+
+	readI32 :: proc(buf : []u8, index : ^i32) -> i32 {
+		skipWhitespace(buf, index)
+		str := string(buf[index^:])
+		val, ok := strconv.parse_int(str)
+		_ = ok
+		skipToNextWhitespace(buf, index)
+		return cast(i32)val
+	}
+
+	// reads string in between "
+	readString :: proc(buf : []u8, index : ^i32) -> string {
+		skipWhitespace(buf, index)
+		if buf[index^] != '\"' do return ""
+		startindex := index^ + 1
+		endindex := startindex + cast(i32)strings.index_byte(string(buf[startindex:]), '\"')
+		index^ = endindex + 1
+		res := string(buf[startindex:endindex])
+		println("startindex", startindex, "endindex", endindex, "res", res)
+		return res
+	}
+
+	skipToNextWhitespace :: proc(buf : []u8, index : ^i32) {
+		for !strings.is_space(cast(rune)buf[index^]) && buf[index^]!='\n' && buf[index^]!='\r' {
+			index^ += 1
+			println("skip to next line")
+		}
+		index^ += 1
+	}
 }
 
 map_debugPrint :: proc() {
 	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
 		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
-			fmt.print(map_data.tiles[x][y] == map_tileKind_t.WALL ? "#" : " ")
+			fmt.print(map_data.tiles[x][y] == map_tileKind_t.FULL ? "#" : " ")
 		}
 		println("")
 	}
 }
 
+// draw tilemap, pickups, etc.
 map_drawTilemap :: proc() {
-	map_drawTileBox :: proc(pos : vec3, size : vec3) {
-		//rl.DrawCubeTexture(map_data.wallTexture, pos, size.x, size.y, size.z, rl.WHITE)
-		rl.DrawModelEx(cubeModel, pos, {0,1,0}, 0.0, size, rl.WHITE)
-	}
-	
-	rl.BeginShaderMode(tileShader)
+	rl.BeginShaderMode(map_data.tileShader)
 	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
 		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
-			posxz : vec2 = {(cast(f32)x) * TILE_WIDTH, (cast(f32)y) * TILE_WIDTH} + vec2{TILE_WIDTH/2.0, TILE_WIDTH/2.0}
 			//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
-			
-			checker := cast(bool)((x%2) ~ (y%2))
+			tilekind := map_data.tiles[x][y]
+
 			boxbuf : [PHY_MAX_TILE_BOXES]phy_box_t = {}
 			boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
-			for i : i32 = 0; i < boxcount; i += 1 {
-				map_drawTileBox(boxbuf[i].pos, boxbuf[i].size*2)
+			//checker := cast(bool)((x%2) ~ (y%2))
+			#partial switch tilekind {
+				case:
+					for i : i32 = 0; i < boxcount; i += 1 {
+						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+					}
+				case map_tileKind_t.ELEVATOR:
+					rl.DrawModelEx(map_data.elevatorModel, boxbuf[0].pos, {0,1,0}, 0.0, boxbuf[0].size*2.0, rl.WHITE)
+					for i : i32 = 1; i < boxcount; i += 1 {
+						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+					}
 			}
 		}
 	}
 	rl.EndShaderMode()
 
+	rl.BeginShaderMode(map_data.portalShader)
 	// draw finish
 	rl.DrawCubeTexture(map_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
+	rl.EndShaderMode()
+
+	// draw pickups and update them
+	{
+		ROTSPEED :: 180
+		SCALE :: 5.0
+
+		for i : i32 = 0; i < map_data.gunPickupCount; i += 1 {
+			pos := map_data.gunPickups[i].pos + vec3{0, math.sin(timepassed*8.0)*0.2, 0}
+			gunindex := cast(i32)map_data.gunPickups[i].kind
+			rl.DrawModelEx(gun_data.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
+			rl.DrawSphere(pos, -2.0, {255,230,180,40})
+			if linalg.length2(player_data.pos - pos) < 16.0 {
+				gun_data.equipped = map_data.gunPickups[i].kind
+				gun_data.ammoCounts[gunindex] = gun_startAmmoCounts[gunindex]
+				rl.PlaySoundMulti(gun_data.ammoPickupSound)
+
+				temp := map_data.gunPickups[i]
+				map_data.gunPickupCount -= 1
+				map_data.gunPickups[i] = map_data.gunPickups[map_data.gunPickupCount]
+				map_data.gunPickups[map_data.gunPickupCount] = temp
+			}
+		}
+	}
 }
 
 
@@ -610,7 +866,7 @@ map_drawTilemap :: proc() {
 
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
 PLAYER_LOOK_SENSITIVITY		:: 0.004
-PLAYER_FOV			:: 120
+PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
 PLAYER_SIZE			:: vec3{1,2,1}
 PLAYER_HEAD_SIN_TIME		::  math.PI * 5.0
@@ -646,7 +902,7 @@ player_data : struct {
 	damageSound	: rl.Sound,
 	swooshSound	: rl.Sound,
 
-	swooshStrength	: f32,
+	swooshStrength	: f32, // just lerped velocity length
 }
 
 
@@ -657,8 +913,6 @@ player_damage :: proc(damage : f32) {
 }
 
 _player_update :: proc() {
-	oldpos := player_data.pos
-
 	if player_data.pos.y < PLAYER_FALL_DEATH_Y {
 		player_die()
 		return
@@ -675,28 +929,26 @@ _player_update :: proc() {
 	}
 
 	vellen := linalg.length(player_data.vel)
-	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 2.0, 0.0, 1.0))
 
-	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.005, 2.0), 0.0, 1.0) * 0.1)
-	if !rl.IsSoundPlaying(player_data.swooshSound) {
-		rl.PlaySound(player_data.swooshSound)
-	}
+	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 3.0, 0.0, 1.0))
+	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.003, 2.0), 0.0, 1.0) * 0.8)
+	if !rl.IsSoundPlaying(player_data.swooshSound) do rl.PlaySound(player_data.swooshSound)
 
-	if player_data.isOnGround && vellen > 5.0 {
+	if player_data.isOnGround && linalg.length(player_data.vel * vec3{1,0,1}) > 5.0 {
 		player_data.stepTimer += deltatime * PLAYER_HEAD_SIN_TIME
 		if player_data.stepTimer > math.PI*2.0 {
 			player_data.stepTimer = 0.0
-			//rl.PlaySoundMulti(player_data.footstepSound)
+			rl.PlaySoundMulti(player_data.footstepSound)
 		}
 	} else {
-		player_data.stepTimer = 0.0
+		player_data.stepTimer = -0.01
 	}
 
 	player_data.rotImpulse = linalg.lerp(player_data.rotImpulse, vec3{0,0,0}, clamp(deltatime * 6.0, 0.0, 1.0))
 
 	player_data.lookRotMat3 = linalg.matrix3_from_yaw_pitch_roll(
 		player_data.lookRotEuler.y + player_data.rotImpulse.y,
-		player_data.lookRotEuler.x + player_data.rotImpulse.x,
+		clamp(player_data.lookRotEuler.x + player_data.rotImpulse.x, -math.PI*0.5*0.95, math.PI*0.5*0.95),
 		player_data.lookRotEuler.z + player_data.rotImpulse.z,
 	)
 
@@ -753,6 +1005,13 @@ _player_update :: proc() {
 	prevIsOnGround := player_data.isOnGround
 	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y && !jumped
 
+	if !prevIsOnGround && player_data.isOnGround { // just landed
+		if !rl.IsSoundPlaying(player_data.landSound) {
+			rl.PlaySound(player_data.landSound)
+			rl.PlaySoundMulti(player_data.footstepSound)
+		}
+	}
+
 
 
 	// elevator update
@@ -764,7 +1023,7 @@ _player_update :: proc() {
 
 		if isInElevatorTile {
 			height := map_data.elevatorHeights[c]
-			elevatorIsMoving := false
+			elevatorIsMoving = false
 
 			y := math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
 
@@ -791,6 +1050,15 @@ _player_update :: proc() {
 				player_data.vel.y += TILE_ELEVATOR_SPEED * 0.5
 			}
 		}
+
+		if elevatorIsMoving {
+			println("elevator moving")
+			if !rl.IsSoundPlaying(map_data.elevatorSound) {
+				rl.PlaySound(map_data.elevatorSound)
+			}
+		} else {
+			rl.StopSound(map_data.elevatorSound)
+		}
 	}
 
 	player_data.isOnGround |= elevatorIsMoving
@@ -808,9 +1076,12 @@ _player_update :: proc() {
 
 	// camera
 	{
-		player_data.lookRotEuler.y += -rl.GetMouseDelta().x * PLAYER_LOOK_SENSITIVITY
-		player_data.lookRotEuler.x += rl.GetMouseDelta().y * PLAYER_LOOK_SENSITIVITY
-		player_data.lookRotEuler.x = clamp(player_data.lookRotEuler.x, -0.48 * math.PI, 0.48 * math.PI)
+		if framespassed > 5 { // mouse input seems to have weird spike first frame
+			player_data.lookRotEuler.y += -rl.GetMouseDelta().x * PLAYER_LOOK_SENSITIVITY
+			player_data.lookRotEuler.x += rl.GetMouseDelta().y * PLAYER_LOOK_SENSITIVITY
+			player_data.lookRotEuler.x = clamp(player_data.lookRotEuler.x, -math.PI*0.5*0.95, math.PI*0.5*0.95)
+		}
+	
 		player_data.lookRotEuler.z = math.lerp(player_data.lookRotEuler.z, 0.0, clamp(deltatime * 7.5, 0.0, 1.0))
 		player_data.lookRotEuler.z -= movedir.x*deltatime*0.75
 		player_data.lookRotEuler.z = clamp(player_data.lookRotEuler.z, -math.PI*0.3, math.PI*0.3)
@@ -841,24 +1112,29 @@ _player_update :: proc() {
 player_startMap :: proc() {
 	println("player started game")
 	player_data.pos = map_data.startPos
+	player_data.lookRotEuler.x = 0.0
+	player_data.lookRotEuler.z = 0.0
+	player_data.lookRotEuler.y = math.PI*2 - (math.atan2(-map_data.startPlayerDir.x, -map_data.startPlayerDir.y) * math.sign(-map_data.startPlayerDir.x))
 	player_initData()
 }
 
 player_initData :: proc() {
 	player_data.rotImpulse = {}
 	player_data.vel = {}
-	gun_timer = 0
+	gun_data.timer = 0
 	player_data.health = PLAYER_START_HEALTH
 	player_data.vel = {0, 0.1, 0}
 	player_data.lookDir = {0,0,1}
 
-	gun_ammoCounts = GUN_START_AMMO_COUNTS
+	gun_data.ammoCounts = gun_startAmmoCounts
 }
 
 player_die :: proc() {
 	println("player died")
+	player_damage(1.0)
 	player_startMap()
 	player_initData()
+	world_reset()
 }
 
 player_finishMap :: proc() {
@@ -875,7 +1151,7 @@ player_finishMap :: proc() {
 // (guns for the player, not for the enemies)
 //
 
-GUN_SCALE :: 1.0
+GUN_SCALE :: 1.1
 GUN_POS_X :: 0.1
 
 GUN_COUNT :: 3
@@ -891,41 +1167,41 @@ GUN_MACHINEGUN_SPREAD		:: 0.02
 GUN_MACHINEGUN_DAMAGE		:: 0.2
 GUN_LASERRIFLE_DAMAGE		:: 1.0
 
-gun_equipped : gun_kind_t = gun_kind_t.SHOTGUN
-gun_timer : f32 = 0.0
-GUN_START_AMMO_COUNTS :: [GUN_COUNT]i32{24, 86, 12}
-gun_ammoCounts : [GUN_COUNT]i32
-
+gun_startAmmoCounts : [GUN_COUNT]i32 = {24, 86, 12}
 gun_shootTimes : [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
 
 gun_data : struct {
-	shotgunModel	: rl.Model,
-	machinegunModel	: rl.Model,
-	laserrifleModel	: rl.Model,
+	equipped	: gun_kind_t,
+	timer		: f32,
+
+	ammoCounts	: [GUN_COUNT]i32,
+
 	flareModel	: rl.Model,
+	gunModels	: [GUN_COUNT]rl.Model,
 
 	shotgunSound	: rl.Sound,
 	machinegunSound	: rl.Sound,
 	laserrifleSound	: rl.Sound,
 	headshotSound	: rl.Sound,
 	emptyMagSound	: rl.Sound,
+	ammoPickupSound	: rl.Sound,
 }
 
 
 
 gun_calcViewportPos :: proc() -> vec3 {
-	s := (math.sin(player_data.stepTimer) + 1.0) * clamp(linalg.length(player_data.vel) * 0.01, 0.1, 1.0) *
+	s := math.sin(player_data.stepTimer < 0.0 ? timepassed*PLAYER_HEAD_SIN_TIME*0.5 : player_data.stepTimer*0.5) * clamp(linalg.length(player_data.vel) * 0.01, 0.1, 1.0) *
 		0.04 * (player_data.isOnGround ? 1.0 : 0.05)
-	kick := clamp(gun_timer*0.5, 0.0, 1.0)*0.8
-	return vec3{-GUN_POS_X + player_data.lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.2 - kick}
+	kick := clamp(gun_data.timer*0.5, 0.0, 1.0)*0.8
+	return vec3{-GUN_POS_X + player_data.lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.48 - kick}
 }
 
 gun_getMuzzleOffset :: proc() -> vec3 {
 	offs := vec3{}
-	switch gun_equipped {
-		case gun_kind_t.SHOTGUN:	offs = {0,0,1.0}
-		case gun_kind_t.MACHINEGUN:	offs = {0,0,1.3}
-		case gun_kind_t.LASERRIFLE:	offs = {0,0,0.8}
+	switch gun_data.equipped {
+		case gun_kind_t.SHOTGUN:	offs = {0,0,0.6}
+		case gun_kind_t.MACHINEGUN:	offs = {0,0,0.9}
+		case gun_kind_t.LASERRIFLE:	offs = {0,0,0.5}
 	}
 	return offs
 }
@@ -936,16 +1212,14 @@ gun_calcMuzzlePos :: proc() -> vec3 {
 }
 
 gun_drawModel :: proc(pos : vec3) {
-	gunindex := cast(i32)gun_equipped
-	switch gun_equipped {
-		case gun_kind_t.SHOTGUN:	rl.DrawModel(gun_data.shotgunModel,	pos, GUN_SCALE, rl.WHITE)
-		case gun_kind_t.MACHINEGUN:	rl.DrawModel(gun_data.machinegunModel,	pos, GUN_SCALE, rl.WHITE)
-		case gun_kind_t.LASERRIFLE:	rl.DrawModel(gun_data.laserrifleModel,	pos, GUN_SCALE, rl.WHITE)
-	}
+	if gun_data.ammoCounts[cast(i32)gun_data.equipped] <= 0 do return
+
+	gunindex := cast(i32)gun_data.equipped
+	rl.DrawModel(gun_data.gunModels[gunindex], pos, GUN_SCALE, rl.WHITE)
 
 	// flare
 	FADETIME :: 0.2
-	fade := (gun_timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME
+	fade := (gun_data.timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME
 	if fade > 0.0 {
 		rnd := vec3{
 			rand.float32_range(-1.0, 1.0, &randData),
@@ -958,8 +1232,8 @@ gun_drawModel :: proc(pos : vec3) {
 }
 
 _gun_update :: proc() {
-	prevgun := gun_equipped
-	gunindex := cast(i32)gun_equipped
+	prevgun := gun_data.equipped
+	gunindex := cast(i32)gun_data.equipped
 
 	// scrool wheel gun switching
 	if rl.GetMouseWheelMove() > 0.5			do gunindex += 1
@@ -969,26 +1243,31 @@ _gun_update :: proc() {
 	else if rl.IsKeyPressed(rl.KeyboardKey.THREE)	do gunindex = 2
 	if gunindex < 0 do gunindex = GUN_COUNT - 1
 	gunindex %= GUN_COUNT
-	gun_equipped = cast(gun_kind_t)gunindex
+	gun_data.equipped = cast(gun_kind_t)gunindex
+	gunindex = cast(i32)gun_data.equipped
 
 
-	if gun_equipped != prevgun do gun_timer = -1.0
+	if gun_data.equipped != prevgun {
+		gun_data.timer = -1.0
+		if gun_data.ammoCounts[gunindex] <= 0 {
+			rl.PlaySoundMulti(gun_data.emptyMagSound)
+		}
+	}
 
-	gun_timer -= deltatime
-
-	gunindex = cast(i32)gun_equipped
+	gun_data.timer -= deltatime
 
 
-	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) && gun_timer < 0.0 {
-		if gun_ammoCounts[gunindex] > 0 {
+
+	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) && gun_data.timer < 0.0 {
+		if gun_data.ammoCounts[gunindex] > 0 {
 			muzzlepos := gun_calcMuzzlePos()
-			switch gun_equipped {
+			switch gun_data.equipped {
 				case gun_kind_t.SHOTGUN:
 					right := linalg.cross(player_data.lookDir, camera.up)
 					up := camera.up
 					RAD :: 0.5
-					COL :: vec4{1,0.7,0.2,1.0}
-					DUR :: 0.5
+					COL :: vec4{1,0.7,0.2,0.9}
+					DUR :: 0.7
 					cl := bullet_shootRaycast(muzzlepos, player_data.lookDir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
@@ -1001,7 +1280,7 @@ _gun_update :: proc() {
 
 					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 55.0 : 2.0)
 					player_data.rotImpulse.x -= 0.15
-					rl.PlaySoundMulti(gun_data.shotgunSound)
+					rl.PlaySound(gun_data.shotgunSound)
 
 				case gun_kind_t.MACHINEGUN:
 					rnd := vec3{
@@ -1009,28 +1288,28 @@ _gun_update :: proc() {
 						rand.float32_range(-1.0, 1.0, &randData),
 						rand.float32_range(-1.0, 1.0, &randData),
 					}
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 0.5, {0.6,0.7,0.8, 0.8}, 0.5)
+					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 1.1, {0.6,0.7,0.8, 1.0}, 0.7)
 					if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 6.0
 					player_data.rotImpulse.x -= 0.035
 					player_data.rotImpulse -= rnd * 0.01
 					rl.PlaySoundMulti(gun_data.machinegunSound)
 
 				case gun_kind_t.LASERRIFLE:
-					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 0.5, {1,0.3,0.2, 0.6}, 2.0)
+					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
 					player_data.vel /= 1.5
 					player_data.vel -= player_data.lookDir * 50
 					player_data.rotImpulse.x -= 0.2
 					player_data.rotImpulse.y += 0.04
-					rl.PlaySoundMulti(gun_data.laserrifleSound)
+					rl.PlaySound(gun_data.laserrifleSound)
 
 			}
 
-			gun_ammoCounts[gunindex] -= 1
+			gun_data.ammoCounts[gunindex] -= 1
 
-			switch gun_equipped {
-				case gun_kind_t.SHOTGUN:	gun_timer = gun_shootTimes[gunindex]
-				case gun_kind_t.MACHINEGUN:	gun_timer = gun_shootTimes[gunindex]
-				case gun_kind_t.LASERRIFLE:	gun_timer = gun_shootTimes[gunindex]
+			switch gun_data.equipped {
+				case gun_kind_t.SHOTGUN:	gun_data.timer = gun_shootTimes[gunindex]
+				case gun_kind_t.MACHINEGUN:	gun_data.timer = gun_shootTimes[gunindex]
+				case gun_kind_t.LASERRIFLE:	gun_data.timer = gun_shootTimes[gunindex]
 			}
 		} else if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
 			rl.PlaySoundMulti(gun_data.emptyMagSound)
@@ -1068,6 +1347,8 @@ bullet_data : struct {
 		color		: vec4,
 		duration	: f32,
 	},
+
+	linearEffectShader	: rl.Shader,
 }
 
 // @param timeToLive: in seconds
@@ -1093,11 +1374,17 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 		switch enemykind {
 			case enemy_kind_t.NONE:
 			case enemy_kind_t.GRUNT:
-				headshot := hitpos.y > enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y*0.33
+				headshot := hitpos.y > enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.grunts[enemyindex].health -= headshot ? damage*2 : damage
+				if headshot do rl.PlaySound(gun_data.headshotSound)
+				rl.PlaySoundMulti(enemy_data.gruntHitSound)
+				if enemy_data.grunts[enemyindex].health <= 0.0 do rl.PlaySoundMulti(enemy_data.gruntDeathSound)
 			case enemy_kind_t.KNIGHT:
-				headshot := hitpos.y > enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y*0.33
+				headshot := hitpos.y > enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.knights[enemyindex].health -= headshot ? damage*2 : damage
+				if headshot do rl.PlaySound(gun_data.headshotSound)
+				rl.PlaySoundMulti(enemy_data.knightHitSound)
+				if enemy_data.knights[enemyindex].health <= 0.0 do rl.PlaySoundMulti(enemy_data.knightDeathSound)
 		}
 	}
 	return tn
@@ -1126,13 +1413,24 @@ _bullet_updateDataAndRender :: proc() {
 	}
 
 	// draw
+	rl.BeginShaderMode(bullet_data.linearEffectShader)
 	for i : i32 = 0; i < bullet_data.linearEffectsCount; i += 1 {
-		fade := abs((bullet_data.linearEffects[i].timeToLive / bullet_data.linearEffects[i].duration) - 0.2)
+		fade := (bullet_data.linearEffects[i].timeToLive / bullet_data.linearEffects[i].duration)
 		col := bullet_data.linearEffects[i].color
+
 		rl.DrawCylinderEx(
 			bullet_data.linearEffects[i].start,
 			bullet_data.linearEffects[i].end,
-			fade * bullet_data.linearEffects[i].radius * bullet_data.linearEffects[i].radius * 0.5,
+			fade * bullet_data.linearEffects[i].radius * 0.05,
+			fade * bullet_data.linearEffects[i].radius * 0.4,
+			3,
+			rl.ColorFromNormalized(vec4{1,1,1,0.5 + fade*0.5}),
+		)
+
+		rl.DrawCylinderEx(
+			bullet_data.linearEffects[i].start,
+			bullet_data.linearEffects[i].end,
+			fade * bullet_data.linearEffects[i].radius * 0.1,
 			fade * bullet_data.linearEffects[i].radius,
 			BULLET_LINEAR_EFFECT_MESH_QUALITY,
 			rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
@@ -1144,6 +1442,7 @@ _bullet_updateDataAndRender :: proc() {
 		//	rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
 		//)
 	}
+	rl.EndShaderMode()
 }
 
 
@@ -1159,6 +1458,7 @@ ENEMY_GRUNT_MAX_COUNT :: 32
 ENEMY_KNIGHT_MAX_COUNT :: 32
 
 ENEMY_HEALTH_MULTIPLIER :: 1.5
+ENEMY_HEADSHOT_HALF_OFFSET :: 0.0
 
 ENEMY_GRUNT_SIZE		:: vec3{2, 4, 2}
 ENEMY_GRUNT_ACCELERATION	:: 10
@@ -1186,6 +1486,11 @@ enemy_kind_t :: enum u8 {
 }
 
 enemy_data : struct {
+	gruntHitSound		: rl.Sound,
+	gruntDeathSound		: rl.Sound,
+	knightHitSound		: rl.Sound,
+	knightDeathSound	: rl.Sound,
+
 	gruntCount : i32,
 	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
 		spawnPos		: vec3,
@@ -1382,7 +1687,7 @@ _enemy_updateDataAndRender :: proc() {
 //
 
 ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
-	cstr := str.clone_to_cstring(text, context.temp_allocator)
+	cstr := strings.clone_to_cstring(text, context.temp_allocator)
 	rl.DrawTextEx(normalFont, cstr, pos, size, 0.0, color)
 }
 
@@ -1395,8 +1700,6 @@ ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
 
 //
 // PHYSICS
-//
-// for raycasting the map_data etc.
 //
 
 PHY_MAX_TILE_BOXES :: 4
@@ -1434,7 +1737,7 @@ phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 
 
 
-// "linecast" box through the map_data
+// "linecast" box through the map
 // ! boxsize < TILE_WIDTH
 // @returns: newpos, normal, tmin
 phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, vec3, bool) {
@@ -1445,8 +1748,6 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	if !map_isTilePosValid(map_worldToTile(pos)) do return linelen, {0,0.1,0}, false
 	lowerleft := map_tilePosClamp(map_worldToTile(pos - vec3{dir.x>0.0 ? 1.0:-1.0, 0.0, dir.z>0.0 ? 1.0:-1.0}*TILE_WIDTH))
 	tilepos := lowerleft
-	tileposw3 : vec3 = map_tileToWorld(lowerleft)
-	tileposw : vec2 = vec2{tileposw3.x, tileposw3.z}
 
 	dir = linelen == 0.0 ? {0,-1,0} : dir / linelen
 	ddadir := linalg.normalize(vec2{dir.x, dir.z})
@@ -1489,8 +1790,6 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	raystep := ivec2{ddadir.x>0.0 ? 1 : -1, ddadir.y>0.0 ? 1 : -1}
 
 	//println("pos", pos, "griddiff", griddiff, "lowerleft", lowerleft, "posxz", posxz, "sidedist", sidedist, "deltadist", deltadist)
-
-	maxdist := linelen / TILE_WIDTH
 
 	for {
 		if !map_isTilePosValid(tilepos) ||
@@ -1630,6 +1929,7 @@ phy_boxCastWorldRes_t :: struct {
 phy_boxCastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
 	e_tn, e_hit, e_enemykind, e_enemyindex := phy_boxCastEnemies(pos, wishpos, boxsize)
 	t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, wishpos, boxsize)
+	_ = t_norm
 
 	if e_tn < t_tn {
 		res_tn		= e_tn
@@ -1669,14 +1969,14 @@ phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32) -> vec3 {
 
 appendToAssetPath :: proc(subdir : string, path : string) -> string {
 	return fmt.tprint(
-		args={loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
+		args={loadpath, filepath.SEPARATOR_STRING, "assets", filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
 		sep="",
 	)
 }
 
 // ctx temp alloc
 appendToAssetPathCstr :: proc(subdir : string, path : string) -> cstring {
-	return str.clone_to_cstring(appendToAssetPath(subdir, path), context.temp_allocator)
+	return strings.clone_to_cstring(appendToAssetPath(subdir, path), context.temp_allocator)
 }
 
 loadTexture :: proc(path : string) -> rl.Texture {
