@@ -3,15 +3,19 @@
 </p>
   
 ### *Dungeon of Quake* is a simple first person shooter, heavily inspired by the Quake franchise
-work in progress!
+**work in progress!**
+
+written in the Odin programming language, and using Raylib
 
 # how to build
-use `.\build.bat` command to build the game  
-use `.\build.bat run` command to build and run the game  
+#### setup
+- get the [Odin compiler](https://github.com/odin-lang/Odin)
+- add Odin to `$PATH` enviroment variable
+#### compile
+- use `.\build.bat` command to build the game  
+- use `.\build.bat run` command to build and run the game  
 
-### project dependencies
-Except the Odin compiler, there are **no dependencies whatsoever**  
-All you need to build the game is the latest release from https://github.com/odin-lang/Odin  
+
 
 # creating maps
 more in-depth info is in [DOQM file spec](doqm_format_spec.md)  
