@@ -1,8 +1,13 @@
 <p align="center">
   <img src="/build/assets/textures/dungeon_of_quake_logo.png" width="400">  
 </p>
-  
-### *Dungeon of Quake* is a simple first person shooter, inspired by Quake
+
+<p align="center">
+  Dungeon of Quake is a simple first person shooter, inspired by Quake
+</p>
+</br>
+</br>
+
 **work in progress!**
 
 written in the Odin programming language, and using Raylib
