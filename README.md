@@ -14,6 +14,6 @@ Except the Odin compiler, there are **no dependencies whatsoever**
 All you need to build the game is the latest release from https://github.com/odin-lang/Odin  
 
 # creating maps
-more in-depth info is in [DOQM file spec](doqm_format_spec.txt)  
+more in-depth info is in [DOQM file spec](doqm_format_spec.md)  
 
 Maps are made as top-down view on the map, and different ascii characters correspond to different tiles.  
