@@ -2,7 +2,7 @@
   <img src="/build/textures/dungeon_of_quake_logo.png" width="400">  
 </p>
   
-### *Dungeon of Quake* is a simple first person shooter, heavily inspired by the Quake franchise
+### *Dungeon of Quake* is a simple first person shooter, heavily inspired by Quake
 **work in progress!**
 
 written in the Odin programming language, and using Raylib
@@ -19,5 +19,4 @@ written in the Odin programming language, and using Raylib
 
 # creating maps
 more in-depth info is in [DOQM file spec](doqm_format_spec.md)  
-
-Maps are made as top-down view on the map, and different ascii characters correspond to different tiles.  
+Maps are made as top-down view on the map, and different ascii characters correspond to different tiles - this means anyone can edit maps with just a simple text editor
