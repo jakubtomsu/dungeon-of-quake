@@ -5,7 +5,7 @@
 ## general info
 Maps are saved in text file format, with `.doqm` file extension, which means you can edit these levels with any text editor. The map can be split into two floors using different tiles  
 
->WARNING: Text editors don't really use fonts with characters with sqare aspect ratio,
+>**WARNING:** Text editors don't really use fonts with characters with sqare aspect ratio,
 so the resulting level might end up looking a little stretched in-game. In some text
 editors, you can change text spacing to circumvent the issue.
 
@@ -63,7 +63,7 @@ example attribute declarations:
 ```
 
 
-attribute name | accepted value | note
+attribute name | value          | note
 -------------- | -------------- | ----
 mapName        | `text`         | name of the map
 nextMapName    | `text`         | next map to load after this one is finished
