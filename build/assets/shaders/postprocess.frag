@@ -8,6 +8,7 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 
+
 // Output fragment color
 out vec4 finalColor;
 
@@ -155,8 +156,8 @@ void main() {
 
 	//col = pow(col, vec3(1.0 / screengamma)); // gamma correction
 
-	col += dither(gl_FragCoord.xy)*0.25;
-	col = posterize(col, 12, 1.0);
+	col += dither(gl_FragCoord.xy)*0.2;
+	col = posterize(col, 16, 1.0);
 	//col = gameboyColor(col);
 
 	//col = tonemapACES(col);
