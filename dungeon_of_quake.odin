@@ -53,6 +53,7 @@ normalFont : rl.Font
 
 gameIsPlaying : bool
 gameIsRendered : bool
+screenTint : vec3 = {1,1,1}
 
 
 
@@ -96,7 +97,7 @@ main :: proc() {
 					rl.Rectangle{0, 0, cast(f32)rendertextureMain.texture.width,
 						-cast(f32)rendertextureMain.texture.height},
 					{0, 0},
-					rl.WHITE,
+					rl.ColorFromNormalized(vec4{screenTint.r, screenTint.g, screenTint.b, 1.0}),
 				)
 			rl.EndShaderMode()
 			_app_render2d()
@@ -119,7 +120,7 @@ main :: proc() {
 //
 
 _app_init :: proc() {
-	rl.InitWindow(WINDOW_X, WINDOW_Y, "dungeon of quake")
+	rl.InitWindow(WINDOW_X, WINDOW_Y, "Dungeon of Quake")
 	rl.SetWindowState({
 		rl.ConfigFlag.WINDOW_TOPMOST,
 		rl.ConfigFlag.WINDOW_HIGHDPI,
@@ -175,6 +176,7 @@ _app_init :: proc() {
 	player_data.landSound		= loadSound("land.wav")
 	player_data.damageSound		= loadSound("death0.wav")
 	player_data.swooshSound		= loadSound("swoosh.wav")
+    player_data.healthPickupSound   = loadSound("heal.wav")
 	rl.SetSoundVolume(player_data.landSound, 0.45)
 	rl.SetSoundPitch (player_data.landSound, 0.8)
 
@@ -244,6 +246,8 @@ _app_update :: proc() {
 			map_data.elevatorHeights[key] = clamp(val - (TILE_ELEVATOR_MOVE_FACTOR * deltatime), 0.0, 1.0)
 		}
 	}
+    
+    screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 2.0, 0.0, 1.0))
 }
 
 _debugtext_y : i32 = 0
@@ -380,9 +384,11 @@ TILE_ELEVATOR_SPEED		:: (TILE_ELEVATOR_Y1 - TILE_ELEVATOR_Y0) * TILE_ELEVATOR_MO
 
 MAP_GUN_PICKUP_MAX_COUNT	:: 32
 MAP_HEALTH_PICKUP_MAX_COUNT	:: 32
+MAP_HEALTH_PICKUP_SIZE :: vec3{2,1.5,2}
 
 MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
 
+// 'translated' tiles are changed into different tiles when a map gets loaded
 map_tileKind_t :: enum u8 {
 	NONE			= '-',
 	EMPTY			= ' ',
@@ -398,8 +404,6 @@ map_tileKind_t :: enum u8 {
 	ELEVATOR		= 'e',
 	OBSTACLE_LOWER		= 'o',
 	OBSTACLE_UPPER		= 'O',
-	JUMP_PAD_LOWER		= 'j',
-	JUMP_PAD_UPPER		= 'J',
 
 	PICKUP_HEALTH_LOWER	= 'h', // translated
 	PICKUP_HEALTH_UPPER	= 'H', // translated
@@ -544,6 +548,11 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[2] = phy_calcBox(posxz, 0, 1)
 			return 3
+        case map_tileKind_t.PLATFORM_LARGE:
+            boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[2] = phy_calcBox(posxz, 0, 3)
+			return 3
 
 		case map_tileKind_t.CEILING:
 			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
@@ -554,9 +563,15 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
 			height, ok := map_data.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
 			if !ok do height = 0.0
-			boxbuf[0] = {vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]}, vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2}
+			boxbuf[0] = {
+                vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]},
+                vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2,
+            }
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
 			return 2
+
+        case map_tileKind_t.OBSTACLE_LOWER: .
+        case map_tileKind_t.OBSTACLE_UPPER: .
 	}
 
 	return 0
@@ -674,13 +689,6 @@ map_loadFromFile :: proc(name: string) {
 					enemy_spawnKnight(highpos + vec3{0, ENEMY_KNIGHT_SIZE.y*1.2, 0})
 					tile = map_tileKind_t.WALL_MID
 
-				case map_tileKind_t.PICKUP_HEALTH_LOWER:
-					map_addHealthPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0})
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.PICKUP_HEALTH_UPPER:
-					map_addHealthPickup(highpos + vec3{0, PLAYER_SIZE.y, 0})
-					tile = map_tileKind_t.WALL_MID
-
 				case map_tileKind_t.GUN_SHOTGUN_LOWER:
 					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
 					tile = map_tileKind_t.EMPTY
@@ -700,6 +708,21 @@ map_loadFromFile :: proc(name: string) {
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.GUN_LASERRIFLE_UPPER:
 					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
+					tile = map_tileKind_t.WALL_MID
+                    
+                case map_tileKind_t.PICKUP_HEALTH_LOWER:
+                    rnd := vec2{
+                        rand.float32_range(-1.0, 1.0, &randData),
+                        rand.float32_range(-1.0, 1.0, &randData),
+                    } * TILE_WIDTH * 0.3
+					map_addHealthPickup(lowpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
+					tile = map_tileKind_t.EMPTY
+				case map_tileKind_t.PICKUP_HEALTH_UPPER:
+                    rnd := vec2{
+                        rand.float32_range(-1.0, 1.0, &randData),
+                        rand.float32_range(-1.0, 1.0, &randData),
+                    } * TILE_WIDTH * 0.3
+					map_addHealthPickup(highpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
 					tile = map_tileKind_t.WALL_MID
 			}
 
@@ -840,10 +863,11 @@ map_drawTilemap :: proc() {
 			gunindex := cast(i32)map_data.gunPickups[i].kind
 			rl.DrawModelEx(gun_data.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
 			rl.DrawSphere(pos, -2.0, {255,230,180,40})
-			if linalg.length2(player_data.pos - pos) < 16.0 {
+            RAD :: 4.5
+			if linalg.length2(player_data.pos - pos) < RAD*RAD {
 				gun_data.equipped = map_data.gunPickups[i].kind
 				gun_data.ammoCounts[gunindex] = gun_startAmmoCounts[gunindex]
-				rl.PlaySoundMulti(gun_data.ammoPickupSound)
+				playSoundMulti(gun_data.ammoPickupSound)
 
 				temp := map_data.gunPickups[i]
 				map_data.gunPickupCount -= 1
@@ -851,6 +875,27 @@ map_drawTilemap :: proc() {
 				map_data.gunPickups[map_data.gunPickupCount] = temp
 			}
 		}
+        
+        for i : i32 = 0; i < map_data.healthPickupCount; i += 1 {
+            rl.DrawCube(
+                map_data.healthPickups[i],
+                MAP_HEALTH_PICKUP_SIZE.x*2.0,
+                MAP_HEALTH_PICKUP_SIZE.y*2.0,
+                MAP_HEALTH_PICKUP_SIZE.z*2.0,
+                rl.GREEN,
+            )
+            RAD :: 4.5
+            if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD {
+                player_data.health = PLAYER_MAX_HEALTH
+                screenTint = {1.0,1.0,0.1}
+                playSound(player_data.healthPickupSound)
+                
+                temp := map_data.healthPickups[i]
+				map_data.healthPickupCount -= 1
+				map_data.healthPickups[i] = map_data.healthPickups[map_data.healthPickupCount]
+				map_data.healthPickups[map_data.healthPickupCount] = temp
+            }
+        }
 	}
 }
 
@@ -864,6 +909,7 @@ map_drawTilemap :: proc() {
 // also handles elevators etc.
 //
 
+PLAYER_MAX_HEALTH   :: 10
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
 PLAYER_LOOK_SENSITIVITY		:: 0.004
 PLAYER_FOV			:: 110
@@ -871,17 +917,16 @@ PLAYER_VIEWMODEL_FOV		:: 90
 PLAYER_SIZE			:: vec3{1,2,1}
 PLAYER_HEAD_SIN_TIME		::  math.PI * 5.0
 
-PLAYER_GRAVITY			:: 200 // 800
+PLAYER_GRAVITY			:: 210 // 800
 PLAYER_SPEED			:: 105 // 320
 PLAYER_GROUND_ACCELERATION	:: 6 // 10
 PLAYER_GROUND_FRICTION		:: 6 // 6
-PLAYER_AIR_ACCELERATION		:: 0.7 // 0.7
-PLAYER_AIR_FRICTION		:: 0 // 0
+PLAYER_AIR_ACCELERATION		:: 0.5 // 0.7
+PLAYER_AIR_FRICTION		:: 0.01 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
-PLAYER_START_HEALTH	:: 10.0
-PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT
+PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT*1.2
 
 PLAYER_KEY_JUMP :: rl.KeyboardKey.SPACE
 
@@ -901,6 +946,7 @@ player_data : struct {
 	landSound	: rl.Sound,
 	damageSound	: rl.Sound,
 	swooshSound	: rl.Sound,
+    healthPickupSound   : rl.Sound,
 
 	swooshStrength	: f32, // just lerped velocity length
 }
@@ -909,14 +955,17 @@ player_data : struct {
 
 player_damage :: proc(damage : f32) {
 	player_data.health -= damage
-	rl.PlaySoundMulti(player_data.damageSound)
+	playSoundMulti(player_data.damageSound)
+    screenTint = {1,0.2,0}
 }
 
 _player_update :: proc() {
-	if player_data.pos.y < PLAYER_FALL_DEATH_Y {
+    if player_data.pos.y < PLAYER_FALL_DEATH_Y {
 		player_die()
 		return
-	}
+	} else if player_data.pos.y < PLAYER_FALL_DEATH_Y*0.4 {
+        screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 1.0))
+    }
 
 	if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
 		player_finishMap()
@@ -932,13 +981,13 @@ _player_update :: proc() {
 
 	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 3.0, 0.0, 1.0))
 	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.003, 2.0), 0.0, 1.0) * 0.8)
-	if !rl.IsSoundPlaying(player_data.swooshSound) do rl.PlaySound(player_data.swooshSound)
+	if !rl.IsSoundPlaying(player_data.swooshSound) do playSound(player_data.swooshSound)
 
 	if player_data.isOnGround && linalg.length(player_data.vel * vec3{1,0,1}) > 5.0 {
 		player_data.stepTimer += deltatime * PLAYER_HEAD_SIN_TIME
 		if player_data.stepTimer > math.PI*2.0 {
 			player_data.stepTimer = 0.0
-			rl.PlaySoundMulti(player_data.footstepSound)
+			playSoundMulti(player_data.footstepSound)
 		}
 	} else {
 		player_data.stepTimer = -0.01
@@ -972,8 +1021,8 @@ _player_update :: proc() {
 	if jumped {
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
-		player_data.isOnGround = false
-		rl.PlaySoundMulti(player_data.jumpSound)
+		//player_data.isOnGround = false
+		playSoundMulti(player_data.jumpSound)
 	}
 
 
@@ -1007,8 +1056,8 @@ _player_update :: proc() {
 
 	if !prevIsOnGround && player_data.isOnGround { // just landed
 		if !rl.IsSoundPlaying(player_data.landSound) {
-			rl.PlaySound(player_data.landSound)
-			rl.PlaySoundMulti(player_data.footstepSound)
+			playSound(player_data.landSound)
+			playSoundMulti(player_data.footstepSound)
 		}
 	}
 
@@ -1054,7 +1103,7 @@ _player_update :: proc() {
 		if elevatorIsMoving {
 			println("elevator moving")
 			if !rl.IsSoundPlaying(map_data.elevatorSound) {
-				rl.PlaySound(map_data.elevatorSound)
+				playSound(map_data.elevatorSound)
 			}
 		} else {
 			rl.StopSound(map_data.elevatorSound)
@@ -1122,7 +1171,7 @@ player_initData :: proc() {
 	player_data.rotImpulse = {}
 	player_data.vel = {}
 	gun_data.timer = 0
-	player_data.health = PLAYER_START_HEALTH
+	player_data.health = PLAYER_MAX_HEALTH
 	player_data.vel = {0, 0.1, 0}
 	player_data.lookDir = {0,0,1}
 
@@ -1250,7 +1299,7 @@ _gun_update :: proc() {
 	if gun_data.equipped != prevgun {
 		gun_data.timer = -1.0
 		if gun_data.ammoCounts[gunindex] <= 0 {
-			rl.PlaySoundMulti(gun_data.emptyMagSound)
+			playSoundMulti(gun_data.emptyMagSound)
 		}
 	}
 
@@ -1280,7 +1329,7 @@ _gun_update :: proc() {
 
 					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 55.0 : 2.0)
 					player_data.rotImpulse.x -= 0.15
-					rl.PlaySound(gun_data.shotgunSound)
+					playSound(gun_data.shotgunSound)
 
 				case gun_kind_t.MACHINEGUN:
 					rnd := vec3{
@@ -1292,7 +1341,7 @@ _gun_update :: proc() {
 					if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 6.0
 					player_data.rotImpulse.x -= 0.035
 					player_data.rotImpulse -= rnd * 0.01
-					rl.PlaySoundMulti(gun_data.machinegunSound)
+					playSoundMulti(gun_data.machinegunSound)
 
 				case gun_kind_t.LASERRIFLE:
 					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
@@ -1300,7 +1349,7 @@ _gun_update :: proc() {
 					player_data.vel -= player_data.lookDir * 50
 					player_data.rotImpulse.x -= 0.2
 					player_data.rotImpulse.y += 0.04
-					rl.PlaySound(gun_data.laserrifleSound)
+					playSound(gun_data.laserrifleSound)
 
 			}
 
@@ -1312,7 +1361,7 @@ _gun_update :: proc() {
 				case gun_kind_t.LASERRIFLE:	gun_data.timer = gun_shootTimes[gunindex]
 			}
 		} else if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
-			rl.PlaySoundMulti(gun_data.emptyMagSound)
+			playSoundMulti(gun_data.emptyMagSound)
 		}
 	}
 }
@@ -1376,15 +1425,15 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 			case enemy_kind_t.GRUNT:
 				headshot := hitpos.y > enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.grunts[enemyindex].health -= headshot ? damage*2 : damage
-				if headshot do rl.PlaySound(gun_data.headshotSound)
-				rl.PlaySoundMulti(enemy_data.gruntHitSound)
-				if enemy_data.grunts[enemyindex].health <= 0.0 do rl.PlaySoundMulti(enemy_data.gruntDeathSound)
+				if headshot do playSound(gun_data.headshotSound)
+				playSoundMulti(enemy_data.gruntHitSound)
+				if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.gruntDeathSound)
 			case enemy_kind_t.KNIGHT:
 				headshot := hitpos.y > enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.knights[enemyindex].health -= headshot ? damage*2 : damage
-				if headshot do rl.PlaySound(gun_data.headshotSound)
-				rl.PlaySoundMulti(enemy_data.knightHitSound)
-				if enemy_data.knights[enemyindex].health <= 0.0 do rl.PlaySoundMulti(enemy_data.knightDeathSound)
+				if headshot do playSound(gun_data.headshotSound)
+				playSoundMulti(enemy_data.knightHitSound)
+				if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.knightDeathSound)
 		}
 	}
 	return tn
@@ -1459,10 +1508,11 @@ ENEMY_KNIGHT_MAX_COUNT :: 32
 
 ENEMY_HEALTH_MULTIPLIER :: 1.5
 ENEMY_HEADSHOT_HALF_OFFSET :: 0.0
+ENEMY_GRAVITY           :: 5.0
 
 ENEMY_GRUNT_SIZE		:: vec3{2, 4, 2}
-ENEMY_GRUNT_ACCELERATION	:: 10
-ENEMY_GRUNT_MAX_SPEED		:: 10
+ENEMY_GRUNT_ACCELERATION	:: 13
+ENEMY_GRUNT_MAX_SPEED		:: 14
 ENEMY_GRUNT_FRICTION		:: 6
 ENEMY_GRUNT_MIN_GOOD_DIST	:: 30
 ENEMY_GRUNT_MAX_GOOD_DIST	:: 60
@@ -1471,13 +1521,13 @@ ENEMY_GRUNT_DAMAGE		:: 1.0
 ENEMY_GRUNT_HEALTH		:: 1.0
 
 ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
-ENEMY_KNIGHT_ACCELERATION	:: 180
-ENEMY_KNIGHT_MAX_SPEED		:: 170
+ENEMY_KNIGHT_ACCELERATION	:: 18
+ENEMY_KNIGHT_MAX_SPEED		:: 16
 ENEMY_KNIGHT_FRICTION		:: 3.5
 ENEMY_KNIGHT_DAMAGE		:: 0.8
 ENEMY_KNIGHT_ATTACK_TIME	:: 0.6
 ENEMY_KNIGHT_HEALTH		:: 1.0
-
+ENEMY_KNIGHT_RANGE      :: 8.0
 
 enemy_kind_t :: enum u8 {
 	NONE = 0,
@@ -1509,8 +1559,8 @@ enemy_data : struct {
 		health		: f32,
 		pos		: vec3,
 		attackTimer	: f32,
-		vel		: vec3,
 		isMoving	: bool,
+        vel         : vec3,
 		target		: vec3,
 	},
 }
@@ -1549,9 +1599,12 @@ _enemy_updateDataAndRender :: proc() {
 	assert(enemy_data.gruntCount  < ENEMY_GRUNT_MAX_COUNT)
 	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
 
+
+
 	// update grunts
 	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 		if enemy_data.grunts[i].health <= 0.0 do continue
+        
 		pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
 		dir := linalg.normalize(player_data.pos - pos)
 		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
@@ -1595,6 +1648,7 @@ _enemy_updateDataAndRender :: proc() {
 			enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
 		}
 	
+        enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
 		enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
 		speed := linalg.length(enemy_data.grunts[i].vel)
 		enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
@@ -1604,7 +1658,6 @@ _enemy_updateDataAndRender :: proc() {
 
 		if mov_hit {
 			enemy_data.grunts[i].vel = phy_clipVelocity(enemy_data.grunts[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
-
 		}
 
 		if speed > 1e-6 {
@@ -1615,39 +1668,59 @@ _enemy_updateDataAndRender :: proc() {
 	// update knights
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 		if enemy_data.knights[i].health <= 0.0 do continue
+        
 		pos := enemy_data.knights[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
 		dir := linalg.normalize(player_data.pos - pos)
 		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
 		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
 		seeplayer := p_tn < t_tn && p_hit
-		flatdir := linalg.normalize(dir * vec3{1,0,1})
 
 		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
-	
+		
+		enemy_data.knights[i].attackTimer -= deltatime
+
+
 		if seeplayer {
+			enemy_data.knights[i].target = player_data.pos
+			enemy_data.knights[i].isMoving = true
+		}
+
+
+		flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
+
+		if enemy_data.knights[i].isMoving {
 			enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
 		}
 
-		enemy_data.knights[i].attackTimer -= deltatime
-
 		if seeplayer {
-			if p_tn < 4.5 && enemy_data.knights[i].attackTimer < 0.0 {
-				player_data.vel = flatdir*50.0
-				player_data.vel.y += 20.0
-				enemy_data.knights[i].vel = {}
-				player_damage(ENEMY_KNIGHT_DAMAGE)
+			if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
+				player_damage(ENEMY_KNIGHT_DAMAGE)
+                player_data.vel = flatdir * 100.0
+                player_data.vel.y += 30.0
+                enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED
 			}
 		} else {
-			enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 2.0
+			enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
 		}
-
 	
+        enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
 		enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
 		speed := linalg.length(enemy_data.knights[i].vel)
 		enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
-		enemy_data.knights[i].pos += enemy_data.knights[i].vel * deltatime
+		speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
+		
+		mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
+
+		if mov_hit {
+			enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
+		}
+
+		if speed > 1e-6 {
+			enemy_data.knights[i].pos += (enemy_data.knights[i].vel/speed) * mov_tn
+		}
 	}
+
 
 
 	// render grunts
@@ -1662,14 +1735,16 @@ _enemy_updateDataAndRender :: proc() {
 		rl.DrawCube(enemy_data.knights[i].pos, ENEMY_KNIGHT_SIZE.x*2, ENEMY_KNIGHT_SIZE.y*2, ENEMY_KNIGHT_SIZE.z*2, rl.PINK)
 	}
 
+
+
 	if debugIsEnabled {
-		// render grunts
+		// render grunt physics AABBS
 		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 			if enemy_data.grunts[i].health <= 0.0 do continue
 			rl.DrawCubeWires(enemy_data.grunts[i].pos, ENEMY_GRUNT_SIZE.x*2, ENEMY_GRUNT_SIZE.y*2, ENEMY_GRUNT_SIZE.z*2, rl.GREEN)
 		}
 
-		// render knights
+		// render knight physics AABBS
 		for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 			if enemy_data.knights[i].health <= 0.0 do continue
 			rl.DrawCubeWires(enemy_data.knights[i].pos, ENEMY_KNIGHT_SIZE.x*2, ENEMY_KNIGHT_SIZE.y*2, ENEMY_KNIGHT_SIZE.z*2, rl.GREEN)
@@ -1986,12 +2061,14 @@ loadTexture :: proc(path : string) -> rl.Texture {
 }
 
 loadSound :: proc(path : string) -> rl.Sound {
+   if !rl.IsAudioDeviceReady() do return {}
 	fullpath := appendToAssetPathCstr("audio", path)
 	println("! loading sound: ", fullpath)
 	return rl.LoadSound(fullpath)
 }
 
 loadMusic :: proc(path : string) -> rl.Music {
+    if !rl.IsAudioDeviceReady() do return {}
 	fullpath := appendToAssetPathCstr("audio", path)
 	println("! loading music: ", fullpath)
 	return rl.LoadMusicStream(fullpath)
@@ -2021,4 +2098,16 @@ loadFragShader :: proc(path : string) -> rl.Shader {
 	fullpath := appendToAssetPathCstr("shaders", path)
 	println("! loading shader: ", fullpath)
 	return rl.LoadShader(nil, fullpath)
+}
+
+
+
+playSound :: proc(sound : rl.Sound) {
+    if !rl.IsAudioDeviceReady() do return
+    playSound(sound)
+}
+
+playSoundMulti :: proc(sound : rl.Sound) {
+    if !rl.IsAudioDeviceReady() do return
+    playSoundMulti(sound)
 }
