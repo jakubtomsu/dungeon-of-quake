@@ -13,10 +13,8 @@
 **currently work in progress!**
 
 # how to build
-#### setup
 - get the [Odin compiler](https://github.com/odin-lang/Odin)
 - add Odin to `$PATH` enviroment variable
-#### compile
 - use `.\build.bat` command to build the game  
 - use `.\build.bat run` command to build and run the game  
 
