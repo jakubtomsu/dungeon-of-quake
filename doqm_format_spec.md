@@ -55,7 +55,7 @@ Each map can have some attributes which change how it looks or behaves.
 All attributes are alwats defined between a pair of curly braces `{ }`, and each attribute is followed by a colon `:` character.  
 Text attribute value has to be between two quotation marks `"` like this: `"foo"`.  
 example attribute declarations:  
-```
+```cpp
 {
 	mapName: "foo"
 	skyColor: 1.0 0.5 1
