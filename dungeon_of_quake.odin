@@ -10,14 +10,11 @@ import "core:math/linalg/glsl"
 import "core:math/rand"
 import "core:fmt"
 import "core:time"
-//RAYLIB_USE_LINALG :: true
 import rl "vendor:raylib"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:strconv"
-//import win32 "core:sys/win32"
-
 
 
 
@@ -57,10 +54,6 @@ screenTint : vec3 = {1,1,1}
 
 
 
-
-//
-// MAIN
-//
 
 main :: proc() {
 	_app_init()
@@ -134,6 +127,7 @@ _app_init :: proc() {
 		rl.ConfigFlag.VSYNC_HINT,
 	})
 	rl.InitAudioDevice()
+	
 
 	rl.SetTargetFPS(75)
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
@@ -142,6 +136,7 @@ _app_init :: proc() {
 	rl.SetExitKey(rl.KeyboardKey.NULL)
 
 	rendertextureMain	= rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
+
 	postprocessShader	= loadFragShader("postprocess.frag")
 	map_data.tileShader	= loadShader("tile.vert", "tile.frag")
 	map_data.portalShader	= loadShader("portal.vert", "portal.frag")
@@ -149,10 +144,13 @@ _app_init :: proc() {
 	bullet_data.linearEffectShader = loadShader("bulletLinearEffect.vert", "bulletLinearEffect.frag")
 
 
-	map_data.wallTexture			= loadTexture("tile0.png")
-	map_data.portalTexture			= loadTexture("portal.png")
-	map_data.elevatorTexture		= loadTexture("metal.png")
+
+	map_data.wallTexture		= loadTexture("tile0.png")
+	map_data.portalTexture		= loadTexture("portal.png")
+	map_data.elevatorTexture	= loadTexture("metal.png")
 	map_data.healthPickupTexture	= loadTexture("box.png")
+
+	if !rl.IsAudioDeviceReady() do time.sleep(10)
 
 	map_data.backgroundMusic	= loadMusic("music0.wav")
 	map_data.ambientMusic		= loadMusic("wind.wav")
@@ -183,7 +181,7 @@ _app_init :: proc() {
 	player_data.landSound		= loadSound("land.wav")
 	player_data.damageSound		= loadSound("death0.wav")
 	player_data.swooshSound		= loadSound("swoosh.wav")
-    player_data.healthPickupSound   = loadSound("heal.wav")
+	player_data.healthPickupSound	= loadSound("heal.wav")
 	rl.SetSoundVolume(player_data.landSound, 0.45)
 	rl.SetSoundPitch (player_data.landSound, 0.8)
 
@@ -253,8 +251,8 @@ _app_update :: proc() {
 			map_data.elevatorHeights[key] = clamp(val - (TILE_ELEVATOR_MOVE_FACTOR * deltatime), 0.0, 1.0)
 		}
 	}
-    
-    screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 2.0, 0.0, 1.0))
+
+	screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 2.0, 0.0, 1.0))
 }
 
 _debugtext_y : i32 = 0
@@ -576,8 +574,8 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[2] = phy_calcBox(posxz, 0, 1)
 			return 3
-        case map_tileKind_t.PLATFORM_LARGE:
-            boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+		case map_tileKind_t.PLATFORM_LARGE:
+			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
 			boxbuf[2] = phy_calcBox(posxz, 0, 3)
 			return 3
@@ -592,17 +590,17 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			height, ok := map_data.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
 			if !ok do height = 0.0
 			boxbuf[0] = {
-                vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]},
-                vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2,
-            }
+				vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]},
+				vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2,
+			}
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
 			return 2
 
-        case map_tileKind_t.OBSTACLE_LOWER:
+		case map_tileKind_t.OBSTACLE_LOWER:
 			boxbuf[0] = phy_calcBox(posxz, -3, 3)
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
 			return 2
-        case map_tileKind_t.OBSTACLE_UPPER:
+		case map_tileKind_t.OBSTACLE_UPPER:
 			boxbuf[0] = phy_calcBox(posxz, -1, 5)
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
 			return 2
@@ -757,19 +755,19 @@ map_loadFromFile :: proc(name: string) {
 				case map_tileKind_t.GUN_LASERRIFLE_UPPER:
 					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
 					tile = map_tileKind_t.WALL_MID
-                    
-                case map_tileKind_t.PICKUP_HEALTH_LOWER:
-                    rnd := vec2{
-                        rand.float32_range(-1.0, 1.0, &randData),
-                        rand.float32_range(-1.0, 1.0, &randData),
-                    } * TILE_WIDTH * 0.3
+
+				case map_tileKind_t.PICKUP_HEALTH_LOWER:
+					rnd := vec2{
+						rand.float32_range(-1.0, 1.0, &randData),
+						rand.float32_range(-1.0, 1.0, &randData),
+					} * TILE_WIDTH * 0.3
 					map_addHealthPickup(lowpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.PICKUP_HEALTH_UPPER:
-                    rnd := vec2{
-                        rand.float32_range(-1.0, 1.0, &randData),
-                        rand.float32_range(-1.0, 1.0, &randData),
-                    } * TILE_WIDTH * 0.3
+					rnd := vec2{
+						rand.float32_range(-1.0, 1.0, &randData),
+						rand.float32_range(-1.0, 1.0, &randData),
+					} * TILE_WIDTH * 0.3
 					map_addHealthPickup(highpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
 					tile = map_tileKind_t.WALL_MID
 			}
@@ -913,7 +911,7 @@ map_drawTilemap :: proc() {
 			gunindex := cast(i32)map_data.gunPickups[i].kind
 			rl.DrawModelEx(gun_data.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
 			rl.DrawSphere(pos, -2.0, {255,230,180,40})
-            RAD :: 4.5
+			RAD :: 4.5
 			if linalg.length2(player_data.pos - pos) < RAD*RAD {
 				gun_data.equipped = map_data.gunPickups[i].kind
 				gun_data.ammoCounts[gunindex] = gun_startAmmoCounts[gunindex]
@@ -925,31 +923,31 @@ map_drawTilemap :: proc() {
 				map_data.gunPickups[map_data.gunPickupCount] = temp
 			}
 		}
-        
+
 		// update health pickups
 		// draw health pickups
-        for i : i32 = 0; i < map_data.healthPickupCount; i += 1 {
-            rl.DrawCubeTexture(
+		for i : i32 = 0; i < map_data.healthPickupCount; i += 1 {
+			rl.DrawCubeTexture(
 				map_data.healthPickupTexture,
-                map_data.healthPickups[i],
-                MAP_HEALTH_PICKUP_SIZE.x*2.0,
-                MAP_HEALTH_PICKUP_SIZE.y*2.0,
-                MAP_HEALTH_PICKUP_SIZE.z*2.0,
-                rl.WHITE,
-            )
+				map_data.healthPickups[i],
+				MAP_HEALTH_PICKUP_SIZE.x*2.0,
+				MAP_HEALTH_PICKUP_SIZE.y*2.0,
+				MAP_HEALTH_PICKUP_SIZE.z*2.0,
+				rl.WHITE,
+			)
 	
-            RAD :: 4.5
-            if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD {
-                player_data.health = PLAYER_MAX_HEALTH
-                screenTint = {1.0,1.0,0.1}
-                playSound(player_data.healthPickupSound)
-                
-                temp := map_data.healthPickups[i]
+			RAD :: 4.5
+			if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD {
+				player_data.health = PLAYER_MAX_HEALTH
+				screenTint = {1.0,1.0,0.1}
+				//playSound(player_data.healthPickupSound)
+
+				temp := map_data.healthPickups[i]
 				map_data.healthPickupCount -= 1
 				map_data.healthPickups[i] = map_data.healthPickups[map_data.healthPickupCount]
 				map_data.healthPickups[map_data.healthPickupCount] = temp
-            }
-        }
+			}
+		}
 	}
 }
 
@@ -995,12 +993,12 @@ player_data : struct {
 	lookRotMat3	: mat3,
 	stepTimer	: f32,
 
-	jumpSound	: rl.Sound,
-	footstepSound	: rl.Sound,
-	landSound	: rl.Sound,
-	damageSound	: rl.Sound,
-	swooshSound	: rl.Sound,
-    healthPickupSound   : rl.Sound,
+	jumpSound		: rl.Sound,
+	footstepSound		: rl.Sound,
+	landSound		: rl.Sound,
+	damageSound		: rl.Sound,
+	swooshSound		: rl.Sound,
+	healthPickupSound	: rl.Sound,
 
 	swooshStrength	: f32, // just lerped velocity length
 }
@@ -1010,16 +1008,16 @@ player_data : struct {
 player_damage :: proc(damage : f32) {
 	player_data.health -= damage
 	playSoundMulti(player_data.damageSound)
-    screenTint = {1,0.2,0}
+	screenTint = {1,0.2,0}
 }
 
 _player_update :: proc() {
-    if player_data.pos.y < PLAYER_FALL_DEATH_Y {
+	if player_data.pos.y < PLAYER_FALL_DEATH_Y {
 		player_die()
 		return
 	} else if player_data.pos.y < PLAYER_FALL_DEATH_Y*0.4 {
-        screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 1.0))
-    }
+		screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 1.0))
+	}
 
 	if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
 		player_finishMap()
@@ -1340,8 +1338,7 @@ _gun_update :: proc() {
 	else if rl.IsKeyPressed(rl.KeyboardKey.ONE)	do gunindex = 0
 	else if rl.IsKeyPressed(rl.KeyboardKey.TWO)	do gunindex = 1
 	else if rl.IsKeyPressed(rl.KeyboardKey.THREE)	do gunindex = 2
-	if gunindex < 0 do gunindex = GUN_COUNT - 1
-	gunindex %= GUN_COUNT
+	gunindex %%= GUN_COUNT
 	gun_data.equipped = cast(gun_kind_t)gunindex
 	gunindex = cast(i32)gun_data.equipped
 
@@ -1609,7 +1606,7 @@ enemy_data : struct {
 		pos		: vec3,
 		attackTimer	: f32,
 		isMoving	: bool,
-        vel         : vec3,
+		vel		: vec3,
 		target		: vec3,
 	},
 }
@@ -1653,7 +1650,7 @@ _enemy_updateDataAndRender :: proc() {
 	// update grunts
 	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 		if enemy_data.grunts[i].health <= 0.0 do continue
-        
+
 		pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
 		dir := linalg.normalize(player_data.pos - pos)
 		// cast player
@@ -1689,23 +1686,19 @@ _enemy_updateDataAndRender :: proc() {
 
 		if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
 			if enemy_data.grunts[i].attackTimer < 0.0 { // attack
-				enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
-
-				rndstrength := (linalg.length(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
-					p_tn*ENEMY_GRUNT_DIST_RAND) * 0.1
-	
-				// cast bullet
-				t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + (dir + randVec3()*rndstrength)*1e6, {EPS,EPS,EPS})
-
-				
-				bullet_createLinearEffect(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
-				player_damage(ENEMY_GRUNT_DAMAGE)
+				//enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
+				//rndstrength := (linalg.length(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
+				//	p_tn*ENEMY_GRUNT_DIST_RAND) * 0.1
+				//// cast bullet
+				////t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + (dir + randVec3()*rndstrength)*1e6, {EPS,EPS,EPS})
+				//bullet_createLinearEffect(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
+				//player_damage(ENEMY_GRUNT_DAMAGE)
 			}
 		} else {
 			enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
 		}
 	
-        enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
+		enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
 		enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
 		speed := linalg.length(enemy_data.grunts[i].vel)
 		enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
@@ -1727,7 +1720,7 @@ _enemy_updateDataAndRender :: proc() {
 	// update knights
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 		if enemy_data.knights[i].health <= 0.0 do continue
-        
+
 		pos := enemy_data.knights[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
 		dir := linalg.normalize(player_data.pos - pos)
 		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
@@ -1755,15 +1748,15 @@ _enemy_updateDataAndRender :: proc() {
 			if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
 				player_damage(ENEMY_KNIGHT_DAMAGE)
-                player_data.vel = flatdir * 100.0
-                player_data.vel.y += 30.0
-                enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED
+				player_data.vel = flatdir * 100.0
+				player_data.vel.y += 30.0
+				enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED
 			}
 		} else {
 			enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
 		}
 	
-        enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
+		enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
 		enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
 		speed := linalg.length(enemy_data.knights[i].vel)
 		enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
@@ -2120,14 +2113,14 @@ loadTexture :: proc(path : string) -> rl.Texture {
 }
 
 loadSound :: proc(path : string) -> rl.Sound {
-   if !rl.IsAudioDeviceReady() do return {}
+	//if !rl.IsAudioDeviceReady() do return {}
 	fullpath := appendToAssetPathCstr("audio", path)
 	println("! loading sound: ", fullpath)
 	return rl.LoadSound(fullpath)
 }
 
 loadMusic :: proc(path : string) -> rl.Music {
-    if !rl.IsAudioDeviceReady() do return {}
+	//if !rl.IsAudioDeviceReady() do return {}
 	fullpath := appendToAssetPathCstr("audio", path)
 	println("! loading music: ", fullpath)
 	return rl.LoadMusicStream(fullpath)
@@ -2162,13 +2155,13 @@ loadFragShader :: proc(path : string) -> rl.Shader {
 
 
 playSound :: proc(sound : rl.Sound) {
-    if !rl.IsAudioDeviceReady() do return
-    playSound(sound)
+	if !rl.IsAudioDeviceReady() do return
+	rl.PlaySound(sound)
 }
 
 playSoundMulti :: proc(sound : rl.Sound) {
-    if !rl.IsAudioDeviceReady() do return
-    playSoundMulti(sound)
+	if !rl.IsAudioDeviceReady() do return
+	rl.PlaySoundMulti(sound)
 }
 
 // rand vector with elements in -1..1

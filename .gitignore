@@ -4,4 +4,5 @@ build_.bat
 
 build/*.exp
 build/*.lib
+build/*.exe
 build/log.txt
