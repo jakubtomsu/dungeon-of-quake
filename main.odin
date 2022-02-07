@@ -1,6 +1,8 @@
 package main
 
-import "doq"
+import doq "dungeon_of_quake"
+
+
 
 main :: proc() {
 	doq._doq_main()

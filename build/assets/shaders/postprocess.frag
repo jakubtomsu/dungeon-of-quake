@@ -7,6 +7,7 @@ in vec4 fragColor;
 // Input uniform values
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
+uniform vec3 tintColor;
 
 
 // Output fragment color
@@ -150,9 +151,8 @@ float toGrayscale(vec3 col) {
 void main() {
 	// Texel color fetching from texture sampler
 	vec2 uv = fragTexCoord.xy;
-	vec4 origColor = texture(texture0, uv);
+	vec4 origColor = texture(texture0, uv) * vec4(tintColor, 1.0);
 	vec3 col = origColor.rgb;
-
 
 	//col = pow(col, vec3(1.0 / screengamma)); // gamma correction
 
