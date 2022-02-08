@@ -11,7 +11,6 @@
 </br>
 
 **currently work in progress!**
-
 # how to build
 - get the [Odin compiler](https://github.com/odin-lang/Odin)
 - add Odin to `$PATH` enviroment variable
