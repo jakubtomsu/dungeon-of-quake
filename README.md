@@ -26,7 +26,7 @@ Maps are made as top-down view on the map, and different ascii characters corres
 `.doqm` file extension is used, even though the underlying file is just plain text.
 #### Info for creating maps is in [DOQM file spec](doqm_format_spec.md)  
 
-> The raw tile table is in (map.odin)[/doq/map.odin] as `map_tileKind_t`
+> The raw tile table is in [map.odin](/doq/map.odin) as `map_tileKind_t`
 
 Some tiles get translated to different tiles when the map gets loaded into memory. For instance, lowercase
 health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.
