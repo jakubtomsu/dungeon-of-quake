@@ -10,6 +10,8 @@
 </br>
 </br>
 
+
+
 **currently work in progress!**
 # how to build
 - get the [Odin compiler](https://github.com/odin-lang/Odin)
@@ -17,8 +19,7 @@
 - use `.\build.bat` command to build the game  
 - use `.\build.bat run` command to build and run the game  
 
-# project tree
-(doq/)[doq/]    source code
+
 
 # maps
 Maps are made as top-down view on the map, and different ascii characters correspond to different tiles - this means anyone can edit maps with just a simple text editor.  
