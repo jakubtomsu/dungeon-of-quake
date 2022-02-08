@@ -102,5 +102,5 @@ void main() {
 		discard;
 	}
 
-	finalColor = vec4(col, alpha > 0.5 ? 1.0 : 0.2);
+	finalColor = vec4(col, (alpha > 0.5 ? 1.0 : 0.2) * (0.2 + texelColor.a));
 }

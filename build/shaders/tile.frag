@@ -91,7 +91,9 @@ float simplex3d_fractal(vec3 m) {
 		+ 0.0666667 * simplex3d(8.0 * m);
 }
 
-vec3 toGridPos(vec3 pos) { return floor(pos*64.0)/64.0; }
+vec3 toGridPos(vec3 pos) { return floor(pos*64.0)/64.0; } // pixel/texture grid!
+
+#define TILE_WIDTH 30.0
 
 void main() {
 	// Texel color fetching from texture sampler
@@ -102,14 +104,16 @@ void main() {
 	vec3 col = texelColor.rgb;
 	vec2 griduv = floor(uv*64.0)/64.0;
 	//col += vec3(abs(fragNormal.x)*0.04 + fragNormal.y*0.04);
-	vec3 gridpos = toGridPos(fragPosition*1.0001/30.0);
+	vec3 gridpos = toGridPos(fragPosition*1.0001/TILE_WIDTH);
 	float gridnoise = simplex3d_fractal(gridpos*3.0);
 	gridnoise += sign(gridnoise)*0.1;
 	//col += vec3(gridnoise*0.2);
 	float tileCenterDist = (pow(abs(mod(griduv.x,1.0) - 0.5)*2.0, 3.0)+pow(abs(mod(griduv.y,1.0) - 0.5)*2.0, 3.0))*0.5;
 	//col = vec3(pow(tileCenterDist, 0.5));
-	col *= vec3(1.0) + vec3(abs(gridnoise)*tileCenterDist*simplex3d(toGridPos(fragPosition/30.0)*0.4)*10.0);
+	col *= vec3(1.0) + vec3(abs(gridnoise)*tileCenterDist*simplex3d(toGridPos(fragPosition/TILE_WIDTH)*0.4)*10.0);
+	//vec3 tilepos = floor(fragPosition/TILE_WIDTH - fragNormal*0.001 + vec3(0,0.5,0));
 	//col += texelColor.rgb * gridnoise * 2.0;
+	//col = tilepos*0.1;
 
 	//col = vec3(dot(col, vec3(0.299, 0.587, 0.114)));
 

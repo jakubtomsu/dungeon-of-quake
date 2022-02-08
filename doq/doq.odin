@@ -31,7 +31,7 @@ mat3 :: linalg.Matrix3f32
 WINDOW_X :: 1440
 WINDOW_Y :: 810
 
-debugIsEnabled : bool = true
+debugIsEnabled : bool = false
 
 camera: rl.Camera = {}
 viewmodelCamera: rl.Camera = {}
@@ -42,13 +42,19 @@ timepassed : f32 = 0.0
 app_shouldExitNextFrame : bool = false
 loadpath : string
 
-rendertextureMain : rl.RenderTexture2D
+renderTextureMain : rl.RenderTexture2D
 postprocessShader : rl.Shader
 randData : rand.Rand
 
-normalFont : rl.Font
+gameIsPaused : bool = false
 
 screenTint : vec3 = {1,1,1}
+
+app_updatePathKind : enum {
+	LOADSCREEN = 0,
+	MAIN_MENU,
+	GAME,
+} = .LOADSCREEN
 
 
 
@@ -57,56 +63,68 @@ _doq_main :: proc() {
 	_app_init()
 
 	for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
-		println("frame =", framespassed, "deltatime =", deltatime)
+		println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
 
-		rl.UpdateCamera(&camera)
-		rl.UpdateCamera(&viewmodelCamera)
-		rl.DisableCursor()
+		switch app_updatePathKind {
+			case .LOADSCREEN:
+				menu_updateAndDrawLoadScreenUpdatePath()
+			case .MAIN_MENU:
+				menu_updateAndDrawMainMenuUpdatePath()
+			case .GAME:
+			// main game update path
+			{
+				rl.UpdateCamera(&camera)
+				rl.UpdateCamera(&viewmodelCamera)
+				rl.DisableCursor()
 
-		_app_update()
+				_app_update()
 
-		rl.BeginTextureMode(rendertextureMain)
-			bckgcol := vec4{
-				map_data.skyColor.r,
-				map_data.skyColor.g,
-				map_data.skyColor.b,
-				1.0,
+				rl.BeginTextureMode(renderTextureMain)
+					bckgcol := vec4{
+						map_data.skyColor.r,
+						map_data.skyColor.g,
+						map_data.skyColor.b,
+						1.0,
+					}
+					rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
+					rl.BeginMode3D(camera)
+						_app_render3d()
+						_gun_update()
+						_player_update()
+						_enemy_updateDataAndRender()
+						_bullet_updateDataAndRender()
+					rl.EndMode3D()
+					rl.BeginMode3D(viewmodelCamera)
+						gun_drawModel(gun_calcViewportPos())
+					rl.EndMode3D()
+				rl.EndTextureMode()
+
+				rl.BeginDrawing()
+					rl.ClearBackground(rl.PINK) // for debug
+					rl.SetShaderValue(
+						postprocessShader,
+						cast(rl.ShaderLocationIndex)rl.GetShaderLocation(postprocessShader, "tintColor"),
+						&screenTint,
+						rl.ShaderUniformDataType.VEC3,
+					)
+
+					rl.BeginShaderMode(postprocessShader)
+						rl.DrawTextureRec(
+							renderTextureMain.texture,
+							rl.Rectangle{
+								0, 0,
+								cast(f32)renderTextureMain.texture.width,
+								-cast(f32)renderTextureMain.texture.height,
+							},
+							{0, 0},
+							rl.WHITE,
+						)
+					rl.EndShaderMode()
+					_app_render2d()
+				rl.EndDrawing()
 			}
-			rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
-			rl.BeginMode3D(camera)
-				_app_render3d()
-				_gun_update()
-				_player_update()
-				_enemy_updateDataAndRender()
-				_bullet_updateDataAndRender()
-			rl.EndMode3D()
-			rl.BeginMode3D(viewmodelCamera)
-				gun_drawModel(gun_calcViewportPos())
-			rl.EndMode3D()
-		rl.EndTextureMode()
-
-		rl.BeginDrawing()
-			rl.ClearBackground(rl.PINK) // for debug
-			rl.SetShaderValue(
-				postprocessShader,
-				cast(rl.ShaderLocationIndex)rl.GetShaderLocation(postprocessShader, "tintColor"),
-				&screenTint,
-				rl.ShaderUniformDataType.VEC3,
-			)
-
-			rl.BeginShaderMode(postprocessShader)
-				rl.DrawTextureRec(
-					rendertextureMain.texture,
-					rl.Rectangle{0, 0, cast(f32)rendertextureMain.texture.width,
-						-cast(f32)rendertextureMain.texture.height},
-					{0, 0},
-					rl.WHITE,
-				)
-			rl.EndShaderMode()
-			_app_render2d()
-		rl.EndDrawing()
-
+		}
 
 		deltatime = rl.GetFrameTime()
 		timepassed += deltatime // not really accurate but whatever
@@ -140,7 +158,10 @@ _app_init :: proc() {
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
 
-	rendertextureMain	= rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
+	renderTextureMain	= rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
+
+	gui_data.loadScreenLogo	= loadTexture("dungeon_of_quake_logo.png")
+	rl.SetTextureFilter(gui_data.loadScreenLogo, rl.TextureFilter.TRILINEAR)
 
 	postprocessShader	= loadFragShader("postprocess.frag")
 	map_data.tileShader	= loadShader("tile.vert", "tile.frag")
@@ -225,7 +246,8 @@ _app_init :: proc() {
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
 	//normalFont = loadFont("metalord.ttf")
-	normalFont = loadFont("eurcntrc.ttf")
+	gui_data.titleFont	= loadFont("eurcntrc.ttf")
+	gui_data.normalFont	= loadFont("germania_one.ttf")
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 	
@@ -233,6 +255,7 @@ _app_init :: proc() {
 	map_data.bounds = {MAP_MAX_WIDTH, MAP_MAX_WIDTH}
 	if os.is_file(appendToAssetPath("maps", "_quickload.doqm")) {
 		map_loadFromFile("_quickload.doqm")
+		// app_updatePathKind = .GAME
 	} else {
 
 	}
@@ -266,15 +289,15 @@ _debugtext_y : i32 = 0
 _app_render2d :: proc() {
 	_debugtext_y = 2
 
-	// cursor
+	// crosshair
 	//rl.DrawRectangle(WINDOW_X/2 - 3, WINDOW_Y/2 - 3, 6, 6, rl.Fade(rl.BLACK, 0.5))
 	//rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
 
 	gunindex := cast(i32)gun_data.equipped
 
 	// draw ammo
-	ui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_data.ammoCounts[gunindex]))
-	ui_drawText({30, WINDOW_Y - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("health: ", player_data.health))
+	gui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_data.ammoCounts[gunindex]))
+	gui_drawText({30, WINDOW_Y - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("health: ", player_data.health))
 
 	for i : i32 = 0; i < GUN_COUNT; i += 1 {
 		LINE :: 40
@@ -285,7 +308,7 @@ _app_render2d :: proc() {
 			rl.DrawRectangle(cast(i32)pos.x-W, cast(i32)pos.y-W, 120, TEXTHEIGHT+W*2, {150,150,150,100})
 		}
 
-		ui_drawText(pos, TEXTHEIGHT, gun_data.ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
+		gui_drawText(pos, TEXTHEIGHT, gun_data.ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
 	}
 
 	if debugIsEnabled {
@@ -459,12 +482,14 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 				if headshot do playSound(gun_data.headshotSound)
 				playSoundMulti(enemy_data.gruntHitSound)
 				if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.gruntDeathSound)
+				enemy_data.grunts[enemyindex].vel += dir * 10.0 * damage
 			case enemy_kind_t.KNIGHT:
 				headshot := hitpos.y > enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.knights[enemyindex].health -= headshot ? damage*2 : damage
 				if headshot do playSound(gun_data.headshotSound)
 				playSoundMulti(enemy_data.knightHitSound)
 				if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.knightDeathSound)
+				enemy_data.knights[enemyindex].vel += dir * 10.0 * damage
 		}
 	}
 	return tn
@@ -544,20 +569,20 @@ ENEMY_GRAVITY			:: 5.0
 ENEMY_GRUNT_SIZE		:: vec3{2, 4, 2}
 ENEMY_GRUNT_ACCELERATION	:: 13
 ENEMY_GRUNT_MAX_SPEED		:: 14
-ENEMY_GRUNT_FRICTION		:: 6
+ENEMY_GRUNT_FRICTION		:: 5
 ENEMY_GRUNT_MIN_GOOD_DIST	:: 30
 ENEMY_GRUNT_MAX_GOOD_DIST	:: 60
 ENEMY_GRUNT_ATTACK_TIME		:: 1.5
 ENEMY_GRUNT_DAMAGE		:: 1.0
 ENEMY_GRUNT_HEALTH		:: 1.0
-ENEMY_GRUNT_SPEED_RAND		:: 1.0
-ENEMY_GRUNT_DIST_RAND		:: 1.0
+ENEMY_GRUNT_SPEED_RAND		:: 0.005 // NOTE: multiplier for length(player velocity) ^ 2
+ENEMY_GRUNT_DIST_RAND		:: 0.5
 ENEMY_GRUNT_MAX_DIST		:: 120.0
 
 ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
 ENEMY_KNIGHT_ACCELERATION	:: 12
 ENEMY_KNIGHT_MAX_SPEED		:: 12
-ENEMY_KNIGHT_FRICTION		:: 3.5
+ENEMY_KNIGHT_FRICTION		:: 4
 ENEMY_KNIGHT_DAMAGE		:: 0.8
 ENEMY_KNIGHT_ATTACK_TIME	:: 0.6
 ENEMY_KNIGHT_HEALTH		:: 1.0
@@ -586,7 +611,6 @@ enemy_data : struct {
 		target			: vec3,
 		isMoving		: bool,
 		vel			: vec3,
-		attackSinceStopped	: u16,
 	},
 
 	knightCount : i32,
@@ -649,6 +673,8 @@ _enemy_updateDataAndRender :: proc() {
 		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {EPS,EPS,EPS})
 		seeplayer := p_tn < t_tn && p_hit
 
+		if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
+
 		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 	
 		enemy_data.grunts[i].attackTimer -= deltatime
@@ -662,39 +688,47 @@ _enemy_updateDataAndRender :: proc() {
 
 		flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
 
-		if enemy_data.grunts[i].isMoving {
-			if !seeplayer {
-				enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
-			} else {
-				if p_tn < ENEMY_GRUNT_MIN_GOOD_DIST {
-					enemy_data.grunts[i].vel -= flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
-				} else if p_tn > ENEMY_GRUNT_MAX_GOOD_DIST {
-					enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
-				}
-			}
-		}
-
 		if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
 			if enemy_data.grunts[i].attackTimer < 0.0 { // attack
 				enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
-				//rndstrength := (linalg.length(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
-				//	p_tn*ENEMY_GRUNT_DIST_RAND) * 0.1
-				//// cast bullet
-				////t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + (dir + randVec3()*rndstrength)*1e6, {EPS,EPS,EPS})
-				bullet_createBulletLine(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
-				player_damage(ENEMY_GRUNT_DAMAGE)
+				rndstrength := (linalg.length2(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
+					p_tn*ENEMY_GRUNT_DIST_RAND) * 1e-3 * 0.5
+				// cast bullet
+				bulletdir := linalg.normalize(dir + randVec3()*rndstrength + player_data.vel*deltatime/PLAYER_SPEED)
+				bullet_tn, bullet_norm, bullet_hit := phy_boxCastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
+				bullet_createBulletLine(pos, pos + bulletdir*bullet_tn, 2.0, vec4{1.0, 0.0, 0.5, 0.9}, 1.0)
+				bulletplayer_tn, bulletplayer_hit := phy_boxCastPlayer(pos, bulletdir, {0,0,0})
+				if bulletplayer_hit && bulletplayer_tn < bullet_tn { // if the ray actually hit player first
+					player_damage(ENEMY_GRUNT_DAMAGE)
+					player_data.vel += bulletdir * 40.0
+					player_data.rotImpulse += {0.1, 0.0, 0.0}
+				}
 			}
 		} else {
 			enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
 		}
 	
 		enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
-		enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
 		speed := linalg.length(enemy_data.grunts[i].vel)
 		enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
 		speed = max(speed, ENEMY_GRUNT_MAX_SPEED)
 		
 		mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.grunts[i].vel, ENEMY_GRUNT_SIZE)
+		if mov_hit && mov_norm.y > 0.2 { // if on ground
+			enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
+
+			if enemy_data.grunts[i].isMoving {
+				if !seeplayer {
+					enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+				} else {
+					if p_tn < ENEMY_GRUNT_MIN_GOOD_DIST {
+						enemy_data.grunts[i].vel -= flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+					} else if p_tn > ENEMY_GRUNT_MAX_GOOD_DIST {
+						enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+					}
+				}
+			}
+		}
 
 		if mov_hit {
 			enemy_data.grunts[i].vel = phy_clipVelocity(enemy_data.grunts[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
@@ -713,11 +747,13 @@ _enemy_updateDataAndRender :: proc() {
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 		if enemy_data.knights[i].health <= 0.0 do continue
 
-		pos := enemy_data.knights[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
+		pos := enemy_data.knights[i].pos + vec3{0, ENEMY_KNIGHT_SIZE.y*0.5, 0}
 		dir := linalg.normalize(player_data.pos - pos)
 		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
 		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
 		seeplayer := p_tn < t_tn && p_hit
+
+		if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
 
 		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 		
@@ -732,29 +768,30 @@ _enemy_updateDataAndRender :: proc() {
 
 		flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
 
-		if enemy_data.knights[i].isMoving {
-			enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
-		}
-
 		if seeplayer {
 			if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
 				player_damage(ENEMY_KNIGHT_DAMAGE)
 				player_data.vel = flatdir * 100.0
 				player_data.vel.y += 30.0
-				enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED
+				enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED * 0.1
 			}
 		} else {
 			enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
 		}
 	
 		enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
-		enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
 		speed := linalg.length(enemy_data.knights[i].vel)
 		enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
 		speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
 		
 		mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
+		if mov_hit && mov_norm.y > 0.2 { // if on ground
+			enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
+			if enemy_data.knights[i].isMoving {
+				enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
+			}
+		}
 
 		if mov_hit {
 			enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
@@ -841,6 +878,7 @@ loadMusic :: proc(path : string) -> rl.Music {
 loadFont :: proc(path : string) -> rl.Font {
 	fullpath := appendToAssetPathCstr("fonts", path)
 	println("! loading font: ", fullpath)
+	//return rl.LoadFontEx(fullpath, 64, nil, 0)
 	return rl.LoadFont(fullpath)
 }
 

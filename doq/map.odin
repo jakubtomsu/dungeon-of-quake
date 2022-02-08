@@ -347,10 +347,10 @@ map_loadFromFile :: proc(name: string) {
 					tile = map_tileKind_t.WALL_MID
 
 				case map_tileKind_t.ENEMY_KNIGHT_LOWER:
-					enemy_spawnKnight(lowpos + vec3{0, ENEMY_KNIGHT_SIZE.y*1.2, 0})
+					enemy_spawnKnight(lowpos + vec3{0, ENEMY_KNIGHT_SIZE.y*2.0, 0})
 					tile = map_tileKind_t.EMPTY
 				case map_tileKind_t.ENEMY_KNIGHT_UPPER:
-					enemy_spawnKnight(highpos + vec3{0, ENEMY_KNIGHT_SIZE.y*1.2, 0})
+					enemy_spawnKnight(highpos + vec3{0, ENEMY_KNIGHT_SIZE.y*2.0, 0})
 					tile = map_tileKind_t.WALL_MID
 
 				case map_tileKind_t.GUN_SHOTGUN_LOWER:
@@ -555,13 +555,13 @@ map_drawTilemap :: proc() {
 			//)
 
 			rl.DrawModel(map_data.healthPickupModel, map_data.healthPickups[i], MAP_HEALTH_PICKUP_SIZE.x, rl.WHITE)
-	
+			
 			RAD :: 6.5
-			if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD {
+			if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD && player_data.health < PLAYER_MAX_HEALTH {
 				player_data.health += PLAYER_MAX_HEALTH*0.25
+				player_data.health = clamp(player_data.health, 0.0, PLAYER_MAX_HEALTH)
 				screenTint = {1.0,0.8,0.0}
 				playSound(player_data.healthPickupSound)
-
 				temp := map_data.healthPickups[i]
 				map_data.healthPickupCount -= 1
 				map_data.healthPickups[i] = map_data.healthPickups[map_data.healthPickupCount]

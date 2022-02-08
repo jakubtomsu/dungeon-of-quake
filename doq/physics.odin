@@ -170,7 +170,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 
 			if tn>tf || tf<PHY_COMPARISON_EPS do continue // no intersection (inside counts as intersection)
 			if tn>ctx.tmin do continue // this hit is worse than the one we already have
-			if tn<-glsl.max(ctx.linelen*1.1, 1.0)-PHY_COMPARISON_EPS do continue
+			if tn<-glsl.max(ctx.linelen, 1.0)*5.0-PHY_COMPARISON_EPS do continue // disallow movement too far back
 			if math.is_nan(tn) || math.is_nan(tf) || math.is_inf(tn) || math.is_inf(tf) do continue
 
 			//println("ok")

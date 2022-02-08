@@ -68,21 +68,24 @@ player_damage :: proc(damage : f32) {
 	player_data.health -= damage
 	playSoundMulti(player_data.damageSound)
 	screenTint = {1,0.6,0.5}
-	player_data.slowness += damage * 0.5
+	player_data.slowness += damage * 0.2
 }
 
 _player_update :: proc() {
+	// fall death
 	if player_data.pos.y < PLAYER_FALL_DEATH_Y {
 		//player_die()
 		player_damage(1.0)
-		player_data.pos = player_data.lastValidPos
-		player_data.vel = -player_data.lastValidVel * 0.5
+		dir := -linalg.normalize(player_data.lastValidVel)
+		player_data.vel = dir * 100.0
+		player_data.pos = player_data.lastValidPos + dir
 		player_data.slowness = 1.0
 		return
 	} else if player_data.pos.y < PLAYER_FALL_DEATH_Y*0.4 {
 		screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 0.98))
 	}
 
+	// portal finish
 	if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
 		player_finishMap()
 		return
@@ -141,6 +144,7 @@ _player_update :: proc() {
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		//player_data.isOnGround = false
 		playSoundMulti(player_data.jumpSound)
+		player_data.rotImpulse.x -= 0.03
 	}
 
 
@@ -182,6 +186,7 @@ _player_update :: proc() {
 			playSound(player_data.landSound)
 			playSoundMulti(player_data.footstepSound)
 		}
+		player_data.rotImpulse.x += 0.02
 	}
 
 
@@ -332,7 +337,7 @@ gun_kind_t :: enum {
 	LASERRIFLE	= 2,
 }
 
-GUN_SHOTGUN_SPREAD		:: 0.12
+GUN_SHOTGUN_SPREAD		:: 0.1
 GUN_SHOTGUN_DAMAGE		:: 0.1
 GUN_MACHINEGUN_SPREAD		:: 0.02
 GUN_MACHINEGUN_DAMAGE		:: 0.2
