@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="/build/assets/textures/dungeon_of_quake_logo.png" width="400">  
+  <img src="/build/textures/dungeon_of_quake_logo.png" width="400">  
 </p>
 
 <p align="center">
