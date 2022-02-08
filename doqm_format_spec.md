@@ -3,9 +3,9 @@
 
 
 ## general info
-Maps are saved in text file format, with `.doqm` file extension, which means you can edit these levels with any text editor. The map can be split into two floors using different tiles  
+Maps are saved as a plain text, but use the `.doqm` file extension. This means you can edit these levels with any text editor. Maps can also be split into two floors, using certain tiles.  
 
->**WARNING:** Text editors don't really use fonts with characters with sqare aspect ratio,
+> **WARNING:** Text editors don't really use fonts with sqare aspect ratio characters,
 so the resulting level might end up looking a little stretched in-game. In some text
 editors, you can change text spacing to circumvent the issue.
 
@@ -15,37 +15,35 @@ editors, you can change text spacing to circumvent the issue.
 >**NOTE:** some blocks have different lowercase/uppercase versions.  
 for instance: you can use uppercase `S` instead of lowercase `s` if you want the start position to be on the 2nd floor.
 
-`lower` means it's on the 1st floor  
-`upper` means it;s on the 2st floor  
 
-tile character | tile name          | floor   | note        
--------------- | ------------------ | ------- | ------------
-`-`            | none               |         |
-` `            | empty              |         |
-`#`            | full               |         |
-`w`            | wall-mid           |         |
-`c`            | ceiling            |         |
-`s`            | start              | `lower` |
-`S`            | start              | `upper` |
-`f`            | finish             | `lower` |
-`F`            | finish             | `upper` |
-`p`            | small platform     |         |
-`P`            | large platform     |         |
-`e`            | elevator           |         |
-`o`            | obstacle           | `lower` |
-`O`            | obstacle           | `upper` |
-`h`            | health pickup      | `lower` | adds 1/4 of health to player
-`H`            | health pickup      | `upper` |
-`d`            | shotgun pickup     | `lower` |
-`D`            | shotgun pickup     | `upper` |
-`m`            | machinegun pickup  | `lower` |
-`M`            | machinegun pickup  | `upper` |
-`l`            | laserrifle pickup  | `lower` |
-`L`            | laserrifle pickup  | `upper` |
-`k`            | knight spawn       | `lower` |
-`K`            | knight spawn       | `upper` |
-`g`            | grunt spawn        | `lower` |
-`G`            | grunt spawn        | `upper` |
+tile character | tile name          | note  |   
+-------------- | ------------------ | ----- |
+`-`            | none               |
+` `            | empty              |
+`#`            | full               |
+`w`            | wall-mid           |
+`c`            | ceiling            |
+`s`            | start              |
+`S`            | start              |
+`f`            | finish             |
+`F`            | finish             |
+`p`            | small platform     |
+`P`            | large platform     |
+`e`            | elevator           |
+`o`            | obstacle           |
+`O`            | obstacle           |
+`h`            | health pickup      | adds 1/4 of health to player
+`H`            | health pickup      |
+`d`            | shotgun pickup     |
+`D`            | shotgun pickup     |
+`m`            | machinegun pickup  |
+`M`            | machinegun pickup  |
+`l`            | laserrifle pickup  |
+`L`            | laserrifle pickup  |
+`k`            | knight spawn       |
+`K`            | knight spawn       |
+`g`            | grunt spawn        |
+`G`            | grunt spawn        |
 
 
 
