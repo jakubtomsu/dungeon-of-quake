@@ -74,10 +74,10 @@ map_data : struct {
 	authorName	: string, // TODO
 	startMessage	: string, // TODO
 	startPlayerDir	: vec2,
-	skyColor		: vec3,
-	fogStrength		: f32,
+	skyColor	: vec3, // normalized rgb
+	fogStrength	: f32,
 
-	tiles		: [MAP_MAX_WIDTH][MAP_MAX_WIDTH]map_tileKind_t,
+	tiles		: [MAP_MAX_WIDTH][MAP_MAX_WIDTH]map_tileKind_t, // TODO: allocate exact-size buffer on loadtime
 	bounds		: ivec2,
 	startPos	: vec3,
 	finishPos	: vec3,
@@ -156,13 +156,13 @@ map_addHealthPickup :: proc(pos : vec3) {
 
 
 
-// fills input buffer with axis-aligned boxes for a given tile
+// fills input buffer `boxbuf` with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
-map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
+map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 	tileKind := map_data.tiles[coord[0]][coord[1]]
 
-	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> phy_box_t {
-		return phy_box_t{
+	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> box_t {
+		return box_t{
 			vec3{posxz.x, posy*TILE_WIDTH, posxz.y},
 			vec3{TILE_WIDTH, sizey * TILE_WIDTH, TILE_WIDTH} / 2,
 		}
@@ -175,7 +175,7 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []phy_box_t) -> i32 {
 			return 0
 
 		case map_tileKind_t.FULL:
-			boxbuf[0] = phy_box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[0] = box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
 			return 1
 
 		case map_tileKind_t.EMPTY:
@@ -492,7 +492,7 @@ map_drawTilemap :: proc() {
 			//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
 			tilekind := map_data.tiles[x][y]
 
-			boxbuf : [PHY_MAX_TILE_BOXES]phy_box_t = {}
+			boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
 			boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
 			//checker := cast(bool)((x%2) ~ (y%2))
 			#partial switch tilekind {

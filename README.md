@@ -18,6 +18,17 @@
 - use `.\build.bat` command to build the game  
 - use `.\build.bat run` command to build and run the game  
 
-# creating maps
-more in-depth info is in [DOQM file spec](doqm_format_spec.md)  
-Maps are made as top-down view on the map, and different ascii characters correspond to different tiles - this means anyone can edit maps with just a simple text editor
+# maps
+Maps are made as top-down view on the map, and different ascii characters correspond to different tiles - this means anyone can edit maps with just a simple text editor.  
+`.doqm` file extension is used, even though the underlying file is just plain text.
+#### Info for creating maps is in [DOQM file spec](doqm_format_spec.md)  
+
+> The raw tile table is in (map.odin)[/doq/map.odin] as `map_tileKind_t`
+
+Some tiles get translated to different tiles when the map gets loaded into memory. For instance, lowercase
+health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.
+
+# TODO
+- simple profiler, maybe with (chrome://tracing)[chrome://tracing]
+- particles
+- `?` map editor, probaly as a separate program

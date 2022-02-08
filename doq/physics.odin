@@ -3,6 +3,9 @@ package doq
 //
 // PHYSICS
 //
+// ray intersectors by Inigo Quilez:
+// https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
+//
 
 import "core:math"
 import "core:math/linalg"
@@ -13,13 +16,15 @@ PHY_MAX_TILE_BOXES :: 4
 PHY_BOXCAST_EPS :: 1e-2
 PHY_COMPARISON_EPS :: PHY_BOXCAST_EPS*3.0
 
-phy_box_t :: struct {
+box_t :: struct {
 	pos  : vec3,
 	size : vec3,
 }
 
 
 
+// util
+// @returns: true if the two boxes intersect
 phy_boxVsBox :: proc(pos0 : vec3, size0 : vec3, pos1 : vec3, size1 : vec3) -> bool {
 	return  (pos0.x + size0.x > pos1.x - size1.x && pos0.x - size0.x < pos1.x + size1.x) &&
 		(pos0.y + size0.y > pos1.y - size1.y && pos0.y - size0.y < pos1.y + size1.y) &&
@@ -28,6 +33,7 @@ phy_boxVsBox :: proc(pos0 : vec3, size0 : vec3, pos1 : vec3, size1 : vec3) -> bo
 
 // calculates near and far hit points with a box
 // @param pos: relative to box center
+// orig. by Inigo Quilez
 phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : vec3) -> (f32, f32) {
 	n := dirinv * pos
 	k := dirinvabs * size
@@ -38,16 +44,19 @@ phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : ve
 	return tn, tf
 }
 
-// hit or inside
+// @returns: true if hit or inside
 phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 	return tn<tf && tf>0
 }
 
 
 
-// "linecast" box through the map
-// ! boxsize < TILE_WIDTH
+// `linecast` box through the map
+// `boxsize` < `TILE_WIDTH`
 // @returns: newpos, normal, tmin
+//
+// uses custom DDA for traversing the uniform grid, but also looks at the skipped tile so we don't miss them.
+// The boxes queried from a given tile then get expaned by the original boxcast volume, and then raycasted.
 phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, vec3, bool) {
 	using math
 	posxz := vec2{pos.x, pos.z}
@@ -99,6 +108,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 
 	//println("pos", pos, "griddiff", griddiff, "lowerleft", lowerleft, "posxz", posxz, "sidedist", sidedist, "deltadist", deltadist)
 
+	// DDA traversal
 	for {
 		if !map_isTilePosValid(tilepos) ||
 		(linalg.length(vec2{cast(f32)(tilepos.x - lowerleft.x), cast(f32)(tilepos.y - lowerleft.y)})-3.0)*TILE_WIDTH > ctx.tmin {
@@ -132,10 +142,10 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 		}
 	}
 
-	// @dir: precomputed normalize(wishpos - pos)
+	// @dir: precomputed `normalize(wishpos - pos)`
 	// @returns : clipped pos
 	phy_boxCastTilemapTile :: proc(coord : ivec2, ctx : ^phy_boxCastContext_t) {
-		boxbuf : [PHY_MAX_TILE_BOXES]phy_box_t = {}
+		boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
 		boxcount := map_getTileBoxes(coord, boxbuf[0:])
 
 		for i : i32 = 0; i < boxcount; i += 1 {
@@ -167,12 +177,12 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	
 	ctx.tmin = clamp(ctx.tmin, -MAP_MAX_WIDTH*TILE_WIDTH, MAP_MAX_WIDTH*TILE_WIDTH)
 
-	//return pos + dir*ctx.tmin, ctx.normal, ctx.hit
 	return ctx.tmin, ctx.normal, ctx.hit
 }
 
 
 
+// just a brute-force raycast of all enemies, good enough though
 // O(n), n = number of enemies
 phy_boxCastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
 	using math

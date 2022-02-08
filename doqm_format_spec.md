@@ -13,37 +13,31 @@ editors, you can change text spacing to circumvent the issue.
 
 ## tiles
 >**NOTE:** some blocks have different lowercase/uppercase versions.  
-for instance: you can use uppercase `S` instead of lowercase `s` if you want the start position to be on the 2nd floor.
+for instance: you can use uppercase `S` instead of lowercase `s` if you want the start position to be on the 2nd floor.  
+In that case, only the lowercase version is shown in the table.
+>> **NOTE:** some tiles have lowercase/uppercase versions which **do not** change the floor, but something else.
 
 
-tile character | tile name          | note  |   
--------------- | ------------------ | ----- |
-`-`            | none               |
-` `            | empty              |
-`#`            | full               |
-`w`            | wall-mid           |
-`c`            | ceiling            |
-`s`            | start              |
-`S`            | start              |
-`f`            | finish             |
-`F`            | finish             |
-`p`            | small platform     |
-`P`            | large platform     |
-`e`            | elevator           |
-`o`            | obstacle           |
-`O`            | obstacle           |
-`h`            | health pickup      | adds 1/4 of health to player
-`H`            | health pickup      |
-`d`            | shotgun pickup     |
-`D`            | shotgun pickup     |
-`m`            | machinegun pickup  |
-`M`            | machinegun pickup  |
-`l`            | laserrifle pickup  |
-`L`            | laserrifle pickup  |
-`k`            | knight spawn       |
-`K`            | knight spawn       |
-`g`            | grunt spawn        |
-`G`            | grunt spawn        |
+tile character | tile name | uppercase | note |
+-------------- | --------- | --------- | ---- |
+`-`|none               |✕| this tile is completely empty
+` `|empty              |✕| this tile has floor and ceiling, that's all
+`#`|full               |✕| one very tall tile
+`w`|wall-mid           |✕| wall up to the 2nd floor
+`c`|ceiling            |✕| lower ceiling
+`s`|start              |✓| place where the player spawns when the game starts
+`f`|finish             |✓| place where the end portal is spawned
+`p`|small platform     |✕| like `empty`, but also has a single tile between the 1st and 2nd floor
+`P`|large platform     |✕| `platform`, but 3 tiles tall
+`e`|elevator           |✕| elevator that takes you from the 1st to 2nd floor
+`o`|obstacle           |✕| like `empty`, but floor is 1 tile taller
+`O`|obstacle           |✕|
+`h`|health pickup      |✓| adds 1/4 of health to player
+`d`|shotgun pickup     |✓| `d` stands for `default`, since it's the default weapon
+`m`|machinegun pickup  |✓| refills **machinegun** ammo
+`l`|laserrifle pickup  |✓| refills **laserrifle** ammo
+`g`|grunt spawn        |✓| place where a grunt enemy spawns
+`k`|knight spawn       |✓| place where a knight enemy spawns
 
 
 
@@ -100,7 +94,7 @@ finish is on a elevated platform made with walls (`w`), where you can't get with
 c     c-------c     c
 #     #-------# k   #
 c     c-------c   k c
-#     #-------#     #
+#h  h #-------#     #
 ##wew##-------#Oo oO#
 -#www#--------#wwwww#
 ##wpw##########wwwGw#
