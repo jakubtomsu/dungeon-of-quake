@@ -2,6 +2,12 @@ package doq
 
 
 
+//
+// MAP
+//
+
+
+
 import "core:os"
 import "core:math"
 import "core:math/linalg"
@@ -12,10 +18,6 @@ import "core:strconv"
 import rl "vendor:raylib"
 
 
-
-//
-// MAP
-//
 
 MAP_MAX_WIDTH	:: 128
 TILE_WIDTH	:: 30.0

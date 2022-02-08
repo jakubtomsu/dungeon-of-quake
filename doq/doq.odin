@@ -146,7 +146,7 @@ _app_init :: proc() {
 	map_data.tileShader	= loadShader("tile.vert", "tile.frag")
 	map_data.portalShader	= loadShader("portal.vert", "portal.frag")
 	map_data.tileShaderCamPosUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "camPos")
-	bullet_data.linearEffectShader = loadShader("bulletLinearEffect.vert", "bulletLinearEffect.frag")
+	bullet_data.bulletLineShader = loadShader("bulletLine.vert", "bulletLine.frag")
 
 
 
@@ -321,7 +321,7 @@ _app_render2d :: proc() {
 		debugtext("    timer", gun_data.timer)
 		debugtext("    ammo counts", gun_data.ammoCounts)
 		debugtext("bullets")
-		debugtext("    linear effect count", bullet_data.linearEffectsCount)
+		debugtext("    linear effect count", bullet_data.bulletLinesCount)
 		debugtext("enemies")
 		debugtext("    grunt count", enemy_data.gruntCount)
 		debugtext("    knight count", enemy_data.knightCount)
@@ -418,8 +418,8 @@ bullet_ammoInfo_t :: struct {
 }
 
 bullet_data : struct {
-	linearEffectsCount : i32,
-	linearEffects : [BULLET_LINEAR_EFFECT_MAX_COUNT]struct {
+	bulletLinesCount : i32,
+	bulletLines : [BULLET_LINEAR_EFFECT_MAX_COUNT]struct {
 		start		: vec3,
 		timeToLive	: f32,
 		end		: vec3,
@@ -428,28 +428,28 @@ bullet_data : struct {
 		duration	: f32,
 	},
 
-	linearEffectShader	: rl.Shader,
+	bulletLineShader	: rl.Shader,
 }
 
 // @param timeToLive: in seconds
-bullet_createLinearEffect :: proc(start : vec3, end : vec3, rad : f32, col : vec4, duration : f32) {
+bullet_createBulletLine :: proc(start : vec3, end : vec3, rad : f32, col : vec4, duration : f32) {
 	if duration <= BULLET_REMOVE_THRESHOLD do return
-	index := bullet_data.linearEffectsCount
+	index := bullet_data.bulletLinesCount
 	if index + 1 >= BULLET_LINEAR_EFFECT_MAX_COUNT do return
-	bullet_data.linearEffectsCount += 1
-	bullet_data.linearEffects[index] = {}
-	bullet_data.linearEffects[index].start		= start
-	bullet_data.linearEffects[index].timeToLive	= duration
-	bullet_data.linearEffects[index].end		= end
-	bullet_data.linearEffects[index].radius		= rad
-	bullet_data.linearEffects[index].color		= col
-	bullet_data.linearEffects[index].duration	= duration
+	bullet_data.bulletLinesCount += 1
+	bullet_data.bulletLines[index] = {}
+	bullet_data.bulletLines[index].start		= start
+	bullet_data.bulletLines[index].timeToLive	= duration
+	bullet_data.bulletLines[index].end		= end
+	bullet_data.bulletLines[index].radius		= rad
+	bullet_data.bulletLines[index].color		= col
+	bullet_data.bulletLines[index].duration	= duration
 }
 
 bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) -> f32 {
 	tn, hit, enemykind, enemyindex := phy_boxCastWorld(start, start + dir*1e6, vec3{rad,rad,rad})
 	hitpos := start + dir*tn
-	bullet_createLinearEffect(start + dir*rad*2.0, hitpos, rad, col, effectDuration)
+	bullet_createBulletLine(start + dir*rad*2.0, hitpos, rad, col, effectDuration)
 	if hit {
 		switch enemykind {
 			case enemy_kind_t.NONE:
@@ -475,50 +475,50 @@ bullet_shootProjectile :: proc(start : vec3, dir : vec3, damage : f32, rad : f32
 }
 
 _bullet_updateDataAndRender :: proc() {
-	assert(bullet_data.linearEffectsCount >= 0)
-	assert(bullet_data.linearEffectsCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
+	assert(bullet_data.bulletLinesCount >= 0)
+	assert(bullet_data.bulletLinesCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
 
 	// remove old
-	loopremove : for i : i32 = 0; i < bullet_data.linearEffectsCount; i += 1 {
-		bullet_data.linearEffects[i].timeToLive -= deltatime
-		if bullet_data.linearEffects[i].timeToLive <= BULLET_REMOVE_THRESHOLD { // needs to be removed
-			if i + 1 >= bullet_data.linearEffectsCount { // we're on the last one
-				bullet_data.linearEffectsCount -= 1
+	loopremove : for i : i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
+		bullet_data.bulletLines[i].timeToLive -= deltatime
+		if bullet_data.bulletLines[i].timeToLive <= BULLET_REMOVE_THRESHOLD { // needs to be removed
+			if i + 1 >= bullet_data.bulletLinesCount { // we're on the last one
+				bullet_data.bulletLinesCount -= 1
 				break loopremove
 			}
-			bullet_data.linearEffectsCount -= 1
-			lastindex := bullet_data.linearEffectsCount
-			bullet_data.linearEffects[i] = bullet_data.linearEffects[lastindex]
+			bullet_data.bulletLinesCount -= 1
+			lastindex := bullet_data.bulletLinesCount
+			bullet_data.bulletLines[i] = bullet_data.bulletLines[lastindex]
 		}
 	}
 
 	// draw
-	rl.BeginShaderMode(bullet_data.linearEffectShader)
-	for i : i32 = 0; i < bullet_data.linearEffectsCount; i += 1 {
-		fade := (bullet_data.linearEffects[i].timeToLive / bullet_data.linearEffects[i].duration)
-		col := bullet_data.linearEffects[i].color
+	rl.BeginShaderMode(bullet_data.bulletLineShader)
+	for i : i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
+		fade := (bullet_data.bulletLines[i].timeToLive / bullet_data.bulletLines[i].duration)
+		col := bullet_data.bulletLines[i].color
 
 		rl.DrawCylinderEx(
-			bullet_data.linearEffects[i].start,
-			bullet_data.linearEffects[i].end,
-			fade * bullet_data.linearEffects[i].radius * 0.05,
-			fade * bullet_data.linearEffects[i].radius * 0.4,
+			bullet_data.bulletLines[i].start,
+			bullet_data.bulletLines[i].end,
+			fade * bullet_data.bulletLines[i].radius * 0.05,
+			fade * bullet_data.bulletLines[i].radius * 0.4,
 			3,
 			rl.ColorFromNormalized(vec4{1,1,1,0.5 + fade*0.5}),
 		)
 
 		rl.DrawCylinderEx(
-			bullet_data.linearEffects[i].start,
-			bullet_data.linearEffects[i].end,
-			fade * bullet_data.linearEffects[i].radius * 0.1,
-			fade * bullet_data.linearEffects[i].radius,
+			bullet_data.bulletLines[i].start,
+			bullet_data.bulletLines[i].end,
+			fade * bullet_data.bulletLines[i].radius * 0.1,
+			fade * bullet_data.bulletLines[i].radius,
 			BULLET_LINEAR_EFFECT_MESH_QUALITY,
 			rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
 		)
 
 		//rl.DrawSphere(
-		//	bullet_data.linearEffects[i].start,
-		//	fade * bullet_data.linearEffects[i].radius,
+		//	bullet_data.bulletLines[i].start,
+		//	fade * bullet_data.bulletLines[i].radius,
 		//	rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
 		//)
 	}
@@ -681,7 +681,7 @@ _enemy_updateDataAndRender :: proc() {
 				//	p_tn*ENEMY_GRUNT_DIST_RAND) * 0.1
 				//// cast bullet
 				////t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + (dir + randVec3()*rndstrength)*1e6, {EPS,EPS,EPS})
-				bullet_createLinearEffect(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
+				bullet_createBulletLine(pos, pos + dir*p_tn, 1.0, vec4{1.0, 0.0, 0.0, 0.5}, 1.0)
 				player_damage(ENEMY_GRUNT_DAMAGE)
 			}
 		} else {
@@ -803,23 +803,8 @@ _enemy_updateDataAndRender :: proc() {
 
 
 //
-// MENU UI
-//
-
-ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
-	cstr := strings.clone_to_cstring(text, context.temp_allocator)
-	rl.DrawTextEx(normalFont, cstr, pos, size, 0.0, color)
-}
-
-
-
-
-
-//
 // HELPERS PROCEDURES
 //
-
-
 
 appendToAssetPath :: proc(subdir : string, path : string) -> string {
 	return fmt.tprint(

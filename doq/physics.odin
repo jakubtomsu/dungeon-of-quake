@@ -1,15 +1,21 @@
 package doq
 
+
+
 //
 // PHYSICS
+// really simple, but fairly stable collision detection (also continuous)
 //
 // ray intersectors by Inigo Quilez:
 // https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
 //
 
+
+
 import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
+
 
 
 PHY_MAX_TILE_BOXES :: 4

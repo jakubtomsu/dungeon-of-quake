@@ -18,6 +18,9 @@
 - use `.\build.bat` command to build the game  
 - use `.\build.bat run` command to build and run the game  
 
+# project tree
+(doq/)[doq/]    source code
+
 # maps
 Maps are made as top-down view on the map, and different ascii characters correspond to different tiles - this means anyone can edit maps with just a simple text editor.  
 `.doqm` file extension is used, even though the underlying file is just plain text.
@@ -27,6 +30,8 @@ Maps are made as top-down view on the map, and different ascii characters corres
 
 Some tiles get translated to different tiles when the map gets loaded into memory. For instance, lowercase
 health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.
+
+
 
 # TODO
 - simple profiler, maybe with (chrome://tracing)[chrome://tracing]
