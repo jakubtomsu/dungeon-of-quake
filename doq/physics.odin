@@ -1,4 +1,4 @@
-package dungeon_of_quake
+package doq
 
 //
 // PHYSICS
@@ -11,6 +11,7 @@ import "core:math/linalg/glsl"
 
 PHY_MAX_TILE_BOXES :: 4
 PHY_BOXCAST_EPS :: 1e-2
+PHY_COMPARISON_EPS :: PHY_BOXCAST_EPS*3.0
 
 phy_box_t :: struct {
 	pos  : vec3,
@@ -151,9 +152,9 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 
 			//println("tn", tn, "tf", tf)
 
-			if tn>tf || tf<0.0 do continue // no intersection (inside counts as intersection)
+			if tn>tf || tf<PHY_COMPARISON_EPS do continue // no intersection (inside counts as intersection)
 			if tn>ctx.tmin do continue // this hit is worse than the one we already have
-
+			if tn<-glsl.max(ctx.linelen*1.1, 1.0)-PHY_COMPARISON_EPS do continue
 			if math.is_nan(tn) || math.is_nan(tf) || math.is_inf(tn) || math.is_inf(tf) do continue
 
 			//println("ok")
@@ -161,7 +162,6 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 			ctx.tmin = tn
 			ctx.normal = -ctx.dirsign * cast(vec3)(glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))
 			ctx.hit = true
-
 		}
 	}
 	
@@ -216,6 +216,7 @@ phy_boxCastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_t
 }
 
 
+
 phy_boxCastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool) {
 	dirinv := vec3{
 		dir.x==0.0?1e6:1.0/dir.x,
@@ -228,10 +229,7 @@ phy_boxCastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool)
 }
 
 
-phy_boxCastWorldRes_t :: struct {
-	newpos	: vec3,
-	hit	: bool,
-}
+
 
 phy_boxCastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
 	e_tn, e_hit, e_enemykind, e_enemyindex := phy_boxCastEnemies(pos, wishpos, boxsize)
@@ -252,12 +250,12 @@ phy_boxCastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn 
 }
 
 
+
 phy_clipVelocity :: proc(vel : vec3, normal : vec3, overbounce : f32) -> vec3 {
 	backoff := linalg.vector_dot(vel, normal) * overbounce
 	change := normal*backoff
 	return vel - change
 }
-
 
 phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32) -> vec3 {
 	len := linalg.vector_length(vel)

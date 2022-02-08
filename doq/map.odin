@@ -1,4 +1,4 @@
-package dungeon_of_quake
+package doq
 
 
 
@@ -527,7 +527,7 @@ map_drawTilemap :: proc() {
 			gunindex := cast(i32)map_data.gunPickups[i].kind
 			rl.DrawModelEx(gun_data.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
 			rl.DrawSphere(pos, -2.0, {255,230,180,40})
-			RAD :: 4.5
+			RAD :: 6.5
 			if linalg.length2(player_data.pos - pos) < RAD*RAD {
 				gun_data.equipped = map_data.gunPickups[i].kind
 				gun_data.ammoCounts[gunindex] = gun_startAmmoCounts[gunindex]
@@ -554,7 +554,7 @@ map_drawTilemap :: proc() {
 
 			rl.DrawModel(map_data.healthPickupModel, map_data.healthPickups[i], MAP_HEALTH_PICKUP_SIZE.x, rl.WHITE)
 	
-			RAD :: 4.5
+			RAD :: 6.5
 			if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD {
 				player_data.health += PLAYER_MAX_HEALTH*0.25
 				screenTint = {1.0,0.8,0.0}

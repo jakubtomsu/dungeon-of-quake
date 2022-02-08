@@ -1,6 +1,6 @@
 package main
 
-import doq "dungeon_of_quake"
+import "doq"
 
 
 

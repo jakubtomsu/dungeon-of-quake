@@ -1,4 +1,4 @@
-package dungeon_of_quake
+package doq
 
 
 
@@ -48,8 +48,6 @@ randData : rand.Rand
 
 normalFont : rl.Font
 
-gameIsPlaying : bool
-gameIsRendered : bool
 screenTint : vec3 = {1,1,1}
 
 
@@ -536,12 +534,12 @@ _bullet_updateDataAndRender :: proc() {
 // ENEMIES
 //
 
-ENEMY_GRUNT_MAX_COUNT :: 32
-ENEMY_KNIGHT_MAX_COUNT :: 32
+ENEMY_GRUNT_MAX_COUNT	:: 32
+ENEMY_KNIGHT_MAX_COUNT	:: 32
 
-ENEMY_HEALTH_MULTIPLIER :: 1.5
-ENEMY_HEADSHOT_HALF_OFFSET :: 0.0
-ENEMY_GRAVITY           :: 5.0
+ENEMY_HEALTH_MULTIPLIER		:: 1.5
+ENEMY_HEADSHOT_HALF_OFFSET	:: 0.0
+ENEMY_GRAVITY			:: 5.0
 
 ENEMY_GRUNT_SIZE		:: vec3{2, 4, 2}
 ENEMY_GRUNT_ACCELERATION	:: 13
@@ -557,8 +555,8 @@ ENEMY_GRUNT_DIST_RAND		:: 1.0
 ENEMY_GRUNT_MAX_DIST		:: 120.0
 
 ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
-ENEMY_KNIGHT_ACCELERATION	:: 18
-ENEMY_KNIGHT_MAX_SPEED		:: 16
+ENEMY_KNIGHT_ACCELERATION	:: 12
+ENEMY_KNIGHT_MAX_SPEED		:: 12
 ENEMY_KNIGHT_FRICTION		:: 3.5
 ENEMY_KNIGHT_DAMAGE		:: 0.8
 ENEMY_KNIGHT_ATTACK_TIME	:: 0.6
@@ -825,7 +823,7 @@ ui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
 
 appendToAssetPath :: proc(subdir : string, path : string) -> string {
 	return fmt.tprint(
-		args={loadpath, filepath.SEPARATOR_STRING, "assets", filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
+		args={loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
 		sep="",
 	)
 }

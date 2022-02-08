@@ -1,4 +1,4 @@
-package dungeon_of_quake
+package doq
 
 
 
@@ -23,7 +23,7 @@ PLAYER_LOOK_SENSITIVITY		:: 0.004
 PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
 PLAYER_SIZE			:: vec3{1,2,1}
-PLAYER_HEAD_SIN_TIME		::  math.PI * 5.0
+PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 
 PLAYER_GRAVITY			:: 210 // 800
 PLAYER_SPEED			:: 105 // 320
@@ -80,7 +80,7 @@ _player_update :: proc() {
 		player_data.slowness = 1.0
 		return
 	} else if player_data.pos.y < PLAYER_FALL_DEATH_Y*0.4 {
-		screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 1.0))
+		screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 0.98))
 	}
 
 	if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
@@ -186,6 +186,15 @@ _player_update :: proc() {
 
 
 
+	if phy_hit do player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 1.02)
+
+	player_data.vel = phy_applyFrictionToVelocity(
+		player_data.vel,
+		(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION) + player_data.slowness*15.0,
+	)
+
+
+
 	// elevator update
 	elevatorIsMoving := false
 	{
@@ -215,34 +224,22 @@ _player_update :: proc() {
 
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
-				player_data.vel.y = PLAYER_GRAVITY * deltatime
+				player_data.vel.y = -PLAYER_GRAVITY * deltatime
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
-				player_data.vel.y += TILE_ELEVATOR_SPEED * 0.5
+				player_data.vel.y = TILE_ELEVATOR_SPEED * 0.5
 			}
 		}
 
 		if elevatorIsMoving {
-			println("elevator moving")
-			if !rl.IsSoundPlaying(map_data.elevatorSound) {
-				playSound(map_data.elevatorSound)
-			}
+			if !rl.IsSoundPlaying(map_data.elevatorSound) do playSound(map_data.elevatorSound)
 		} else {
 			rl.StopSound(map_data.elevatorSound)
 		}
 	}
 
 	player_data.isOnGround |= elevatorIsMoving
-
-
-
-	if phy_hit do player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.2 : 0.95)
-
-	player_data.vel = phy_applyFrictionToVelocity(
-		player_data.vel,
-		(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION) + player_data.slowness*15.0,
-	)
 
 
 
@@ -266,7 +263,6 @@ _player_update :: proc() {
 		camera.target = camera.position + cam_forw
 		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_data.lookRotEuler.z*1.3, cam_forw), vec3{0,1.0,0}))
 	}
-
 
 	if debugIsEnabled {
 		size := vec3{1,1,1}
