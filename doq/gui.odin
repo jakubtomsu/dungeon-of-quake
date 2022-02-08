@@ -106,10 +106,10 @@ menu_updateAndDrawPauseMenu :: proc() {
 
 menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 	rl.BeginDrawing()
-		rl.ClearBackground(rl.BLACK)
+		unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, gui_data.loadScreenTimer * 0.4))
+		rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}*0.1, unfade)))
 		gui_drawText({10, 10}, 20, rl.YELLOW, "load screen")
 		OFFS :: 200
-		unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, gui_data.loadScreenTimer * 0.4))
 		STARTSCALE :: 12.0
 		scale := glsl.min(
 			WINDOW_X / f32(gui_data.loadScreenLogo.width),
@@ -121,6 +121,13 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 			0.0, // rot
 			scale * 0.5, // scale
 			rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, unfade)),
+		)
+
+		gui_drawText(
+			{WINDOW_X/2-100,WINDOW_Y-130},
+			25,
+			rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, clamp(unfade-0.4 + math.sin(timepassed*4.0)*0.1, 0.0, 1.0))),
+			"press any key to continue",
 		)
 	rl.EndDrawing()
 

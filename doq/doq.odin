@@ -878,8 +878,8 @@ loadMusic :: proc(path : string) -> rl.Music {
 loadFont :: proc(path : string) -> rl.Font {
 	fullpath := appendToAssetPathCstr("fonts", path)
 	println("! loading font: ", fullpath)
-	//return rl.LoadFontEx(fullpath, 64, nil, 0)
-	return rl.LoadFont(fullpath)
+	return rl.LoadFontEx(fullpath, 32, nil, 0)
+	//return rl.LoadFont(fullpath)
 }
 
 loadModel :: proc(path : string) -> rl.Model {
