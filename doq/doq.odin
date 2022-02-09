@@ -47,6 +47,7 @@ postprocessShader : rl.Shader
 randData : rand.Rand
 
 gameIsPaused : bool = false
+gameDrawFPS	: bool = false
 
 screenTint : vec3 = {1,1,1}
 
@@ -56,6 +57,7 @@ app_updatePathKind : enum {
 	GAME,
 } = .LOADSCREEN
 
+audioMasterVolume : f32 = 1.0
 
 
 // this just gets called from main
@@ -65,6 +67,9 @@ _doq_main :: proc() {
 	for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
 		println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
+		
+		audioMasterVolume = clamp(audioMasterVolume, 0.0, 1.0)
+		rl.SetMasterVolume(audioMasterVolume)
 
 		switch app_updatePathKind {
 			case .LOADSCREEN:
@@ -248,6 +253,9 @@ _app_init :: proc() {
 	//normalFont = loadFont("metalord.ttf")
 	gui_data.titleFont	= loadFont("eurcntrc.ttf")
 	gui_data.normalFont	= loadFont("germania_one.ttf")
+	gui_data.selectSound	= loadSound("button.wav")
+	gui_data.setValSound	= loadSound("elevator_end0.wav")
+	gui_data.loadScreenMusic	= loadMusic("ambient0.wav")
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 	
@@ -271,6 +279,8 @@ _app_update :: proc() {
 	//rl.SetMusicVolume(player_data.swooshMusic, clamp(linalg.length(player_data.vel * 0.05), 0.0, 1.0))
 
 	if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do debugIsEnabled = !debugIsEnabled
+	
+	if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) do gameIsPaused = !gameIsPaused
 
 	// pull elevators down
 	{
@@ -285,10 +295,7 @@ _app_update :: proc() {
 	screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 2.0, 0.0, 1.0))
 }
 
-_debugtext_y : i32 = 0
 _app_render2d :: proc() {
-	_debugtext_y = 2
-
 	// crosshair
 	//rl.DrawRectangle(WINDOW_X/2 - 3, WINDOW_Y/2 - 3, 6, 6, rl.Fade(rl.BLACK, 0.5))
 	//rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
@@ -311,44 +318,8 @@ _app_render2d :: proc() {
 		gui_drawText(pos, TEXTHEIGHT, gun_data.ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
 	}
 
-	if debugIsEnabled {
-		rl.DrawFPS(0, 0)
-		debugtext :: proc(args : ..any) {
-			tstr := fmt.tprint(args=args)
-			cstr := strings.clone_to_cstring(tstr, context.temp_allocator)
-			rl.DrawText(cstr, 6, _debugtext_y * 12, 10, rl.Fade(rl.WHITE, 0.8))
-			_debugtext_y += 1
-		}
 
-		debugtext("player")
-		debugtext("    pos", player_data.pos)
-		debugtext("    vel", player_data.vel)
-		debugtext("    speed", i32(linalg.length(player_data.vel)))
-		debugtext("    onground", player_data.isOnGround)
-		debugtext("system")
-		debugtext("    IsAudioDeviceReady", rl.IsAudioDeviceReady())
-		debugtext("    loadpath", loadpath)
-		debugtext("map")
-		debugtext("    bounds", map_data.bounds)
-		debugtext("    mapName", map_data.mapName)
-		debugtext("    nextMapName", map_data.nextMapName)
-		debugtext("    startPlayerDir", map_data.startPlayerDir)
-		debugtext("    gunPickupCount", map_data.gunPickupCount,
-			"gunPickupSpawnCount", map_data.gunPickupCount)
-		debugtext("    healthPickupCount", map_data.healthPickupCount,
-			"healthPickupSpawnCount", map_data.healthPickupSpawnCount)
-		debugtext("    skyColor", map_data.skyColor)
-		debugtext("    fogStrengh", map_data.fogStrength)
-		debugtext("gun")
-		debugtext("    equipped", gun_data.equipped)
-		debugtext("    timer", gun_data.timer)
-		debugtext("    ammo counts", gun_data.ammoCounts)
-		debugtext("bullets")
-		debugtext("    linear effect count", bullet_data.bulletLinesCount)
-		debugtext("enemies")
-		debugtext("    grunt count", enemy_data.gruntCount)
-		debugtext("    knight count", enemy_data.knightCount)
-	}
+	menu_drawDebugUI()
 }
 
 _app_render3d :: proc() {
@@ -496,24 +467,26 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 }
 
 bullet_shootProjectile :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4) {
-
+	// TODO
 }
 
 _bullet_updateDataAndRender :: proc() {
 	assert(bullet_data.bulletLinesCount >= 0)
 	assert(bullet_data.bulletLinesCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
 
-	// remove old
-	loopremove : for i : i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
-		bullet_data.bulletLines[i].timeToLive -= deltatime
-		if bullet_data.bulletLines[i].timeToLive <= BULLET_REMOVE_THRESHOLD { // needs to be removed
-			if i + 1 >= bullet_data.bulletLinesCount { // we're on the last one
+	if !gameIsPaused {
+		// remove old
+		loopremove : for i : i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
+			bullet_data.bulletLines[i].timeToLive -= deltatime
+			if bullet_data.bulletLines[i].timeToLive <= BULLET_REMOVE_THRESHOLD { // needs to be removed
+				if i + 1 >= bullet_data.bulletLinesCount { // we're on the last one
+					bullet_data.bulletLinesCount -= 1
+					break loopremove
+				}
 				bullet_data.bulletLinesCount -= 1
-				break loopremove
+				lastindex := bullet_data.bulletLinesCount
+				bullet_data.bulletLines[i] = bullet_data.bulletLines[lastindex]
 			}
-			bullet_data.bulletLinesCount -= 1
-			lastindex := bullet_data.bulletLinesCount
-			bullet_data.bulletLines[i] = bullet_data.bulletLines[lastindex]
 		}
 	}
 
@@ -660,148 +633,148 @@ _enemy_updateDataAndRender :: proc() {
 	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
 
 
-
-	// update grunts
-	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
-		if enemy_data.grunts[i].health <= 0.0 do continue
-
-		pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
-		dir := linalg.normalize(player_data.pos - pos)
-		// cast player
-		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
-		EPS :: 0.0
-		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {EPS,EPS,EPS})
-		seeplayer := p_tn < t_tn && p_hit
-
-		if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
-
-		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
+	if !gameIsPaused {
+		// update grunts
+		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
+			if enemy_data.grunts[i].health <= 0.0 do continue
 	
-		enemy_data.grunts[i].attackTimer -= deltatime
-
-
-		if seeplayer {
-			enemy_data.grunts[i].target = player_data.pos
-			enemy_data.grunts[i].isMoving = true
-		}
-
-
-		flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
-
-		if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
-			if enemy_data.grunts[i].attackTimer < 0.0 { // attack
-				enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
-				rndstrength := (linalg.length2(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
-					p_tn*ENEMY_GRUNT_DIST_RAND) * 1e-3 * 0.5
-				// cast bullet
-				bulletdir := linalg.normalize(dir + randVec3()*rndstrength + player_data.vel*deltatime/PLAYER_SPEED)
-				bullet_tn, bullet_norm, bullet_hit := phy_boxCastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
-				bullet_createBulletLine(pos, pos + bulletdir*bullet_tn, 2.0, vec4{1.0, 0.0, 0.5, 0.9}, 1.0)
-				bulletplayer_tn, bulletplayer_hit := phy_boxCastPlayer(pos, bulletdir, {0,0,0})
-				if bulletplayer_hit && bulletplayer_tn < bullet_tn { // if the ray actually hit player first
-					player_damage(ENEMY_GRUNT_DAMAGE)
-					player_data.vel += bulletdir * 40.0
-					player_data.rotImpulse += {0.1, 0.0, 0.0}
-				}
-			}
-		} else {
-			enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
-		}
+			pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
+			dir := linalg.normalize(player_data.pos - pos)
+			// cast player
+			p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
+			EPS :: 0.0
+			t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {EPS,EPS,EPS})
+			seeplayer := p_tn < t_tn && p_hit
 	
-		enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
-		speed := linalg.length(enemy_data.grunts[i].vel)
-		enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
-		speed = max(speed, ENEMY_GRUNT_MAX_SPEED)
+			if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
+	
+			// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 		
-		mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.grunts[i].vel, ENEMY_GRUNT_SIZE)
-		if mov_hit && mov_norm.y > 0.2 { // if on ground
-			enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
-
-			if enemy_data.grunts[i].isMoving {
-				if !seeplayer {
-					enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
-				} else {
-					if p_tn < ENEMY_GRUNT_MIN_GOOD_DIST {
-						enemy_data.grunts[i].vel -= flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
-					} else if p_tn > ENEMY_GRUNT_MAX_GOOD_DIST {
+			enemy_data.grunts[i].attackTimer -= deltatime
+	
+	
+			if seeplayer {
+				enemy_data.grunts[i].target = player_data.pos
+				enemy_data.grunts[i].isMoving = true
+			}
+	
+	
+			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
+	
+			if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
+				if enemy_data.grunts[i].attackTimer < 0.0 { // attack
+					enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
+					rndstrength := (linalg.length2(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
+						p_tn*ENEMY_GRUNT_DIST_RAND) * 1e-3 * 0.5
+					// cast bullet
+					bulletdir := linalg.normalize(dir + randVec3()*rndstrength + player_data.vel*deltatime/PLAYER_SPEED)
+					bullet_tn, bullet_norm, bullet_hit := phy_boxCastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
+					bullet_createBulletLine(pos, pos + bulletdir*bullet_tn, 2.0, vec4{1.0, 0.0, 0.5, 0.9}, 1.0)
+					bulletplayer_tn, bulletplayer_hit := phy_boxCastPlayer(pos, bulletdir, {0,0,0})
+					if bulletplayer_hit && bulletplayer_tn < bullet_tn { // if the ray actually hit player first
+						player_damage(ENEMY_GRUNT_DAMAGE)
+						player_data.vel += bulletdir * 40.0
+						player_data.rotImpulse += {0.1, 0.0, 0.0}
+					}
+				}
+			} else {
+				enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
+			}
+		
+			enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
+			speed := linalg.length(enemy_data.grunts[i].vel)
+			enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
+			speed = max(speed, ENEMY_GRUNT_MAX_SPEED)
+			
+			mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.grunts[i].vel, ENEMY_GRUNT_SIZE)
+			if mov_hit && mov_norm.y > 0.2 { // if on ground
+				enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
+	
+				if enemy_data.grunts[i].isMoving {
+					if !seeplayer {
 						enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+					} else {
+						if p_tn < ENEMY_GRUNT_MIN_GOOD_DIST {
+							enemy_data.grunts[i].vel -= flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+						} else if p_tn > ENEMY_GRUNT_MAX_GOOD_DIST {
+							enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION * deltatime
+						}
 					}
 				}
 			}
-		}
-
-		if mov_hit {
-			enemy_data.grunts[i].vel = phy_clipVelocity(enemy_data.grunts[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
-			enemy_data.grunts[i].pos += mov_norm*PHY_BOXCAST_EPS*2.0
-			enemy_data.grunts[i].vel += mov_norm*deltatime
-		}
-
-		if speed > 1e-6 {
-			enemy_data.grunts[i].pos += (enemy_data.grunts[i].vel/speed) * mov_tn
-		}
-	}
-
-
-
-	// update knights
-	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
-		if enemy_data.knights[i].health <= 0.0 do continue
-
-		pos := enemy_data.knights[i].pos + vec3{0, ENEMY_KNIGHT_SIZE.y*0.5, 0}
-		dir := linalg.normalize(player_data.pos - pos)
-		p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
-		t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
-		seeplayer := p_tn < t_tn && p_hit
-
-		if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
-
-		// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
-		
-		enemy_data.knights[i].attackTimer -= deltatime
-
-
-		if seeplayer {
-			enemy_data.knights[i].target = player_data.pos
-			enemy_data.knights[i].isMoving = true
-		}
-
-
-		flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
-
-		if seeplayer {
-			if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
-				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
-				player_damage(ENEMY_KNIGHT_DAMAGE)
-				player_data.vel = flatdir * 100.0
-				player_data.vel.y += 30.0
-				enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED * 0.1
+	
+			if mov_hit {
+				enemy_data.grunts[i].vel = phy_clipVelocity(enemy_data.grunts[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
+				enemy_data.grunts[i].pos += mov_norm*PHY_BOXCAST_EPS*2.0
+				enemy_data.grunts[i].vel += mov_norm*deltatime
 			}
-		} else {
-			enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
+	
+			if speed > 1e-6 {
+				enemy_data.grunts[i].pos += (enemy_data.grunts[i].vel/speed) * mov_tn
+			}
 		}
 	
-		enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
-		speed := linalg.length(enemy_data.knights[i].vel)
-		enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
-		speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
+	
+	
+		// update knights
+		for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
+			if enemy_data.knights[i].health <= 0.0 do continue
+	
+			pos := enemy_data.knights[i].pos + vec3{0, ENEMY_KNIGHT_SIZE.y*0.5, 0}
+			dir := linalg.normalize(player_data.pos - pos)
+			p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
+			t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
+			seeplayer := p_tn < t_tn && p_hit
+	
+			if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
+	
+			// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
+			
+			enemy_data.knights[i].attackTimer -= deltatime
+	
+	
+			if seeplayer {
+				enemy_data.knights[i].target = player_data.pos
+				enemy_data.knights[i].isMoving = true
+			}
+	
+	
+			flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
+	
+			if seeplayer {
+				if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
+					enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
+					player_damage(ENEMY_KNIGHT_DAMAGE)
+					player_data.vel = flatdir * 100.0
+					player_data.vel.y += 30.0
+					enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED * 0.1
+				}
+			} else {
+				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
+			}
 		
-		mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
-		if mov_hit && mov_norm.y > 0.2 { // if on ground
-			enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
-			if enemy_data.knights[i].isMoving {
-				enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
+			enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
+			speed := linalg.length(enemy_data.knights[i].vel)
+			enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
+			speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
+			
+			mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
+			if mov_hit && mov_norm.y > 0.2 { // if on ground
+				enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
+				if enemy_data.knights[i].isMoving {
+					enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
+				}
+			}
+	
+			if mov_hit {
+				enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
+			}
+	
+			if speed > 1e-6 {
+				enemy_data.knights[i].pos += (enemy_data.knights[i].vel/speed) * mov_tn
 			}
 		}
-
-		if mov_hit {
-			enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
-		}
-
-		if speed > 1e-6 {
-			enemy_data.knights[i].pos += (enemy_data.knights[i].vel/speed) * mov_tn
-		}
-	}
-
+	} // if !gameIsPaused
 
 
 	// render grunts

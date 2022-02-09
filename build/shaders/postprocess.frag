@@ -29,7 +29,7 @@ vec3 tonemapACES(const in vec3 x) {
 
 
 #define TRY_FIT_COLOR(new) old = mix (new, old, step (length (old-ref), length (new-ref)));
-
+/*
 vec3 gameboyColor(vec3 ref) {
 	ref *= 255.0;
 	vec3 old = vec3(100.0*255.0);
@@ -121,7 +121,7 @@ vec3 EGAColor(vec3 ref) {
 	TRY_FIT_COLOR(vec3(255.0,128.0,128.0));
 	return old / 255.0;
 }
-
+*/
 
 float _ditherMatrix(float x, float y) {
 	return mix(mix(mix(
@@ -156,12 +156,12 @@ void main() {
 
 	//col = pow(col, vec3(1.0 / screengamma)); // gamma correction
 
-	col += dither(gl_FragCoord.xy)*0.2;
+	//col += dither(gl_FragCoord.xy)*0.2;
 	col = posterize(col, 16, 1.0);
 	//col = gameboyColor(col);
 
 	//col = tonemapACES(col);
 
-	if(gl_FragCoord.x < 30 && gl_FragCoord.y < 30) col = vec3(1,0,1);
+	if(gl_FragCoord.x < 30 && gl_FragCoord.y < 30) col = vec3(1,0,1); // debug
 	finalColor = vec4(col, 1.0);
 }

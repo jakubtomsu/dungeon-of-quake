@@ -13,93 +13,122 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:fmt"
+// import "core:os"
 import rl "vendor:raylib"
 
 
+
+//
+// MENU
+//
+
+MENU_MAX_MAP_SELECT_FILES :: 256
 
 gui_data : struct {
 	loadScreenLogo	: rl.Texture,
 	loadScreenTimer	: f32,
 
+	pauseMenuIsOpen	: bool,
+	selected	: i32, // this can be shared, since we always have only one menu on screen
+	
 	normalFont	: rl.Font,
 	titleFont	: rl.Font,
 
-	pauseMenuIsOpen	: bool,
-	selected	: i32, // this can be shared, since we always have only one menu on screen
+	selectSound		: rl.Sound,
+	setValSound		: rl.Sound,
+	loadScreenMusic	: rl.Music,
+	
+	mapSelectFileElemsCount : i32,
+	mapSelectFileElems	: [MENU_MAX_MAP_SELECT_FILES]gui_menuElem_t,
 }
-
-// val is not rendered
-// used for buttons
-gui_menuBool_t :: struct {
-	name	: string,
-	val	: ^bool,
-}
-
-gui_menuFloat_t :: struct {
-	name	: string,
-	val	: ^f32,
-}
-
-gui_menuElem_t :: union {
-	gui_menuBool_t,
-	gui_menuFloat_t,
-}
-
-
-
-gui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
-	cstr := strings.clone_to_cstring(text, context.temp_allocator)
-	rl.DrawTextEx(gui_data.normalFont, cstr, pos, size, 0.0, color)
-}
-
-gui_drawTitleText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
-	cstr := strings.clone_to_cstring(text, context.temp_allocator)
-	rl.DrawTextEx(gui_data.titleFont, cstr, pos, size, 0.0, color)
-}
-
-gui_updateAndDrawElemBuf :: proc(elems : []gui_menuElem_t) {
-	if rl.IsKeyPressed(rl.KeyboardKey.DOWN)	do gui_data.selected += 1
-	if rl.IsKeyPressed(rl.KeyboardKey.UP)	do gui_data.selected -= 1
-	gui_data.selected %%= i32(len(elems))
-
-	selElem := elems[gui_data.selected]
-	switch in selElem {
-		case gui_menuBool_t:
-			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) {
-				selElem.(gui_menuBool_t).val^ = !selElem.(gui_menuBool_t).val^
-			}
-		case gui_menuFloat_t:
-			if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
-				selElem.(gui_menuFloat_t).val^ += 0.1
-			} else if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
-				selElem.(gui_menuFloat_t).val^ -= 0.1
-			}
-	}
-
-	SIZE :: 60
-	for i := 0; i < len(elems); i += 1 {
-		col := i32(i)==gui_data.selected ? rl.WHITE:rl.GRAY
-		switch in elems[i] {
-			case gui_menuBool_t:
-				gui_drawText({100, f32(i)*SIZE}, SIZE, col, elems[i].(gui_menuBool_t).name)
-			case gui_menuFloat_t:
-				gui_drawText({100, f32(i)*SIZE}, SIZE, col, elems[i].(gui_menuFloat_t).name)
-				gui_drawText({400, f32(i)*SIZE}, SIZE, col, fmt.tprint(elems[i].(gui_menuFloat_t).val^))
-		}
-	}
-}
-
 
 
 menu_updateAndDrawPauseMenu :: proc() {
-	//testb := false
-	//testf : f32 = 0.0
-	//elems : []gui_menuElem_t = {
-	//	gui_menuBool_t{"resume", &testb},
-	//	gui_menuFloat_t{"audio volume", &testf},
-	//}
+	elems : []gui_menuElem_t = {
+		gui_menuBool_t{"resume", &gameIsPaused},
+		//gui_menuFloat_t{"audio volume", &testf},
+	}
 
-	//gui_updateAndDrawElemBuf(elems[:])
+	gui_updateAndDrawElemBuf(elems[:])
+}
+
+menu_drawPlayerUI :: proc() {
+	
+}
+
+_debugtext_y : i32 = 2
+menu_drawDebugUI :: proc() {
+	if gameDrawFPS || debugIsEnabled do rl.DrawFPS(0, 0)
+
+	_debugtext_y = 2
+
+	if debugIsEnabled {
+		debugtext :: proc(args : ..any) {
+			tstr := fmt.tprint(args=args)
+			cstr := strings.clone_to_cstring(tstr, context.temp_allocator)
+			rl.DrawText(cstr, 6, _debugtext_y * 12, 10, rl.Fade(rl.WHITE, 0.8))
+			_debugtext_y += 1
+		}
+
+		debugtext("player")
+		debugtext("    pos", player_data.pos)
+		debugtext("    vel", player_data.vel)
+		debugtext("    speed", i32(linalg.length(player_data.vel)))
+		debugtext("    onground", player_data.isOnGround)
+		debugtext("system")
+		debugtext("    IsAudioDeviceReady", rl.IsAudioDeviceReady())
+		debugtext("    loadpath", loadpath)
+		debugtext("    gameIsPaused", gameIsPaused)
+		debugtext("map")
+		debugtext("    bounds", map_data.bounds)
+		debugtext("    mapName", map_data.mapName)
+		debugtext("    nextMapName", map_data.nextMapName)
+		debugtext("    startPlayerDir", map_data.startPlayerDir)
+		debugtext("    gunPickupCount", map_data.gunPickupCount,
+			"gunPickupSpawnCount", map_data.gunPickupCount)
+		debugtext("    healthPickupCount", map_data.healthPickupCount,
+			"healthPickupSpawnCount", map_data.healthPickupSpawnCount)
+		debugtext("    skyColor", map_data.skyColor)
+		debugtext("    fogStrengh", map_data.fogStrength)
+		debugtext("gun")
+		debugtext("    equipped", gun_data.equipped)
+		debugtext("    timer", gun_data.timer)
+		debugtext("    ammo counts", gun_data.ammoCounts)
+		debugtext("bullets")
+		debugtext("    linear effect count", bullet_data.bulletLinesCount)
+		debugtext("enemies")
+		debugtext("    grunt count", enemy_data.gruntCount)
+		debugtext("    knight count", enemy_data.knightCount)
+	}
+}
+
+
+
+menu_updateAndDrawMainMenuUpdatePath :: proc() {
+	shouldResume := false
+	shouldMapSelect := false
+	rl.BeginDrawing()
+		rl.ClearBackground(rl.BLACK)
+		gui_drawText({10, 10}, 20, rl.PINK, "main menu")
+		menu_drawDebugUI()
+		
+		elems : []gui_menuElem_t = {
+			gui_menuButton_t{"start game", &shouldResume},
+			gui_menuButton_t{"map select", &shouldMapSelect},
+			gui_menuTitle_t{"settings"},
+			gui_menuFloat_t{"audio volume", &audioMasterVolume},
+			gui_menuBool_t{"draw FPS", &gameDrawFPS},
+			gui_menuBool_t{"enable debug mode", &debugIsEnabled},
+			gui_menuFloat_t{"test f", &audioMasterVolume},
+			gui_menuTitle_t{"test title"},
+			gui_menuFloat_t{"test f", &audioMasterVolume},
+		}
+
+		gui_updateAndDrawElemBuf(elems[:])
+	rl.EndDrawing()
+
+
+	if shouldResume do app_updatePathKind = .GAME
 }
 
 
@@ -143,26 +172,123 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 
 
 
-menu_updateAndDrawMainMenuUpdatePath :: proc() {
-	shouldResume := false
-	rl.BeginDrawing()
-		rl.ClearBackground(rl.BLACK)
-		gui_drawText({10, 10}, 20, rl.PINK, "main menu")
+menu_mainMenuFetchMapSelectFiles :: proc() {
+	//filebuf, err := os.read_dir
+}
+
+
+
+//
+// GUI
+//
+
+
+// val is not rendered
+gui_menuButton_t :: struct {
+	name	: string,
+	val	: ^bool,
+}
+
+gui_menuBool_t :: struct {
+	name	: string,
+	val		: ^bool,
+}
+
+gui_menuFloat_t :: struct {
+	name	: string,
+	val	: ^f32,
+}
+
+gui_menuTitle_t :: struct {
+	name	: string,
+}
+
+gui_menuElem_t :: union {
+	gui_menuButton_t,
+	gui_menuBool_t,
+	gui_menuFloat_t,
+	gui_menuTitle_t,
+}
+
+
+
+gui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
+	cstr := strings.clone_to_cstring(text, context.temp_allocator)
+	rl.DrawTextEx(gui_data.normalFont, cstr, pos, size, 0.0, color)
+}
+
+gui_drawTitleText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
+	cstr := strings.clone_to_cstring(text, context.temp_allocator)
+	rl.DrawTextEx(gui_data.titleFont, cstr, pos, size, 0.0, color)
+}
+
+gui_updateAndDrawElemBuf :: proc(elems : []gui_menuElem_t) {
+	selectDir := 0
+	if rl.IsKeyPressed(rl.KeyboardKey.DOWN)	do selectDir += 1
+	if rl.IsKeyPressed(rl.KeyboardKey.UP)	do selectDir -= 1
+	
+	if selectDir != 0 {
+		loopfind: for i := 0; i < len(elems); i += 1 {
+			index := (int(gui_data.selected) + i*selectDir + selectDir) %% len(elems)
+			#partial switch in elems[index] {
+				case gui_menuTitle_t: continue loopfind
+			}
+			gui_data.selected = i32(index)
+			break loopfind
+		}
+	}
+
+	SIZE :: 30
+	offs : f32 = 1
+	for i := 0; i < len(elems); i += 1 {
+		isSelected := i32(i)==gui_data.selected
+		col : rl.Color = isSelected ? {220,220,220,200}:{200,200,200,160}
+		vcol : rl.Color = isSelected ? {255,255,255,255}:{200,200,200,160}
+		NOFFS :: 300
+		VOFFS :: 600
+		switch in elems[i] {
+			case gui_menuButton_t:
+				gui_drawText({NOFFS, offs*SIZE}, SIZE, col, elems[i].(gui_menuButton_t).name)
+			case gui_menuBool_t:
+				gui_drawText({NOFFS, offs*SIZE}, SIZE, col, elems[i].(gui_menuBool_t).name)
+				gui_drawText({VOFFS, offs*SIZE}, SIZE, vcol, elems[i].(gui_menuBool_t).val^ ? "yes" : "no")
+			case gui_menuFloat_t:
+				gui_drawText({NOFFS, offs*SIZE}, SIZE, col, elems[i].(gui_menuFloat_t).name)
+				gui_drawText({VOFFS, offs*SIZE}, SIZE, vcol, fmt.tprint(elems[i].(gui_menuFloat_t).val^))
+			case gui_menuTitle_t:
+				offs += 0.6
+				gui_drawText({NOFFS, offs*SIZE}, SIZE * 0.8, {200,200,200,100}, elems[i].(gui_menuTitle_t).name)
+				offs -= 0.1
+		}
 		
-		testf : f32 = 0.0
-		elems : []gui_menuElem_t = {
-			gui_menuBool_t{"resume", &shouldResume},
-			gui_menuFloat_t{"audio volume", &testf},
-			gui_menuFloat_t{"test", &testf},
-			gui_menuFloat_t{"test2", &testf},
+		if isSelected {
+			gui_drawText({NOFFS - 30, offs*SIZE}, SIZE, vcol, ">")
 		}
 
-		gui_updateAndDrawElemBuf(elems[:])
-	rl.EndDrawing()
-	
-	//if i32(rl.GetKeyPressed()) != 0 {
-	//}
+		offs += 1
+	}
 
-	if shouldResume do app_updatePathKind = .GAME
+	selElem := elems[gui_data.selected]
+	switch in selElem {
+		case gui_menuButton_t:
+			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) ||
+				rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
+				selElem.(gui_menuButton_t).val^ = !selElem.(gui_menuButton_t).val^
+			}
+		case gui_menuBool_t:
+			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) ||
+				rl.IsKeyPressed(rl.KeyboardKey.SPACE) ||
+				rl.IsKeyPressed(rl.KeyboardKey.RIGHT) || 
+				rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
+				selElem.(gui_menuBool_t).val^ = !selElem.(gui_menuBool_t).val^
+			}
+		case gui_menuFloat_t:
+			if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
+				selElem.(gui_menuFloat_t).val^ += 0.1
+			} else if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
+				selElem.(gui_menuFloat_t).val^ -= 0.1
+			}
+		case gui_menuTitle_t:
+	}
 }
 

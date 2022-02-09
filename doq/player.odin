@@ -67,8 +67,8 @@ player_data : struct {
 player_damage :: proc(damage : f32) {
 	player_data.health -= damage
 	playSoundMulti(player_data.damageSound)
-	screenTint = {1,0.6,0.5}
-	player_data.slowness += damage * 0.2
+	screenTint = {1,0.3,0.2}
+	player_data.slowness += damage * 0.25
 }
 
 _player_update :: proc() {
