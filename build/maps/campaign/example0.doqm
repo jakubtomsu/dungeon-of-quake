@@ -1,0 +1,20 @@
+{
+	mapName: "example 0"
+	skyColor: 1.0 0.2 0.0
+	fogStrength: 1.2
+	startPlayerDir: 0.0 -1.0
+}
+
+#######-------#######
+#O s o#-------#ewFwe#
+c     c-------c     c
+#    o#-------#Ok   #
+c     c-------c   k c
+#h  h #-------#     #
+##wew##-------# o oO#
+lcpww#--------#wwwww#
+##ppw##########wwwGw#
+#Gpppppp--w---wwwwwww
+#ppwKww########wwGww#
+ccw#w###------##w#w##
+e

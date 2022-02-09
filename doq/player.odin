@@ -19,7 +19,7 @@ import rl "vendor:raylib"
 
 PLAYER_MAX_HEALTH		:: 10
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
-PLAYER_LOOK_SENSITIVITY		:: 0.004
+PLAYER_LOOK_SENSITIVITY		:: 0.002
 PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
 PLAYER_SIZE			:: vec3{1,2,1}
@@ -29,7 +29,7 @@ PLAYER_GRAVITY			:: 210 // 800
 PLAYER_SPEED			:: 105 // 320
 PLAYER_GROUND_ACCELERATION	:: 10 // 10
 PLAYER_GROUND_FRICTION		:: 6 // 6
-PLAYER_AIR_ACCELERATION		:: 1.3 // 0.7
+PLAYER_AIR_ACCELERATION		:: 0.8 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
@@ -139,7 +139,7 @@ _player_update :: proc() {
 
 	jumped := rl.IsKeyDown(PLAYER_KEY_JUMP) && player_data.isOnGround
 	if jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 19.0 - clamp((linalg.length(player_data.vel)-PLAYER_SPEED)*4.0, 0.0, 30.0))
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 40.0 - clamp((linalg.length(player_data.vel)-PLAYER_SPEED*0.95)*17.0, 0.0, 100.0))
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		//player_data.isOnGround = false
@@ -164,7 +164,7 @@ _player_update :: proc() {
 
 	wishpos := player_data.pos + player_data.vel * deltatime
 	
-	phy_tn, phy_norm, phy_hit := phy_boxCastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
+	phy_tn, phy_norm, phy_hit := phy_boxcastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
 	phy_vec := player_data.pos + linalg.normalize(player_data.vel)*phy_tn
 	
 	println("pos", player_data.pos, "vel", player_data.vel)
@@ -225,7 +225,6 @@ _player_update :: proc() {
 				height = 0.0
 				elevatorIsMoving = false
 			}
-			map_data.elevatorHeights[c] = height
 
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
@@ -233,11 +232,17 @@ _player_update :: proc() {
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
-				player_data.vel.y = TILE_ELEVATOR_SPEED * 0.5
+				player_data.vel.y = TILE_ELEVATOR_SPEED * 2.0
+				player_data.pos.y += 0.02
+				height -= 0.02
+				elevatorIsMoving = false
+				player_data.isOnGround = false
 			}
+		
+			map_data.elevatorHeights[c] = height
 		}
 
-		if elevatorIsMoving {
+		if elevatorIsMoving && !gameIsPaused {
 			if !rl.IsSoundPlaying(map_data.elevatorSound) do playSound(map_data.elevatorSound)
 		} else {
 			rl.StopSound(map_data.elevatorSound)
@@ -254,8 +259,8 @@ _player_update :: proc() {
 	// camera
 	{
 		if framespassed > 5 { // mouse input seems to have weird spike first frame
-			player_data.lookRotEuler.y += -rl.GetMouseDelta().x * PLAYER_LOOK_SENSITIVITY
-			player_data.lookRotEuler.x += rl.GetMouseDelta().y * PLAYER_LOOK_SENSITIVITY
+			player_data.lookRotEuler.y += -rl.GetMouseDelta().x * settings.mouseSensitivity * PLAYER_LOOK_SENSITIVITY
+			player_data.lookRotEuler.x += rl.GetMouseDelta().y  * settings.mouseSensitivity * PLAYER_LOOK_SENSITIVITY
 			player_data.lookRotEuler.x = clamp(player_data.lookRotEuler.x, -math.PI*0.5*0.95, math.PI*0.5*0.95)
 		}
 	
@@ -271,15 +276,20 @@ _player_update :: proc() {
 
 	if settings.debugIsEnabled {
 		size := vec3{1,1,1}
-		tn, normal, hit := phy_boxCastTilemap(camera.position, camera.position + cam_forw*1000.0, size*0.5)
+		tn, normal, hit := phy_boxcastTilemap(camera.position, camera.position + cam_forw*1000.0, size*0.5)
 		hitpos := camera.position + cam_forw*tn
 		rl.DrawCube(hitpos, size.x, size.y, size.z, rl.YELLOW)
 		rl.DrawLine3D(hitpos, hitpos + normal*4, rl.ORANGE)
 	}
 
+	if settings.debugIsEnabled {
+		rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GREEN)
+	}
 
 	if settings.debugIsEnabled {
-		rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, {0,255,0,100})
+		depth := phy_raycastDepth(player_data.pos)
+		rl.DrawCube(player_data.pos + vec3{0, -depth, 0}, 1,1,1, rl.GREEN)
+		println("depth", depth)
 	}
 }
 
@@ -292,6 +302,7 @@ player_startMap :: proc() {
 	player_data.lookRotEuler.z = 0.0
 	player_data.lookRotEuler.y = math.PI*2 - (math.atan2(-map_data.startPlayerDir.x, -map_data.startPlayerDir.y) * math.sign(-map_data.startPlayerDir.x))
 	player_initData()
+	screenTint = {}
 }
 
 player_initData :: proc() {
@@ -343,7 +354,8 @@ GUN_MACHINEGUN_SPREAD		:: 0.02
 GUN_MACHINEGUN_DAMAGE		:: 0.2
 GUN_LASERRIFLE_DAMAGE		:: 1.0
 
-gun_startAmmoCounts : [GUN_COUNT]i32 = {24, 86, 12}
+gun_startAmmoCounts : [GUN_COUNT]i32 = {32, 0, 0}
+gun_maxAmmoCounts : [GUN_COUNT]i32 = {64, 128, 18}
 gun_shootTimes : [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
 
 gun_data : struct {
@@ -397,7 +409,7 @@ gun_drawModel :: proc(pos : vec3) {
 	FADETIME :: 0.15
 	fade := (gun_data.timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME
 	if fade > 0.0 {
-		rnd := randVec3()
+		rnd := randVec3() * f32(gameIsPaused ? 0.0 : 1.0)
 		muzzleoffs := gun_getMuzzleOffset() + rnd*0.02
 		rl.DrawModel(gun_data.flareModel, pos + muzzleoffs, 0.4 - fade*fade*0.2, rl.Fade(rl.WHITE, clamp(fade, 0.0, 1.0)*0.9))
 	}
@@ -407,7 +419,7 @@ _gun_update :: proc() {
 	prevgun := gun_data.equipped
 	gunindex := cast(i32)gun_data.equipped
 
-	// scrool wheel gun switching
+	// scroll wheel gun switching
 	if rl.GetMouseWheelMove() > 0.5			do gunindex += 1
 	else if rl.GetMouseWheelMove() < -0.5		do gunindex -= 1
 	else if rl.IsKeyPressed(rl.KeyboardKey.ONE)	do gunindex = 0
@@ -449,7 +461,7 @@ _gun_update :: proc() {
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
-					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 55.0 : 2.0)
+					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 60.0 : 2.0)
 					player_data.rotImpulse.x -= 0.15
 					playSound(gun_data.shotgunSound)
 
@@ -463,7 +475,7 @@ _gun_update :: proc() {
 
 				case gun_kind_t.LASERRIFLE:
 					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
-					player_data.vel /= 1.5
+					player_data.vel /= 1.25
 					player_data.vel -= player_data.lookDir * 50
 					player_data.rotImpulse.x -= 0.2
 					player_data.rotImpulse.y += 0.04

@@ -14,6 +14,7 @@ import "core:time"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
+import "core:strconv"
 import rl "vendor:raylib"
 
 
@@ -46,19 +47,24 @@ randData : rand.Rand
 
 gameIsPaused : bool = false
 settings : struct {
-	drawFPS				: bool,
-	drawCursor			: bool,
+	drawFPS			: bool,
 	debugIsEnabled		: bool,
 	audioMasterVolume	: f32,
+	crosshairOpacity	: f32,
+	mouseSensitivity	: f32,
 }
+
+
 
 screenTint : vec3 = {1,1,1}
 
-app_updatePathKind : enum {
+app_updatePathKind_t :: enum {
 	LOADSCREEN = 0,
 	MAIN_MENU,
 	GAME,
-} = .LOADSCREEN
+}
+
+app_updatePathKind : app_updatePathKind_t
 
 
 
@@ -66,12 +72,18 @@ app_updatePathKind : enum {
 _doq_main :: proc() {
 	_app_init()
 
+	menu_data.startOffs = -10
+
 	for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
 		println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
 		
 		settings.audioMasterVolume = clamp(settings.audioMasterVolume, 0.0, 1.0)
+		settings.crosshairOpacity = clamp(settings.crosshairOpacity, 0.0, 1.0)
+		settings.mouseSensitivity = clamp(settings.mouseSensitivity, 0.1, 5.0)
 		rl.SetMasterVolume(settings.audioMasterVolume)
+	
+		rl.DisableCursor()
 
 		switch app_updatePathKind {
 			case .LOADSCREEN:
@@ -83,7 +95,6 @@ _doq_main :: proc() {
 			{
 				rl.UpdateCamera(&camera)
 				rl.UpdateCamera(&viewmodelCamera)
-				rl.DisableCursor()
 
 				_app_update()
 
@@ -141,7 +152,9 @@ _doq_main :: proc() {
 		}
 
 		deltatime = rl.GetFrameTime()
-		timepassed += deltatime // not really accurate but whatever
+		if !gameIsPaused {
+			timepassed += deltatime // not really accurate but whatever
+		}
 	}
 
 	rl.CloseWindow()
@@ -164,24 +177,26 @@ _app_init :: proc() {
 		rl.ConfigFlag.VSYNC_HINT,
 	})
 	rl.InitAudioDevice()
-	
-	settings.audioMasterVolume = 1.0
-
 	rl.SetTargetFPS(75)
+	rl.SetExitKey(rl.KeyboardKey.NULL)
+
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
 	println("loadpath", loadpath)
+	
+	settings_setDefault()
+	settings_loadFromFile()
 
-	rl.SetExitKey(rl.KeyboardKey.NULL)
 
 	renderTextureMain	= rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
 
-	gui_data.loadScreenLogo	= loadTexture("dungeon_of_quake_logo.png")
-	rl.SetTextureFilter(gui_data.loadScreenLogo, rl.TextureFilter.TRILINEAR)
+	menu_data.loadScreenLogo	= loadTexture("dungeon_of_quake_logo.png")
+	rl.SetTextureFilter(menu_data.loadScreenLogo, rl.TextureFilter.TRILINEAR)
 
 	postprocessShader	= loadFragShader("postprocess.frag")
 	map_data.tileShader	= loadShader("tile.vert", "tile.frag")
 	map_data.portalShader	= loadShader("portal.vert", "portal.frag")
 	map_data.tileShaderCamPosUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "camPos")
+	map_data.normalShader	= loadFragShader("normal.frag")
 	bullet_data.bulletLineShader = loadShader("bulletLine.vert", "bulletLine.frag")
 
 
@@ -230,13 +245,16 @@ _app_init :: proc() {
 	gun_data.gunModels[cast(i32)gun_kind_t.LASERRIFLE]	= loadModel("laserrifle.glb")
 	gun_data.flareModel		= loadModel("flare.glb")
 
-	map_data.tileModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
-	map_data.tileModel.materials[0].shader = map_data.tileShader
+	map_data.tileModel		= rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
+	map_data.elevatorModel		= loadModel("elevator.glb")
+	map_data.healthPickupModel	= loadModel("healthpickup.glb")
+	map_data.boxModel		= loadModel("box.glb")
 	rl.SetMaterialTexture(&map_data.tileModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
-	map_data.elevatorModel = loadModel("elevator.glb")
-	map_data.elevatorModel.materials[0].shader = map_data.tileShader
 	rl.SetMaterialTexture(&map_data.elevatorModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.elevatorTexture)
-	map_data.healthPickupModel = loadModel("healthpickup.glb")
+	map_data.tileModel.materials[0].shader		= map_data.tileShader
+	map_data.elevatorModel.materials[0].shader	= map_data.tileShader
+	map_data.boxModel.materials[0].shader		= map_data.normalShader
+	//rl.SetMaterialTexture(&map_data.boxModel.materials[1], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
 
 	enemy_data.gruntHitSound	= loadSound("death2.wav")
 	enemy_data.gruntDeathSound	= enemy_data.gruntHitSound
@@ -244,6 +262,7 @@ _app_init :: proc() {
 	enemy_data.knightDeathSound	= enemy_data.gruntHitSound
 	enemy_data.gruntModel		= loadModel("grunt.glb")
 	enemy_data.knightModel		= enemy_data.gruntModel
+	rl.SetSoundVolume(enemy_data.gruntHitSound, 0.6)
 
 
 	camera.position = {0, 3, 0}
@@ -261,11 +280,13 @@ _app_init :: proc() {
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
 	//normalFont = loadFont("metalord.ttf")
-	gui_data.titleFont	= loadFont("eurcntrc.ttf")
-	gui_data.normalFont	= loadFont("germania_one.ttf")
-	gui_data.selectSound	= loadSound("button.wav")
-	gui_data.setValSound	= loadSound("elevator_end0.wav")
-	gui_data.loadScreenMusic	= loadMusic("ambient0.wav")
+	menu_data.titleFont		= loadFont("eurcntrc.ttf")
+	menu_data.normalFont		= loadFont("germania_one.ttf")
+	menu_data.selectSound		= loadSound("button3.wav")
+	menu_data.setValSound		= loadSound("button2.wav")
+	menu_data.loadScreenMusic	= loadMusic("ambient0.wav")
+	rl.SetSoundVolume(menu_data.selectSound, 0.7)
+	rl.SetSoundVolume(menu_data.setValSound, 0.9)
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 	
@@ -273,10 +294,9 @@ _app_init :: proc() {
 	map_data.bounds = {MAP_MAX_WIDTH, MAP_MAX_WIDTH}
 	if os.is_file(appendToAssetPath("maps", "_quickload.doqm")) {
 		map_loadFromFile("_quickload.doqm")
-		// app_updatePathKind = .GAME
-	} else {
-
+		app_setUpdatePathKind(.GAME)
 	}
+	
 	//map_debugPrint()
 
 	player_startMap()
@@ -302,7 +322,7 @@ _app_update :: proc() {
 		}
 	}
 
-	screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 2.0, 0.0, 1.0))
+	screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 3.0, 0.0, 1.0))
 }
 
 _app_render2d :: proc() {
@@ -327,7 +347,12 @@ _app_render3d :: proc() {
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
 	rl.SetShaderValue(map_data.tileShader, map_data.tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
-
+	rl.SetShaderValue(
+		map_data.normalShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.normalShader, "camPos"),
+		&camera.position,
+		rl.ShaderUniformDataType.VEC3,
+	)
 	fogColor := vec4{
 		map_data.skyColor.r*1.1,
 		map_data.skyColor.g*1.1,
@@ -353,11 +378,19 @@ _app_render3d :: proc() {
 
 
 
+app_setUpdatePathKind :: proc(kind : app_updatePathKind_t) {
+	app_updatePathKind = kind
+	menu_resetState()
+	gameIsPaused = false
+}
+
+
 
 
 
 world_reset :: proc() {
 	player_initData()
+	player_startMap()
 
 	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 		enemy_data.grunts[i].pos = enemy_data.grunts[i].spawnPos
@@ -384,6 +417,53 @@ world_reset :: proc() {
 
 
 
+
+settings_setDefault :: proc() {
+	settings.drawFPS		= false
+	settings.debugIsEnabled		= false
+	settings.audioMasterVolume	= 0.5
+	settings.crosshairOpacity	= 0.5
+	settings.mouseSensitivity	= 1.0
+}
+
+settings_getFilePath :: proc() -> string {
+	return fmt.tprint(args={loadpath, filepath.SEPARATOR_STRING, ".doq_settings"}, sep="")
+}
+
+settings_saveToFile :: proc() {
+	text := fmt.tprint(
+		args={
+			"drawFPS",		SERI_ATTRIB_SEPARATOR, " ", settings.drawFPS,		"\n",
+			"debugIsEnabled",	SERI_ATTRIB_SEPARATOR, " ", settings.debugIsEnabled,	"\n",
+			"audioMasterVolume",	SERI_ATTRIB_SEPARATOR, " ", settings.audioMasterVolume,	"\n",
+			"crosshairOpacity",	SERI_ATTRIB_SEPARATOR, " ", settings.crosshairOpacity,	"\n",
+			"mouseSensitivity",	SERI_ATTRIB_SEPARATOR, " ", settings.mouseSensitivity,	"\n",
+		},
+		sep="",
+	)
+
+	os.write_entire_file(settings_getFilePath(), transmute([]u8)text)
+}
+
+settings_loadFromFile :: proc() {
+	buf, ok := os.read_entire_file_from_filename(settings_getFilePath())
+	if !ok {
+		println("! error: unable to read settings file")
+		return
+	}
+	defer delete(buf)
+
+	text := transmute(string)buf
+	index : i32 = 0
+	for index < i32(len(text)) {
+		seri_skipWhitespace(buf, &index)
+		if seri_attribMatch(buf, &index, "drawFPS")		do settings.drawFPS		= seri_readBool(buf, &index)
+		if seri_attribMatch(buf, &index, "debugIsEnabled")	do settings.debugIsEnabled	= seri_readBool(buf, &index)
+		if seri_attribMatch(buf, &index, "audioMasterVolume")	do settings.audioMasterVolume	= seri_readF32 (buf, &index)
+		if seri_attribMatch(buf, &index, "crosshairOpacity")	do settings.crosshairOpacity	= seri_readF32 (buf, &index)
+		if seri_attribMatch(buf, &index, "mouseSensitivity")	do settings.mouseSensitivity	= seri_readF32 (buf, &index)
+	}
+}
 
 
 
@@ -431,7 +511,7 @@ bullet_createBulletLine :: proc(start : vec3, end : vec3, rad : f32, col : vec4,
 }
 
 bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) -> f32 {
-	tn, hit, enemykind, enemyindex := phy_boxCastWorld(start, start + dir*1e6, vec3{rad,rad,rad})
+	tn, hit, enemykind, enemyindex := phy_boxcastWorld(start, start + dir*1e6, vec3{rad,rad,rad})
 	hitpos := start + dir*tn
 	bullet_createBulletLine(start + dir*rad*2.0, hitpos, rad, col, effectDuration)
 	if hit {
@@ -538,8 +618,8 @@ ENEMY_GRUNT_MAX_GOOD_DIST	:: 60
 ENEMY_GRUNT_ATTACK_TIME		:: 1.5
 ENEMY_GRUNT_DAMAGE		:: 1.0
 ENEMY_GRUNT_HEALTH		:: 1.0
-ENEMY_GRUNT_SPEED_RAND		:: 0.005 // NOTE: multiplier for length(player velocity) ^ 2
-ENEMY_GRUNT_DIST_RAND		:: 0.5
+ENEMY_GRUNT_SPEED_RAND		:: 0.008 // NOTE: multiplier for length(player velocity) ^ 2
+ENEMY_GRUNT_DIST_RAND		:: 0.7
 ENEMY_GRUNT_MAX_DIST		:: 120.0
 
 ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
@@ -631,9 +711,9 @@ _enemy_updateDataAndRender :: proc() {
 			pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
 			dir := linalg.normalize(player_data.pos - pos)
 			// cast player
-			p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
+			p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0,0,0})
 			EPS :: 0.0
-			t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {EPS,EPS,EPS})
+			t_tn, t_norm, t_hit := phy_boxcastTilemap(pos, pos + dir*1e6, {EPS,EPS,EPS})
 			seeplayer := p_tn < t_tn && p_hit
 	
 			if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
@@ -650,7 +730,12 @@ _enemy_updateDataAndRender :: proc() {
 	
 	
 			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
-	
+
+			if p_tn < ENEMY_GRUNT_SIZE.y {
+				player_data.vel = flatdir * 50.0
+				player_data.slowness = 0.1
+			}
+
 			if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
 				if enemy_data.grunts[i].attackTimer < 0.0 { // attack
 					enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
@@ -658,9 +743,9 @@ _enemy_updateDataAndRender :: proc() {
 						p_tn*ENEMY_GRUNT_DIST_RAND) * 1e-3 * 0.5
 					// cast bullet
 					bulletdir := linalg.normalize(dir + randVec3()*rndstrength + player_data.vel*deltatime/PLAYER_SPEED)
-					bullet_tn, bullet_norm, bullet_hit := phy_boxCastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
+					bullet_tn, bullet_norm, bullet_hit := phy_boxcastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
 					bullet_createBulletLine(pos, pos + bulletdir*bullet_tn, 2.0, vec4{1.0, 0.0, 0.5, 0.9}, 1.0)
-					bulletplayer_tn, bulletplayer_hit := phy_boxCastPlayer(pos, bulletdir, {0,0,0})
+					bulletplayer_tn, bulletplayer_hit := phy_boxcastPlayer(pos, bulletdir, {0,0,0})
 					if bulletplayer_hit && bulletplayer_tn < bullet_tn { // if the ray actually hit player first
 						player_damage(ENEMY_GRUNT_DAMAGE)
 						player_data.vel += bulletdir * 40.0
@@ -676,7 +761,7 @@ _enemy_updateDataAndRender :: proc() {
 			enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
 			speed = max(speed, ENEMY_GRUNT_MAX_SPEED)
 			
-			mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.grunts[i].vel, ENEMY_GRUNT_SIZE)
+			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.grunts[i].vel, ENEMY_GRUNT_SIZE)
 			if mov_hit && mov_norm.y > 0.2 { // if on ground
 				enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
 	
@@ -712,8 +797,8 @@ _enemy_updateDataAndRender :: proc() {
 	
 			pos := enemy_data.knights[i].pos + vec3{0, ENEMY_KNIGHT_SIZE.y*0.5, 0}
 			dir := linalg.normalize(player_data.pos - pos)
-			p_tn, p_hit := phy_boxCastPlayer(pos, dir, {0,0,0})
-			t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, pos + dir*1e6, {1,1,1})
+			p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0,0,0})
+			t_tn, t_norm, t_hit := phy_boxcastTilemap(pos, pos + dir*1e6, {1,1,1})
 			seeplayer := p_tn < t_tn && p_hit
 	
 			if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
@@ -748,7 +833,7 @@ _enemy_updateDataAndRender :: proc() {
 			enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
 			speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
 			
-			mov_tn, mov_norm, mov_hit := phy_boxCastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
+			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
 			if mov_hit && mov_norm.y > 0.2 { // if on ground
 				enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
 				if enemy_data.knights[i].isMoving {
@@ -884,4 +969,84 @@ randVec3 :: proc() -> vec3 {
 		rand.float32_range(-1.0, 1.0, &randData),
 		rand.float32_range(-1.0, 1.0, &randData),
 	}
+}
+
+
+
+
+
+//
+// SERIALIZATION/DESERIALIZATION
+//
+
+SERI_ATTRIB_SEPARATOR :: ":"
+
+seri_attribMatch :: proc(buf : []u8, index : ^i32, name : string) -> bool {
+	//println("buf", buf, "index", index^, "name", name)
+	endindex : i32 = cast(i32)strings.index_byte(string(buf[index^:]), ':') + 1
+	if endindex <= 0 do return false
+	src : string = string(buf[index^:index^ + endindex])
+	checkstr := fmt.tprint(args={name, SERI_ATTRIB_SEPARATOR}, sep="")
+	val := strings.compare(src, checkstr)
+	res := val == 0
+	if res {
+		index^ += cast(i32)len(name) + 1
+		seri_skipWhitespace(buf, index)
+	}
+	return res
+}
+
+seri_skipWhitespace :: proc(buf : []u8, index : ^i32) -> bool {
+	skipped := false
+	for strings.is_space(cast(rune)buf[index^]) || buf[index^]=='\n' || buf[index^]=='\r' {
+		index^ += 1
+		skipped = true
+	}
+	return skipped
+}
+
+seri_readF32 :: proc(buf : []u8, index : ^i32) -> f32 {
+	seri_skipWhitespace(buf, index)
+	str := string(buf[index^:])
+	val, ok := strconv.parse_f32(str)
+	_ = ok
+	seri_skipToNextWhitespace(buf, index)
+	return val
+}
+
+seri_readI32 :: proc(buf : []u8, index : ^i32) -> i32 {
+	seri_skipWhitespace(buf, index)
+	str := string(buf[index^:])
+	val, ok := strconv.parse_int(str)
+	_ = ok
+	seri_skipToNextWhitespace(buf, index)
+	return cast(i32)val
+}
+
+seri_readBool :: proc(buf : []u8, index : ^i32) -> bool {
+	seri_skipWhitespace(buf, index)
+	str := string(buf[index^:])
+	res := strings.has_prefix(str, "true")
+	seri_skipToNextWhitespace(buf, index)
+	return res
+}
+
+// reads string in between "
+seri_readString :: proc(buf : []u8, index : ^i32) -> string {
+	seri_skipWhitespace(buf, index)
+	if buf[index^] != '\"' do return ""
+	startindex := index^ + 1
+	endindex := startindex + cast(i32)strings.index_byte(string(buf[startindex:]), '\"')
+	index^ = endindex + 1
+	res := string(buf[startindex:endindex])
+	println("startindex", startindex, "endindex", endindex, "res", res)
+	return res
+}
+
+seri_skipToNextWhitespace :: proc(buf : []u8, index : ^i32) {
+	for !strings.is_space(cast(rune)buf[index^]) && buf[index^]!='\n' && buf[index^]!='\r' {
+		index^ += 1
+		println("skip to next line")
+	}
+	index^ += 1
 }

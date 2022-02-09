@@ -63,7 +63,7 @@ phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 //
 // uses custom DDA for traversing the uniform grid, but also looks at the skipped tile so we don't miss them.
 // The boxes queried from a given tile then get expaned by the original boxcast volume, and then raycasted.
-phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, vec3, bool) {
+phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, vec3, bool) {
 	using math
 	posxz := vec2{pos.x, pos.z}
 	dir := wishpos - pos
@@ -75,7 +75,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	dir = linelen == 0.0 ? {0,-1,0} : dir / linelen
 	ddadir := linalg.normalize(vec2{dir.x, dir.z})
 
-	phy_boxCastContext_t :: struct {
+	phy_boxcastContext_t :: struct {
 		pos		: vec3,
 		dirsign		: vec3,
 		dirinv		: vec3, // 1.0/dir
@@ -88,7 +88,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 		linelen		: f32,
 	}
 
-	ctx : phy_boxCastContext_t = {}
+	ctx : phy_boxcastContext_t = {}
 
 	ctx.pos		= pos
 	ctx.dirsign	= vec3{sign(dir.x), sign(dir.y), sign(dir.z)}
@@ -141,7 +141,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 		for j : i32 = 0; j < len(checktiles); j += 1 {
 			//println("checktile")
 			if !map_isTilePosValid(checktiles[j]) do continue
-			phy_boxCastTilemapTile(checktiles[j], &ctx)
+			phy_boxcastTilemapTile(checktiles[j], &ctx)
 			//rl.DrawCube(map_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
 			//rl.DrawCube(map_tileToWorld(checktiles[j]), 2, 1000, 2, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
 			//rl.DrawCubeWires(map_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
@@ -150,7 +150,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 
 	// @dir: precomputed `normalize(wishpos - pos)`
 	// @returns : clipped pos
-	phy_boxCastTilemapTile :: proc(coord : ivec2, ctx : ^phy_boxCastContext_t) {
+	phy_boxcastTilemapTile :: proc(coord : ivec2, ctx : ^phy_boxcastContext_t) {
 		boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
 		boxcount := map_getTileBoxes(coord, boxbuf[0:])
 
@@ -190,7 +190,7 @@ phy_boxCastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 
 // just a brute-force raycast of all enemies, good enough though
 // O(n), n = number of enemies
-phy_boxCastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
+phy_boxcastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
 	using math
 
 	dir := wishpos - pos
@@ -233,7 +233,34 @@ phy_boxCastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_t
 
 
 
-phy_boxCastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool) {
+// fires ray directly downwards
+// @returns: minimum depth
+phy_raycastDepth :: proc(pos : vec3) -> f32 {
+	tilecoord := map_worldToTile(pos)
+	boxbuf : [PHY_MAX_TILE_BOXES]box_t
+	boxcount := map_getTileBoxes(tilecoord, boxbuf[0:])
+
+	tmin : f32 = 1e6
+	for i : i32 = 0; i < boxcount; i += 1 {
+		relpos := pos - boxbuf[i].pos
+		// check XZ bounds
+		if relpos.x > boxbuf[i].size.x || relpos.z > boxbuf[i].size.z || relpos.x < -boxbuf[i].size.x || relpos.z < -boxbuf[i].size.z {
+			continue
+		}
+	
+		tn := -(+boxbuf[i].size.y-relpos.y)
+		tf := -(-boxbuf[i].size.y-relpos.y)
+		if tf>0.0 && tn<tmin {
+			tmin = tn
+		}
+	}
+
+	return tmin
+}
+
+
+
+phy_boxcastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool) {
 	dirinv := vec3{
 		dir.x==0.0?1e6:1.0/dir.x,
 		dir.y==0.0?1e6:1.0/dir.y,
@@ -247,9 +274,9 @@ phy_boxCastPlayer :: proc(pos : vec3, dir : vec3, boxsize : vec3) -> (f32, bool)
 
 
 
-phy_boxCastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
-	e_tn, e_hit, e_enemykind, e_enemyindex := phy_boxCastEnemies(pos, wishpos, boxsize)
-	t_tn, t_norm, t_hit := phy_boxCastTilemap(pos, wishpos, boxsize)
+phy_boxcastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn : f32, res_hit : bool, res_enemykind : enemy_kind_t, res_enemyindex : i32) {
+	e_tn, e_hit, e_enemykind, e_enemyindex := phy_boxcastEnemies(pos, wishpos, boxsize)
+	t_tn, t_norm, t_hit := phy_boxcastTilemap(pos, wishpos, boxsize)
 	_ = t_norm
 
 	if e_tn < t_tn {

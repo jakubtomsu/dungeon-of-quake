@@ -29,11 +29,11 @@ tile character | tile name | uppercase | note |
 `f`|finish             |✓| place where the end portal is spawned
 `p`|small platform     |✕| like `empty`, but also has a single tile between the 1st and 2nd floor
 `P`|large platform     |✕| `platform`, but 3 tiles tall
-`e`|elevator           |✕| elevator that takes you from the 1st to 2nd floor
+`e`|elevator           |✕| elevator that takes you from the 1st to 2nd floor. Also adds jump boost
 `o`|obstacle           |✕| like `empty`, but floor is 1 tile taller
 `O`|obstacle           |✕|
 `h`|health pickup      |✓| adds 1/4 of health to player
-`d`|shotgun pickup     |✓| `d` stands for `default`, since it's the default weapon
+`d`|shotgun pickup     |✓| refills **shotgun** ammo. `d` stands for `default`, since it's the default weapon
 `m`|machinegun pickup  |✓| refills **machinegun** ammo
 `l`|laserrifle pickup  |✓| refills **laserrifle** ammo
 `g`|grunt spawn        |✓| place where a grunt enemy spawns

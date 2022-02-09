@@ -12,9 +12,7 @@ import "core:os"
 import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
-import "core:strings"
 import "core:fmt"
-import "core:strconv"
 import rl "vendor:raylib"
 
 
@@ -97,6 +95,7 @@ map_data : struct {
 	healthPickupSpawnCount	: i32,
 	healthPickups		: [MAP_HEALTH_PICKUP_MAX_COUNT]vec3,
 
+	normalShader			: rl.Shader,
 	tileShader			: rl.Shader,
 	tileShaderCamPosUniformIndex	: rl.ShaderLocationIndex,
 	portalShader			: rl.Shader,
@@ -112,6 +111,7 @@ map_data : struct {
 	tileModel		: rl.Model,
 	elevatorModel		: rl.Model,
 	healthPickupModel	: rl.Model,
+	boxModel		: rl.Model,
 }
 
 
@@ -223,7 +223,7 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
 			return 2
 		case map_tileKind_t.OBSTACLE_UPPER:
-			boxbuf[0] = phy_calcBox(posxz, -1, 5)
+			boxbuf[0] = phy_calcBox(posxz, -2, 3)
 			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
 			return 2
 		
@@ -251,15 +251,19 @@ map_clearAll :: proc() {
 	}
 }
 
-map_loadFromFile :: proc(name: string) {
+map_loadFromFile :: proc(name: string) -> bool {
 	fullpath := appendToAssetPath("maps", name)
+	return map_loadFromFileAbs(fullpath)
+}
+
+map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 	println("! loading map: ", fullpath)
 	data, success := os.read_entire_file_from_filename(fullpath)
 
 	if !success {
 		//app_shouldExitNextFrame = true
 		println("! error: map file not found!")
-		return
+		return false
 	}
 
 	defer free(&data[0])
@@ -279,7 +283,7 @@ map_loadFromFile :: proc(name: string) {
 		switch ch {
 			case '\x00':
 				println("null")
-				return
+				return false
 			case '\n':
 				println("\\n")
 				y += 1
@@ -293,24 +297,24 @@ map_loadFromFile :: proc(name: string) {
 			case '{':
 				println("attributes")
 				for data[index] != '}' {
-					if !skipWhitespace(data, &index) do index += 1
+					if !seri_skipWhitespace(data, &index) do index += 1
 					println("index", index, "ch", cast(rune)data[index])
-					if attribMatch(data, &index, "mapName")		do map_data.mapName = readString(data, &index)
-					if attribMatch(data, &index, "nextMapName")	do map_data.nextMapName = readString(data, &index)
+					if seri_attribMatch(data, &index, "mapName")		do map_data.mapName = seri_readString(data, &index)
+					if seri_attribMatch(data, &index, "nextMapName")	do map_data.nextMapName = seri_readString(data, &index)
 					
-					if attribMatch(data, &index, "startPlayerDir") {
-						map_data.startPlayerDir.x = readF32(data, &index)
-						map_data.startPlayerDir.y = readF32(data, &index)
+					if seri_attribMatch(data, &index, "startPlayerDir") {
+						map_data.startPlayerDir.x = seri_readF32(data, &index)
+						map_data.startPlayerDir.y = seri_readF32(data, &index)
 						map_data.startPlayerDir = linalg.normalize(map_data.startPlayerDir)
 					}
 					
-					if attribMatch(data, &index, "skyColor") {
-						map_data.skyColor.r = readF32(data, &index)
-						map_data.skyColor.g = readF32(data, &index)
-						map_data.skyColor.b = readF32(data, &index)
+					if seri_attribMatch(data, &index, "skyColor") {
+						map_data.skyColor.r = seri_readF32(data, &index)
+						map_data.skyColor.g = seri_readF32(data, &index)
+						map_data.skyColor.b = seri_readF32(data, &index)
 					}
 					
-					if attribMatch(data, &index, "fogStrength")	do map_data.fogStrength = readF32(data, &index)
+					if seri_attribMatch(data, &index, "fogStrength")	do map_data.fogStrength = seri_readF32(data, &index)
 				}
 		}
 
@@ -395,8 +399,6 @@ map_loadFromFile :: proc(name: string) {
 		}
 
 		x += 1
-
-		//println(cast(map_tileKind_t)ch)
 	}
 
 	map_data.bounds[1] += 1
@@ -406,6 +408,8 @@ map_loadFromFile :: proc(name: string) {
 	println("mapName", map_data.mapName)
 	println("nextMapName", map_data.nextMapName)
 
+	player_startMap()
+
 	rl.SetShaderValue(
 		map_data.portalShader,
 		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.portalShader, "portalPos"),
@@ -414,67 +418,8 @@ map_loadFromFile :: proc(name: string) {
 	)
 
 
-	attribMatch :: proc(buf : []u8, index : ^i32, name : string) -> bool {
-		//println("buf", buf, "index", index^, "name", name)
-		endindex : i32 = cast(i32)strings.index_byte(string(buf[index^:]), ':') + 1
-		if endindex <= 0 do return false
-		src : string = string(buf[index^:index^ + endindex])
-		checkstr := fmt.tprint(args={name, ":"}, sep="")
-		val := strings.compare(src, checkstr)
-		res := val == 0
-		if res {
-			index^ += cast(i32)len(name) + 1
-			skipWhitespace(buf, index)
-		}
-		return res
-	}
+	return true
 
-	skipWhitespace :: proc(buf : []u8, index : ^i32) -> bool {
-		skipped := false
-		for strings.is_space(cast(rune)buf[index^]) || buf[index^]=='\n' || buf[index^]=='\r' {
-			index^ += 1
-			skipped = true
-		}
-		return skipped
-	}
-
-	readF32 :: proc(buf : []u8, index : ^i32) -> f32 {
-		skipWhitespace(buf, index)
-		str := string(buf[index^:])
-		val, ok := strconv.parse_f32(str)
-		_ = ok
-		skipToNextWhitespace(buf, index)
-		return val
-	}
-
-	readI32 :: proc(buf : []u8, index : ^i32) -> i32 {
-		skipWhitespace(buf, index)
-		str := string(buf[index^:])
-		val, ok := strconv.parse_int(str)
-		_ = ok
-		skipToNextWhitespace(buf, index)
-		return cast(i32)val
-	}
-
-	// reads string in between "
-	readString :: proc(buf : []u8, index : ^i32) -> string {
-		skipWhitespace(buf, index)
-		if buf[index^] != '\"' do return ""
-		startindex := index^ + 1
-		endindex := startindex + cast(i32)strings.index_byte(string(buf[startindex:]), '\"')
-		index^ = endindex + 1
-		res := string(buf[startindex:endindex])
-		println("startindex", startindex, "endindex", endindex, "res", res)
-		return res
-	}
-
-	skipToNextWhitespace :: proc(buf : []u8, index : ^i32) {
-		for !strings.is_space(cast(rune)buf[index^]) && buf[index^]!='\n' && buf[index^]!='\r' {
-			index^ += 1
-			println("skip to next line")
-		}
-		index^ += 1
-	}
 }
 
 map_debugPrint :: proc() {
@@ -507,6 +452,16 @@ map_drawTilemap :: proc() {
 					for i : i32 = 1; i < boxcount; i += 1 {
 						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
+				case map_tileKind_t.OBSTACLE_LOWER:
+					rl.DrawModelEx(map_data.boxModel,
+						boxbuf[0].pos+{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
+					)
+					rl.DrawModelEx(map_data.tileModel,
+						boxbuf[0].pos-{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
+					)
+					for i : i32 = 1; i < boxcount; i += 1 {
+						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+					}
 			}
 		}
 	}
@@ -529,10 +484,12 @@ map_drawTilemap :: proc() {
 			gunindex := cast(i32)map_data.gunPickups[i].kind
 			rl.DrawModelEx(gun_data.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
 			rl.DrawSphere(pos, -2.0, {255,230,180,40})
+		
 			RAD :: 6.5
-			if linalg.length2(player_data.pos - pos) < RAD*RAD {
+			if linalg.length2(player_data.pos - pos) < RAD*RAD &&
+				gun_data.ammoCounts[gunindex] < gun_maxAmmoCounts[gunindex] {
 				gun_data.equipped = map_data.gunPickups[i].kind
-				gun_data.ammoCounts[gunindex] = gun_startAmmoCounts[gunindex]
+				gun_data.ammoCounts[gunindex] = gun_maxAmmoCounts[gunindex]
 				playSoundMulti(gun_data.ammoPickupSound)
 
 				temp := map_data.gunPickups[i]
