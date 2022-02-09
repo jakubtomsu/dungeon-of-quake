@@ -31,8 +31,6 @@ mat3 :: linalg.Matrix3f32
 WINDOW_X :: 1440
 WINDOW_Y :: 810
 
-debugIsEnabled : bool = false
-
 camera: rl.Camera = {}
 viewmodelCamera: rl.Camera = {}
 
@@ -47,7 +45,12 @@ postprocessShader : rl.Shader
 randData : rand.Rand
 
 gameIsPaused : bool = false
-gameDrawFPS	: bool = false
+settings : struct {
+	drawFPS				: bool,
+	drawCursor			: bool,
+	debugIsEnabled		: bool,
+	audioMasterVolume	: f32,
+}
 
 screenTint : vec3 = {1,1,1}
 
@@ -57,7 +60,6 @@ app_updatePathKind : enum {
 	GAME,
 } = .LOADSCREEN
 
-audioMasterVolume : f32 = 1.0
 
 
 // this just gets called from main
@@ -68,8 +70,8 @@ _doq_main :: proc() {
 		println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
 		
-		audioMasterVolume = clamp(audioMasterVolume, 0.0, 1.0)
-		rl.SetMasterVolume(audioMasterVolume)
+		settings.audioMasterVolume = clamp(settings.audioMasterVolume, 0.0, 1.0)
+		rl.SetMasterVolume(settings.audioMasterVolume)
 
 		switch app_updatePathKind {
 			case .LOADSCREEN:
@@ -95,8 +97,10 @@ _doq_main :: proc() {
 					rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
 					rl.BeginMode3D(camera)
 						_app_render3d()
-						_gun_update()
-						_player_update()
+						if !gameIsPaused {
+							_gun_update()
+							_player_update()
+						}
 						_enemy_updateDataAndRender()
 						_bullet_updateDataAndRender()
 					rl.EndMode3D()
@@ -126,6 +130,11 @@ _doq_main :: proc() {
 							rl.WHITE,
 						)
 					rl.EndShaderMode()
+					
+					if gameIsPaused{
+						menu_updateAndDrawPauseMenu()
+					}
+					
 					_app_render2d()
 				rl.EndDrawing()
 			}
@@ -156,6 +165,7 @@ _app_init :: proc() {
 	})
 	rl.InitAudioDevice()
 	
+	settings.audioMasterVolume = 1.0
 
 	rl.SetTargetFPS(75)
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
@@ -278,7 +288,7 @@ _app_update :: proc() {
 	//rl.UpdateMusicStream(map_data.ambientMusic)
 	//rl.SetMusicVolume(player_data.swooshMusic, clamp(linalg.length(player_data.vel * 0.05), 0.0, 1.0))
 
-	if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do debugIsEnabled = !debugIsEnabled
+	if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do settings.debugIsEnabled = !settings.debugIsEnabled
 	
 	if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) do gameIsPaused = !gameIsPaused
 
@@ -296,35 +306,15 @@ _app_update :: proc() {
 }
 
 _app_render2d :: proc() {
-	// crosshair
-	//rl.DrawRectangle(WINDOW_X/2 - 3, WINDOW_Y/2 - 3, 6, 6, rl.Fade(rl.BLACK, 0.5))
-	//rl.DrawRectangle(WINDOW_X/2 - 2, WINDOW_Y/2 - 2, 4, 4, rl.Fade(rl.WHITE, 0.5))
-
-	gunindex := cast(i32)gun_data.equipped
-
-	// draw ammo
-	gui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_data.ammoCounts[gunindex]))
-	gui_drawText({30, WINDOW_Y - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("health: ", player_data.health))
-
-	for i : i32 = 0; i < GUN_COUNT; i += 1 {
-		LINE :: 40
-		TEXTHEIGHT :: LINE*0.5
-		pos := vec2{WINDOW_X - 120, WINDOW_Y*0.5 + GUN_COUNT*LINE*0.5 - cast(f32)i*LINE}
-		if i == cast(i32)gun_data.equipped {
-			W :: 8
-			rl.DrawRectangle(cast(i32)pos.x-W, cast(i32)pos.y-W, 120, TEXTHEIGHT+W*2, {150,150,150,100})
-		}
-
-		gui_drawText(pos, TEXTHEIGHT, gun_data.ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
-	}
-
+	
+	menu_drawPlayerUI()
 
 	menu_drawDebugUI()
 }
 
 _app_render3d :: proc() {
 	when false {
-		if debugIsEnabled {
+		if settings.debugIsEnabled {
 			LEN :: 100
 			WID :: 1
 			rl.DrawCube(vec3{LEN, 0, 0}, LEN,WID,WID, rl.RED)
@@ -792,7 +782,7 @@ _enemy_updateDataAndRender :: proc() {
 
 
 
-	if debugIsEnabled {
+	if settings.debugIsEnabled {
 		// render grunt physics AABBS
 		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 			if enemy_data.grunts[i].health <= 0.0 do continue

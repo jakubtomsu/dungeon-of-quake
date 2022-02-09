@@ -269,7 +269,7 @@ _player_update :: proc() {
 		camera.up = linalg.normalize(linalg.quaternion_mul_vector3(linalg.quaternion_angle_axis(player_data.lookRotEuler.z*1.3, cam_forw), vec3{0,1.0,0}))
 	}
 
-	if debugIsEnabled {
+	if settings.debugIsEnabled {
 		size := vec3{1,1,1}
 		tn, normal, hit := phy_boxCastTilemap(camera.position, camera.position + cam_forw*1000.0, size*0.5)
 		hitpos := camera.position + cam_forw*tn
@@ -278,7 +278,7 @@ _player_update :: proc() {
 	}
 
 
-	if debugIsEnabled {
+	if settings.debugIsEnabled {
 		rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, {0,255,0,100})
 	}
 }

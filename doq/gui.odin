@@ -45,7 +45,7 @@ gui_data : struct {
 
 menu_updateAndDrawPauseMenu :: proc() {
 	elems : []gui_menuElem_t = {
-		gui_menuBool_t{"resume", &gameIsPaused},
+		gui_menuButton_t{"resume", &gameIsPaused},
 		//gui_menuFloat_t{"audio volume", &testf},
 	}
 
@@ -53,16 +53,51 @@ menu_updateAndDrawPauseMenu :: proc() {
 }
 
 menu_drawPlayerUI :: proc() {
-	
+	// crosshair
+	if settings.drawCursor {
+		W :: 8
+		H :: 4
+		
+		// horizontal
+		rl.DrawRectangle(WINDOW_X/2-10-W/2, WINDOW_Y/2-1, W, 2, rl.Fade(rl.WHITE, 0.5))
+		rl.DrawRectangle(WINDOW_X/2+10-W/2, WINDOW_Y/2-1, W, 2, rl.Fade(rl.WHITE, 0.5))
+		
+		// vertical
+		rl.DrawRectangle(WINDOW_X/2-1, WINDOW_Y/2-7-H/2, 2, H, rl.Fade(rl.WHITE, 0.5))
+		rl.DrawRectangle(WINDOW_X/2-1, WINDOW_Y/2+7-H/2, 2, H, rl.Fade(rl.WHITE, 0.5))
+		
+		// center dot
+		//rl.DrawRectangle(WINDOW_X/2-1, WINDOW_Y/2-1, 2, 2, rl.WHITE)
+	}
+
+	gunindex := cast(i32)gun_data.equipped
+
+	// draw ammo
+	gui_drawText({WINDOW_X - 150, WINDOW_Y - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("ammo: ", gun_data.ammoCounts[gunindex]))
+	gui_drawText({30, WINDOW_Y - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("health: ", player_data.health))
+
+	// draw guns
+	for i : i32 = 0; i < GUN_COUNT; i += 1 {
+		LINE :: 40
+		TEXTHEIGHT :: LINE*0.5
+		pos := vec2{WINDOW_X - 120, WINDOW_Y*0.5 + GUN_COUNT*LINE*0.5 - cast(f32)i*LINE}
+		if i == cast(i32)gun_data.equipped {
+			W :: 8
+			rl.DrawRectangle(cast(i32)pos.x-W, cast(i32)pos.y-W, 120, TEXTHEIGHT+W*2, {150,150,150,100})
+		}
+
+		gui_drawText(pos, TEXTHEIGHT, gun_data.ammoCounts[i] == 0 ? {255,255,255,100} : rl.WHITE, fmt.tprint(cast(gun_kind_t)i))
+	}
+
 }
 
 _debugtext_y : i32 = 2
 menu_drawDebugUI :: proc() {
-	if gameDrawFPS || debugIsEnabled do rl.DrawFPS(0, 0)
+	if settings.drawFPS || settings.debugIsEnabled do rl.DrawFPS(0, 0)
 
 	_debugtext_y = 2
 
-	if debugIsEnabled {
+	if settings.debugIsEnabled {
 		debugtext :: proc(args : ..any) {
 			tstr := fmt.tprint(args=args)
 			cstr := strings.clone_to_cstring(tstr, context.temp_allocator)
@@ -116,12 +151,12 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 			gui_menuButton_t{"start game", &shouldResume},
 			gui_menuButton_t{"map select", &shouldMapSelect},
 			gui_menuTitle_t{"settings"},
-			gui_menuFloat_t{"audio volume", &audioMasterVolume},
-			gui_menuBool_t{"draw FPS", &gameDrawFPS},
-			gui_menuBool_t{"enable debug mode", &debugIsEnabled},
-			gui_menuFloat_t{"test f", &audioMasterVolume},
+			gui_menuFloat_t{"audio volume", &settings.audioMasterVolume},
+			gui_menuBool_t{"draw FPS", &settings.drawFPS},
+			gui_menuBool_t{"enable debug mode", &settings.debugIsEnabled},
+			gui_menuFloat_t{"test f", &settings.audioMasterVolume},
 			gui_menuTitle_t{"test title"},
-			gui_menuFloat_t{"test f", &audioMasterVolume},
+			gui_menuFloat_t{"test f", &settings.audioMasterVolume},
 		}
 
 		gui_updateAndDrawElemBuf(elems[:])
@@ -175,6 +210,9 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 menu_mainMenuFetchMapSelectFiles :: proc() {
 	//filebuf, err := os.read_dir
 }
+
+
+
 
 
 
@@ -239,13 +277,13 @@ gui_updateAndDrawElemBuf :: proc(elems : []gui_menuElem_t) {
 	}
 
 	SIZE :: 30
-	offs : f32 = 1
+	offs : f32 = 6
 	for i := 0; i < len(elems); i += 1 {
 		isSelected := i32(i)==gui_data.selected
-		col : rl.Color = isSelected ? {220,220,220,200}:{200,200,200,160}
+		col : rl.Color  = isSelected ? {220,220,220,200}:{200,200,200,160}
 		vcol : rl.Color = isSelected ? {255,255,255,255}:{200,200,200,160}
-		NOFFS :: 300
-		VOFFS :: 600
+		NOFFS :: WINDOW_X/2 - 200
+		VOFFS :: WINDOW_X/2 + 100
 		switch in elems[i] {
 			case gui_menuButton_t:
 				gui_drawText({NOFFS, offs*SIZE}, SIZE, col, elems[i].(gui_menuButton_t).name)
