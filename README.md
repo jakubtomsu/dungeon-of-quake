@@ -34,6 +34,6 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 
 
 # TODO
-- simple profiler, maybe with (chrome://tracing)[chrome://tracing]
+- simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles
 - `?` map editor, probaly as a separate program
