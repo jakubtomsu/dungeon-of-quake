@@ -15,7 +15,7 @@ editors, you can change text spacing to circumvent the issue.
 >**NOTE:** some blocks have different lowercase/uppercase versions.  
 for instance: you can use uppercase `S` instead of lowercase `s` if you want the start position to be on the 2nd floor.  
 In that case, only the lowercase version is shown in the table.
->> **NOTE:** some tiles have lowercase/uppercase versions which **do not** change the floor, but something else.
+>> **NOTE:** some tiles have lowercase/uppercase versions which **do not** change which floor the tile is on, but change something else.
 
 
 tile character | tile name | uppercase | note |
