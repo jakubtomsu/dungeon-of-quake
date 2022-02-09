@@ -28,7 +28,7 @@ tiles - this means anyone can edit maps with just a simple text editor.
 
 > The raw tile table is in [map.odin](/doq/map.odin) as `map_tileKind_t`
 
-Some tiles get translated to different tiles when the map gets loaded into memory. For instance, lowercase
+Some tiles are translated to different tiles when the map gets loaded into memory. For instance, lowercase
 health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.
 
 
@@ -36,4 +36,4 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 # TODO
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles
-- `?` map editor, probaly as a separate program
+- (?) map editor, probaly as a separate program
