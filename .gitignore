@@ -6,3 +6,4 @@ build/*.exp
 build/*.lib
 build/*.exe
 build/log.txt
+build/maps/_quickload.doqm
