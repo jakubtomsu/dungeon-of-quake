@@ -32,6 +32,9 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 
 
 # TODO
+- settings:
+  - field of view
+  - background music volume
 - 3D audio
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles
