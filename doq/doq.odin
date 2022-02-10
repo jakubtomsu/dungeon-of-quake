@@ -29,8 +29,8 @@ mat3 :: linalg.Matrix3f32
 
 
 
-WINDOW_X :: 1440
-WINDOW_Y :: 810
+windowSizeX : i32 = 0
+windowSizeY : i32 = 0
 
 camera: rl.Camera = {}
 viewmodelCamera: rl.Camera = {}
@@ -44,6 +44,8 @@ loadpath : string
 renderTextureMain : rl.RenderTexture2D
 postprocessShader : rl.Shader
 randData : rand.Rand
+
+playingMusic : ^rl.Music
 
 gameIsPaused : bool = false
 settings : struct {
@@ -84,6 +86,12 @@ _doq_main :: proc() {
 		rl.SetMasterVolume(settings.audioMasterVolume)
 	
 		rl.DisableCursor()
+
+		if playingMusic != nil {
+			rl.UpdateMusicStream(playingMusic^)
+		}
+
+
 
 		switch app_updatePathKind {
 			case .LOADSCREEN:
@@ -151,6 +159,8 @@ _doq_main :: proc() {
 			}
 		}
 
+
+
 		deltatime = rl.GetFrameTime()
 		if !gameIsPaused {
 			timepassed += deltatime // not really accurate but whatever
@@ -169,35 +179,43 @@ _doq_main :: proc() {
 //
 
 _app_init :: proc() {
-	rl.InitWindow(WINDOW_X, WINDOW_Y, "Dungeon of Quake")
-	rl.SetWindowState({
-		rl.ConfigFlag.WINDOW_TOPMOST,
-		rl.ConfigFlag.WINDOW_HIGHDPI,
-		rl.ConfigFlag.WINDOW_HIGHDPI,
-		rl.ConfigFlag.VSYNC_HINT,
-	})
-	rl.InitAudioDevice()
-	rl.SetTargetFPS(75)
-	rl.SetExitKey(rl.KeyboardKey.NULL)
-
 	loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
 	println("loadpath", loadpath)
 	
 	settings_setDefault()
 	settings_loadFromFile()
 
+	rl.SetWindowState({
+		.WINDOW_TOPMOST,
+		.WINDOW_RESIZABLE,
+		.FULLSCREEN_MODE,
+		//.WINDOW_HIGHDPI,
+		.VSYNC_HINT,
+	})
+	rl.InitWindow(0, 0, "Dungeon of Quake")
+	rl.ToggleFullscreen()
+	windowSizeX = rl.GetScreenWidth()
+	windowSizeY = rl.GetScreenHeight()
 
-	renderTextureMain	= rl.LoadRenderTexture(WINDOW_X, WINDOW_Y)
+	rl.SetExitKey(rl.KeyboardKey.NULL)
+	rl.SetTargetFPS(75)
+
+	rl.InitAudioDevice()
+
+	rl.SetMasterVolume(settings.audioMasterVolume)
+
+
+	renderTextureMain = rl.LoadRenderTexture(windowSizeX, windowSizeY)
 
 	menu_data.loadScreenLogo	= loadTexture("dungeon_of_quake_logo.png")
 	rl.SetTextureFilter(menu_data.loadScreenLogo, rl.TextureFilter.TRILINEAR)
 
-	postprocessShader	= loadFragShader("postprocess.frag")
-	map_data.tileShader	= loadShader("tile.vert", "tile.frag")
-	map_data.portalShader	= loadShader("portal.vert", "portal.frag")
+	map_data.defaultShader		= loadShader("default.vert", "default.frag")
+	postprocessShader		= loadFragShader("postprocess.frag")
+	map_data.tileShader		= loadShader("tile.vert", "tile.frag")
+	map_data.portalShader		= loadShader("portal.vert", "portal.frag")
+	bullet_data.bulletLineShader	= loadShader("bulletLine.vert", "bulletLine.frag")
 	map_data.tileShaderCamPosUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "camPos")
-	map_data.normalShader	= loadFragShader("normal.frag")
-	bullet_data.bulletLineShader = loadShader("bulletLine.vert", "bulletLine.frag")
 
 
 
@@ -222,7 +240,7 @@ _app_init :: proc() {
 	gun_data.headshotSound		= loadSound("headshot.wav")
 	gun_data.emptyMagSound		= loadSound("emptymag.wav")
 	gun_data.ammoPickupSound	= loadSound("ammo_pickup.wav")
-	rl.SetSoundVolume(gun_data.headshotSound, 0.85)
+	rl.SetSoundVolume(gun_data.headshotSound, 1.0)
 	rl.SetSoundPitch (gun_data.headshotSound, 0.85)
 	rl.SetSoundVolume(gun_data.shotgunSound, 0.55)
 	rl.SetSoundPitch (gun_data.shotgunSound, 1.1)
@@ -253,7 +271,7 @@ _app_init :: proc() {
 	rl.SetMaterialTexture(&map_data.elevatorModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.elevatorTexture)
 	map_data.tileModel.materials[0].shader		= map_data.tileShader
 	map_data.elevatorModel.materials[0].shader	= map_data.tileShader
-	map_data.boxModel.materials[0].shader		= map_data.normalShader
+	map_data.boxModel.materials[1].shader		= map_data.defaultShader
 	//rl.SetMaterialTexture(&map_data.boxModel.materials[1], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
 
 	enemy_data.gruntHitSound	= loadSound("death2.wav")
@@ -262,7 +280,7 @@ _app_init :: proc() {
 	enemy_data.knightDeathSound	= enemy_data.gruntHitSound
 	enemy_data.gruntModel		= loadModel("grunt.glb")
 	enemy_data.knightModel		= enemy_data.gruntModel
-	rl.SetSoundVolume(enemy_data.gruntHitSound, 0.6)
+	rl.SetSoundVolume(enemy_data.gruntHitSound, 0.3)
 
 
 	camera.position = {0, 3, 0}
@@ -282,11 +300,12 @@ _app_init :: proc() {
 	//normalFont = loadFont("metalord.ttf")
 	menu_data.titleFont		= loadFont("eurcntrc.ttf")
 	menu_data.normalFont		= loadFont("germania_one.ttf")
-	menu_data.selectSound		= loadSound("button3.wav")
-	menu_data.setValSound		= loadSound("button2.wav")
+	menu_data.selectSound		= loadSound("button4.wav")
+	menu_data.setValSound		= loadSound("button3.wav")
 	menu_data.loadScreenMusic	= loadMusic("ambient0.wav")
-	rl.SetSoundVolume(menu_data.selectSound, 0.7)
-	rl.SetSoundVolume(menu_data.setValSound, 0.9)
+	rl.SetSoundVolume(menu_data.selectSound, 0.6)
+	rl.SetSoundVolume(menu_data.setValSound, 0.8)
+	rl.PlayMusicStream(menu_data.loadScreenMusic)
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 	
@@ -347,18 +366,26 @@ _app_render3d :: proc() {
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
 	rl.SetShaderValue(map_data.tileShader, map_data.tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
+	fogColor := vec4{
+		map_data.skyColor.r,
+		map_data.skyColor.g,
+		map_data.skyColor.b,
+		map_data.fogStrength,
+	}
+	
 	rl.SetShaderValue(
-		map_data.normalShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.normalShader, "camPos"),
+		map_data.defaultShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.defaultShader, "camPos"),
 		&camera.position,
 		rl.ShaderUniformDataType.VEC3,
 	)
-	fogColor := vec4{
-		map_data.skyColor.r*1.1,
-		map_data.skyColor.g*1.1,
-		map_data.skyColor.b*1.1,
-		map_data.fogStrength,
-	}
+	rl.SetShaderValue(
+		map_data.defaultShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.defaultShader, "fogColor"),
+		&fogColor,
+		rl.ShaderUniformDataType.VEC4,
+	)
+
 	rl.SetShaderValue(
 		map_data.tileShader,
 		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "fogColor"),
@@ -422,7 +449,7 @@ settings_setDefault :: proc() {
 	settings.drawFPS		= false
 	settings.debugIsEnabled		= false
 	settings.audioMasterVolume	= 0.5
-	settings.crosshairOpacity	= 0.5
+	settings.crosshairOpacity	= 0.2
 	settings.mouseSensitivity	= 1.0
 }
 
@@ -602,14 +629,14 @@ _bullet_updateDataAndRender :: proc() {
 // ENEMIES
 //
 
-ENEMY_GRUNT_MAX_COUNT	:: 32
-ENEMY_KNIGHT_MAX_COUNT	:: 32
+ENEMY_GRUNT_MAX_COUNT	:: 64
+ENEMY_KNIGHT_MAX_COUNT	:: 64
 
 ENEMY_HEALTH_MULTIPLIER		:: 1.5
 ENEMY_HEADSHOT_HALF_OFFSET	:: 0.0
 ENEMY_GRAVITY			:: 5.0
 
-ENEMY_GRUNT_SIZE		:: vec3{2, 4, 2}
+ENEMY_GRUNT_SIZE		:: vec3{2.5, 4.5, 2.5}
 ENEMY_GRUNT_ACCELERATION	:: 13
 ENEMY_GRUNT_MAX_SPEED		:: 14
 ENEMY_GRUNT_FRICTION		:: 5
@@ -620,9 +647,9 @@ ENEMY_GRUNT_DAMAGE		:: 1.0
 ENEMY_GRUNT_HEALTH		:: 1.0
 ENEMY_GRUNT_SPEED_RAND		:: 0.008 // NOTE: multiplier for length(player velocity) ^ 2
 ENEMY_GRUNT_DIST_RAND		:: 0.7
-ENEMY_GRUNT_MAX_DIST		:: 120.0
+ENEMY_GRUNT_MAX_DIST		:: 250.0
 
-ENEMY_KNIGHT_SIZE		:: vec3{1.5, 3, 1.5}
+ENEMY_KNIGHT_SIZE		:: vec3{2.0, 3.5, 2.0}
 ENEMY_KNIGHT_ACCELERATION	:: 12
 ENEMY_KNIGHT_MAX_SPEED		:: 12
 ENEMY_KNIGHT_FRICTION		:: 4
@@ -678,7 +705,7 @@ enemy_spawnGrunt :: proc(pos : vec3) {
 	enemy_data.grunts[index] = {}
 	enemy_data.grunts[index].spawnPos = pos
 	enemy_data.grunts[index].pos = pos
-	enemy_data.grunts[index].target = pos
+	enemy_data.grunts[index].target = {}
 	enemy_data.grunts[index].health = ENEMY_GRUNT_HEALTH * ENEMY_HEALTH_MULTIPLIER
 }
 
@@ -690,7 +717,7 @@ enemy_spawnKnight :: proc(pos : vec3) {
 	enemy_data.knights[index] = {}
 	enemy_data.knights[index].spawnPos = pos
 	enemy_data.knights[index].pos = pos
-	enemy_data.knights[index].target = pos
+	enemy_data.knights[index].target = {}
 	enemy_data.knights[index].health = ENEMY_KNIGHT_HEALTH * ENEMY_HEALTH_MULTIPLIER
 }
 
@@ -727,8 +754,8 @@ _enemy_updateDataAndRender :: proc() {
 				enemy_data.grunts[i].target = player_data.pos
 				enemy_data.grunts[i].isMoving = true
 			}
-	
-	
+
+
 			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
 
 			if p_tn < ENEMY_GRUNT_SIZE.y {
@@ -739,8 +766,8 @@ _enemy_updateDataAndRender :: proc() {
 			if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
 				if enemy_data.grunts[i].attackTimer < 0.0 { // attack
 					enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
-					rndstrength := (linalg.length2(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
-						p_tn*ENEMY_GRUNT_DIST_RAND) * 1e-3 * 0.5
+					rndstrength := clamp((linalg.length2(player_data.vel)*ENEMY_GRUNT_SPEED_RAND +
+						p_tn*ENEMY_GRUNT_DIST_RAND) * 1e-3 * 0.5, 0.0005, 0.04)
 					// cast bullet
 					bulletdir := linalg.normalize(dir + randVec3()*rndstrength + player_data.vel*deltatime/PLAYER_SPEED)
 					bullet_tn, bullet_norm, bullet_hit := phy_boxcastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
@@ -776,8 +803,16 @@ _enemy_updateDataAndRender :: proc() {
 						}
 					}
 				}
+
+				if speed > 0.01 {
+					forwdepth := phy_raycastDepth(pos + flatdir*ENEMY_GRUNT_SIZE.x*1.7)
+					if forwdepth > ENEMY_GRUNT_SIZE.y*2 {
+						enemy_data.grunts[i].vel = -enemy_data.grunts[i].vel
+					}
+				}
 			}
-	
+
+
 			if mov_hit {
 				enemy_data.grunts[i].vel = phy_clipVelocity(enemy_data.grunts[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
 				enemy_data.grunts[i].pos += mov_norm*PHY_BOXCAST_EPS*2.0
@@ -839,11 +874,19 @@ _enemy_updateDataAndRender :: proc() {
 				if enemy_data.knights[i].isMoving {
 					enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
 				}
+
+				if speed > 0.01 {
+					forwdepth := phy_raycastDepth(pos + flatdir*ENEMY_KNIGHT_SIZE.x*1.7)
+					if forwdepth > ENEMY_KNIGHT_SIZE.y*2 {
+						enemy_data.knights[i].vel = -enemy_data.knights[i].vel*0.5
+					}
+				}
 			}
 	
 			if mov_hit {
 				enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
 			}
+
 	
 			if speed > 1e-6 {
 				enemy_data.knights[i].pos += (enemy_data.knights[i].vel/speed) * mov_tn

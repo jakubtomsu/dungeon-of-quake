@@ -237,6 +237,7 @@ phy_boxcastEnemies :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_t
 // @returns: minimum depth
 phy_raycastDepth :: proc(pos : vec3) -> f32 {
 	tilecoord := map_worldToTile(pos)
+	if !map_isTilePosValid(tilecoord) do return 1e6
 	boxbuf : [PHY_MAX_TILE_BOXES]box_t
 	boxcount := map_getTileBoxes(tilecoord, boxbuf[0:])
 

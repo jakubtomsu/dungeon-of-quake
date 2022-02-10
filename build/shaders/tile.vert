@@ -1,23 +1,18 @@
 #version 330
 
-// Input vertex attributes
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 in vec3 vertexNormal;
 in vec4 vertexColor;
 
-// Input uniform values
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
 
-// Output vertex attributes (to fragment shader)
 out vec3 fragPosition;
 out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
-
-// NOTE: Add here your custom variables
 
 vec2 triplanarMax(vec3 p, vec3 n) {
 	float x = abs(n.x);
@@ -34,6 +29,5 @@ void main() {
 	fragTexCoord = triplanarMax((fragPosition - modPos) / 30.0 + vec3(0.5), fragNormal);
 	fragColor = vertexColor;
 
-	// Calculate final vertex position
 	gl_Position = mvp*vec4(vertexPosition, 1.0);
 }

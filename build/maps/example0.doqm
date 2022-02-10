@@ -3,6 +3,7 @@
 	skyColor: 1.0 0.2 0.0
 	fogStrength: 1.2
 	startPlayerDir: 0.0 -1.0
+	nextMapName: "parkour0.doqm"
 }
 
 #######-------#######

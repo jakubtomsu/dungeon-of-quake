@@ -33,6 +33,15 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 
 
 # TODO
+- 3D audio
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles
 - (?) map editor, probaly as a separate program
+
+
+
+# screenshots
+<img src="/misc/screenshot0.png" width="600">  
+<img src="/misc/screenshot1.png" width="600">  
+<img src="/misc/screenshot2.png" width="600">  
+<img src="/misc/screenshot3.png" width="600">  

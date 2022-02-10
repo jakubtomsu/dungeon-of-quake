@@ -1,25 +1,20 @@
 #version 330
 
-// Input vertex attributes
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 in vec3 vertexNormal;
 in vec4 vertexColor;
 
-// Input uniform values
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
 uniform vec3 portalPos;
 uniform float timePassed;
 
-// Output vertex attributes (to fragment shader)
 out vec3 fragPosition;
 out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
-
-// NOTE: Add here your custom variables
 
 vec2 triplanarMax(vec3 p, vec3 n) {
 	float x = abs(n.x);

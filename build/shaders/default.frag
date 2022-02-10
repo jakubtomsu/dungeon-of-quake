@@ -16,7 +16,6 @@ out vec4 finalColor;
 
 // NOTE: has to be synced with `tile.frag` for it to look consistent
 void main() {
-	/*
 	vec2 uv = fragTexCoord;
 	vec4 texelColor = texture(texture0, uv)*colDiffuse*fragColor;
 	float dist = length(fragPosition - camPos);
@@ -26,9 +25,5 @@ void main() {
 	float fog = pow(dist * 0.001 * fogColor.a, 0.6);
 	col = mix(col, fogColor.rgb, clamp(fog, 0.0, 1.0));
 
-	col = fragNormal;
-
 	finalColor = vec4(col, 1.0);
-	*/
-	finalColor = vec4(1,1,0, 1.0);
 }

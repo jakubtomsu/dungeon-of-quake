@@ -1,19 +1,14 @@
 #version 330
 
-// Input vertex attributes (from vertex shader)
 in vec2 fragTexCoord;
 in vec4 fragColor;
 
-// Input uniform values
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 uniform vec3 tintColor;
 
 
-// Output fragment color
 out vec4 finalColor;
-
-// NOTE: Add here your custom variables
 
 const float screengamma = 2.2;
 
@@ -133,7 +128,6 @@ vec3 dither(vec2 fragcoord) {
 	return vec3(_ditherMatrix(mod(fragcoord.x, 8.0), mod(fragcoord.y, 8.0))) / 255.0;
 }
 
-// gamma around 0.6 is ok
 vec3 posterize(vec3 col, int numcolors, float gamma) {
 	col = pow(col, vec3(gamma, gamma, gamma));
 	col = col*numcolors;
@@ -149,7 +143,6 @@ float toGrayscale(vec3 col) {
 
 
 void main() {
-	// Texel color fetching from texture sampler
 	vec2 uv = fragTexCoord.xy;
 	vec4 origColor = texture(texture0, uv) * vec4(tintColor, 1.0);
 	vec3 col = origColor.rgb;
@@ -160,8 +153,6 @@ void main() {
 	col = posterize(col, 8, 1.1);
 	//col = gameboyColor(col);
 
-	//col = tonemapACES(col);
-
-	if(gl_FragCoord.x < 30 && gl_FragCoord.y < 30) col = vec3(1,0,1); // debug
+	// if(gl_FragCoord.x < 30 && gl_FragCoord.y < 30) col = vec3(1,0,1); // debug
 	finalColor = vec4(col, 1.0);
 }

@@ -23,6 +23,7 @@ TILE_MIN_HEIGHT	:: TILE_WIDTH
 TILEMAP_Y_TILES	:: 7
 TILE_HEIGHT	:: TILE_WIDTH * TILEMAP_Y_TILES
 TILEMAP_MID	:: 4
+TILE_OUT_OF_BOUNDS_SIZE :: 15000.0
 
 TILE_ELEVATOR_MOVE_FACTOR	:: 0.55
 TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
@@ -81,6 +82,7 @@ map_data : struct {
 	bounds		: ivec2,
 	startPos	: vec3,
 	finishPos	: vec3,
+	isMapFinished	: bool,
 
 	elevatorHeights		: map[[2]u8]f32,
 
@@ -95,7 +97,7 @@ map_data : struct {
 	healthPickupSpawnCount	: i32,
 	healthPickups		: [MAP_HEALTH_PICKUP_MAX_COUNT]vec3,
 
-	normalShader			: rl.Shader,
+	defaultShader			: rl.Shader,
 	tileShader			: rl.Shader,
 	tileShaderCamPosUniformIndex	: rl.ShaderLocationIndex,
 	portalShader			: rl.Shader,
@@ -157,6 +159,22 @@ map_addHealthPickup :: proc(pos : vec3) {
 
 
 
+map_floorTilePosSize :: proc(posxz : vec2) -> box_t {
+	return {
+		vec3{posxz[0],(-TILE_HEIGHT-TILE_OUT_OF_BOUNDS_SIZE)/2.0, posxz[1]},
+		vec3{TILE_WIDTH, TILE_OUT_OF_BOUNDS_SIZE+TILE_WIDTH*2, TILE_WIDTH}/2.0,
+	}
+}
+
+map_ceilingTilePosSize :: proc(posxz : vec2) -> box_t {
+	//return vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]},
+	//	vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
+	return {
+		vec3{posxz[0],(+TILE_HEIGHT+TILE_OUT_OF_BOUNDS_SIZE)/2.0, posxz[1]},
+		vec3{TILE_WIDTH, TILE_OUT_OF_BOUNDS_SIZE+TILE_WIDTH*2, TILE_WIDTH}/2.0,
+	}
+}
+
 
 // fills input buffer `boxbuf` with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
@@ -177,33 +195,32 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 			return 0
 
 		case map_tileKind_t.FULL:
-			boxbuf[0] = box_t{vec3{posxz[0], 0.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[0] = box_t{vec3{posxz[0], TILE_WIDTH*0.5, posxz[1]}, vec3{TILE_WIDTH/2, TILE_OUT_OF_BOUNDS_SIZE/2, TILE_WIDTH/2}}
 			return 1
 
 		case map_tileKind_t.EMPTY:
-			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
+			boxbuf[0] = map_floorTilePosSize(posxz)
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
 
 		case map_tileKind_t.WALL_MID:
 			boxbuf[0] = phy_calcBox(posxz, -2, 5)
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
 
 		case map_tileKind_t.PLATFORM_SMALL:
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[0] = map_floorTilePosSize(posxz)
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			boxbuf[2] = phy_calcBox(posxz, 0, 1)
 			return 3
 		case map_tileKind_t.PLATFORM_LARGE:
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[0] = map_floorTilePosSize(posxz)
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			boxbuf[2] = phy_calcBox(posxz, 0, 3)
 			return 3
 
 		case map_tileKind_t.CEILING:
-			boxbuf[0] = {vec3{posxz[0],(-TILE_HEIGHT+TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH/2, TILE_MIN_HEIGHT/2, TILE_WIDTH/2}}
+			boxbuf[0] = map_floorTilePosSize(posxz)
 			boxbuf[1] = phy_calcBox(posxz, 2, 5)
 			return 2
 
@@ -215,16 +232,17 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 				vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]},
 				vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2,
 			}
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, boxsize}
-			return 2
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[2] = map_floorTilePosSize(posxz)
+			return 3
 
 		case map_tileKind_t.OBSTACLE_LOWER:
 			boxbuf[0] = phy_calcBox(posxz, -3, 3)
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
 		case map_tileKind_t.OBSTACLE_UPPER:
 			boxbuf[0] = phy_calcBox(posxz, -2, 3)
-			boxbuf[1] = {vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]}, vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0}
+			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
 		
 	}
@@ -241,6 +259,10 @@ map_clearAll :: proc() {
 	map_data.nextMapName = ""
 	map_data.skyColor = {0.6, 0.5, 0.8} * 0.6
 	map_data.fogStrength = 2.0
+	map_data.gunPickupSpawnCount = 0
+	map_data.gunPickupCount = 0
+	map_data.healthPickupSpawnCount = 0
+	map_data.healthPickupCount = 0
 
 	delete(map_data.elevatorHeights)
 
@@ -462,6 +484,19 @@ map_drawTilemap :: proc() {
 					for i : i32 = 1; i < boxcount; i += 1 {
 						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
+				case map_tileKind_t.OBSTACLE_UPPER:
+					rl.DrawModelEx(map_data.boxModel,
+						boxbuf[0].pos+{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
+					)
+					rl.DrawModelEx(map_data.boxModel,
+						boxbuf[0].pos, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
+					)
+					rl.DrawModelEx(map_data.tileModel,
+						boxbuf[0].pos-{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
+					)
+					for i : i32 = 1; i < boxcount; i += 1 {
+						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+					}
 			}
 		}
 	}
@@ -526,4 +561,9 @@ map_drawTilemap :: proc() {
 			}
 		}
 	}
+
+	//circpos := vec3{player_data.pos.x, -TILE_HEIGHT*0.5 + TILE_WIDTH*0.5, player_data.pos.z}
+	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*2,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
+	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*1,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
+	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*0,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
 }

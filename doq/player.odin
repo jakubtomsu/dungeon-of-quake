@@ -19,22 +19,23 @@ import rl "vendor:raylib"
 
 PLAYER_MAX_HEALTH		:: 10
 PLAYER_HEAD_CENTER_OFFSET	:: 0.8
-PLAYER_LOOK_SENSITIVITY		:: 0.002
+PLAYER_LOOK_SENSITIVITY		:: 0.001
 PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
 PLAYER_SIZE			:: vec3{1,2,1}
 PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 
-PLAYER_GRAVITY			:: 210 // 800
+PLAYER_GRAVITY			:: 220 // 800
 PLAYER_SPEED			:: 105 // 320
 PLAYER_GROUND_ACCELERATION	:: 10 // 10
-PLAYER_GROUND_FRICTION		:: 6 // 6
-PLAYER_AIR_ACCELERATION		:: 0.8 // 0.7
+PLAYER_GROUND_FRICTION		:: 4 // 6
+PLAYER_AIR_ACCELERATION		:: 0.6 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
-PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT*1.2
+PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT*1.8
+PLAYER_FALL_DEATH_START_DARKEN :: PLAYER_FALL_DEATH_Y*0.3
 
 PLAYER_KEY_JUMP :: rl.KeyboardKey.SPACE
 
@@ -51,6 +52,7 @@ player_data : struct {
 	lastValidPos	: vec3,
 	lastValidVel	: vec3,
 	slowness	: f32,
+	onGroundTimer	: f32,
 
 	jumpSound		: rl.Sound,
 	footstepSound		: rl.Sound,
@@ -81,8 +83,9 @@ _player_update :: proc() {
 		player_data.pos = player_data.lastValidPos + dir
 		player_data.slowness = 1.0
 		return
-	} else if player_data.pos.y < PLAYER_FALL_DEATH_Y*0.4 {
-		screenTint = {1,1,1} * (1.0 - clamp(abs(player_data.pos.y - PLAYER_FALL_DEATH_Y*0.4) * 0.02, 0.0, 0.98))
+	} else if player_data.pos.y < PLAYER_FALL_DEATH_START_DARKEN {
+		LEN :: abs(PLAYER_FALL_DEATH_Y - PLAYER_FALL_DEATH_START_DARKEN)
+		screenTint = {1,1,1} * (1.0 - clamp(abs(PLAYER_FALL_DEATH_START_DARKEN - player_data.pos.y) / LEN, 0.0, 0.99))
 	}
 
 	// portal finish
@@ -137,10 +140,13 @@ _player_update :: proc() {
 
 	player_data.vel.y -= PLAYER_GRAVITY * deltatime // * (player_data.isOnGround ? 0.25 : 1.0)
 
-	jumped := rl.IsKeyDown(PLAYER_KEY_JUMP) && player_data.isOnGround
+	isJumpInputOn :: proc() -> bool { return rl.IsKeyPressed(PLAYER_KEY_JUMP) }
+
+	jumped := isJumpInputOn() && player_data.isOnGround
 	if jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 40.0 - clamp((linalg.length(player_data.vel)-PLAYER_SPEED*0.95)*17.0, 0.0, 100.0))
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, clamp(player_data.onGroundTimer*18.0, 0.0, 1.0)*42.0)
 		player_data.vel.y = PLAYER_JUMP_SPEED
+		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		//player_data.isOnGround = false
 		playSoundMulti(player_data.jumpSound)
@@ -159,7 +165,8 @@ _player_update :: proc() {
 		player_data.vel += dir * accelspeed
 	}
 
-	player_accelerate(forw*movedir.y + right*movedir.x, PLAYER_SPEED,
+	wishdir := forw*movedir.y + right*movedir.x
+	player_accelerate(wishdir, PLAYER_SPEED,
 		player_data.isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
 
 	wishpos := player_data.pos + player_data.vel * deltatime
@@ -174,7 +181,8 @@ _player_update :: proc() {
 	if phy_hit do player_data.pos += phy_norm*PHY_BOXCAST_EPS*2.0
 
 	prevIsOnGround := player_data.isOnGround
-	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y && !jumped
+	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
+
 
 	if player_data.isOnGround {
 		player_data.lastValidPos = player_data.pos
@@ -186,17 +194,29 @@ _player_update :: proc() {
 			playSound(player_data.landSound)
 			playSoundMulti(player_data.footstepSound)
 		}
-		player_data.rotImpulse.x += 0.02
+		player_data.rotImpulse.x += 0.03
+	}
+
+	if prevIsOnGround && !player_data.isOnGround && !jumped {
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 40)
 	}
 
 
 
 	if phy_hit do player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 1.02)
 
+	frictmul : f32 = 1.0
+	forwdepth := phy_raycastDepth(player_data.pos + player_data.vel*vec3{1,0,1}*deltatime*6.0)
+	println("forwdepth", forwdepth)
+	if forwdepth > PLAYER_SIZE.y*2.0 && movedir == {} {
+		frictmul += 5.0
+	}
+
 	player_data.vel = phy_applyFrictionToVelocity(
 		player_data.vel,
-		(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION) + player_data.slowness*15.0,
+		f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)*frictmul + player_data.slowness*15.0,
 	)
+
 
 
 
@@ -232,7 +252,7 @@ _player_update :: proc() {
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
-				player_data.vel.y = TILE_ELEVATOR_SPEED * 2.0
+				player_data.vel.y = PLAYER_JUMP_SPEED + TILE_ELEVATOR_SPEED*deltatime*20.0
 				player_data.pos.y += 0.02
 				height -= 0.02
 				elevatorIsMoving = false
@@ -291,6 +311,9 @@ _player_update :: proc() {
 		rl.DrawCube(player_data.pos + vec3{0, -depth, 0}, 1,1,1, rl.GREEN)
 		println("depth", depth)
 	}
+
+	if player_data.isOnGround do player_data.onGroundTimer += deltatime
+	else do player_data.onGroundTimer = 0.0
 }
 
 
@@ -303,6 +326,7 @@ player_startMap :: proc() {
 	player_data.lookRotEuler.y = math.PI*2 - (math.atan2(-map_data.startPlayerDir.x, -map_data.startPlayerDir.y) * math.sign(-map_data.startPlayerDir.x))
 	player_initData()
 	screenTint = {}
+	map_data.isMapFinished = false
 }
 
 player_initData :: proc() {
@@ -314,6 +338,7 @@ player_initData :: proc() {
 	player_data.lookDir = {0,0,1}
 
 	gun_data.ammoCounts = gun_startAmmoCounts
+	gun_data.equipped = .SHOTGUN
 }
 
 player_die :: proc() {
@@ -326,6 +351,8 @@ player_die :: proc() {
 
 player_finishMap :: proc() {
 	println("player finished game")
+	map_data.isMapFinished = true
+	gameIsPaused = true
 }
 
 
@@ -461,7 +488,7 @@ _gun_update :: proc() {
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
-					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 60.0 : 2.0)
+					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 66.0 : 6.0)
 					player_data.rotImpulse.x -= 0.15
 					playSound(gun_data.shotgunSound)
 
