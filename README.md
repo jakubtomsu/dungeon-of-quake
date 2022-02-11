@@ -13,7 +13,7 @@
 **currently work in progress!**
 
 # maps
-#### Info for creating maps is in [DQM file spec](doqm_format_spec.md)  
+#### Info for creating maps is in [DQM file spec](dqm_format_spec.md)  
 Maps are a top-down, ascii view on the map, and different characters correspond to different
 tiles - this means anyone can edit maps with just a simple text editor.  
 `.dqm` file extension is used, even though the underlying file is just plain text.
