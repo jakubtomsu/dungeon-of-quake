@@ -38,7 +38,7 @@ tile character | tile name | uppercase | note |
 `h`|health pickup      |✓| adds 1/4 of health to player
 `d`|shotgun pickup     |✓| refills **shotgun** ammo. `d` stands for `default`, since it's the default weapon
 `m`|machinegun pickup  |✓| refills **machinegun** ammo
-`l`|laserrifle pickup  |✓| refills **laserrifle** ammo
+`l`|laser rifle pickup |✓| refills **laser rifle** ammo
 `g`|grunt spawn        |✓| place where a grunt enemy spawns
 `k`|knight spawn       |✓| place where a knight enemy spawns
 
