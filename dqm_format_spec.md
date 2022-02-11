@@ -31,7 +31,7 @@ tile character | tile name | uppercase | note |
 `P`|large platform     |✕| `platform`, but 3 tiles tall
 `e`|elevator           |✕| elevator that takes you from the 1st to 2nd floor. Also adds jump boost
 `o`|obstacle           |✕| like `empty`, but floor is 1 tile taller
-`O`|obstacle           |✕|
+`O`|obstacle           |✕| `obstacle`, but 2 blocks tall
 `h`|health pickup      |✓| adds 1/4 of health to player
 `d`|shotgun pickup     |✓| refills **shotgun** ammo. `d` stands for `default`, since it's the default weapon
 `m`|machinegun pickup  |✓| refills **machinegun** ammo
