@@ -71,7 +71,7 @@ fogStrength    | `decimal`      | strength/attenuation of fog
 ## simple 8x8 example level
 finish is on a elevated platform made with walls (`w`), where you can't get without the elevator (`e`)  
 
-```
+```cpp
 ########
 #      #
 # s    #
@@ -84,7 +84,7 @@ finish is on a elevated platform made with walls (`w`), where you can't get with
 
 ## more complex example level
 
-```
+```cpp
 {
 	skyColor: 1.0 0.2 0.0
 	fogStrength: 1.2
