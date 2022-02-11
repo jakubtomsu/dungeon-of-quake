@@ -44,7 +44,7 @@ tile character | tile name | uppercase | note |
 
 
 
-## map attributes
+## map attributes (advanced)
 Each map can have some attributes which change how it looks or behaves.  
 
 All attributes are alwats defined between a pair of curly braces `{ }`, and each attribute is followed by a colon `:` character.  
