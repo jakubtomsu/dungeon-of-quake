@@ -13,6 +13,20 @@ so the resulting level might end up looking a little stretched in-game. In some 
 editors, you can change text spacing to circumvent the issue.
 
 
+## simple 8x8 example level
+finish is on a elevated platform made with walls (`w`), where you can't get without the elevator (`e`)  
+
+```cpp
+########
+#      #
+# s    #
+#      #
+#      #
+#wwweww#
+#wwwwwF#
+########
+```
+
 
 ## tiles
 >**NOTE:** some blocks have different lowercase/uppercase versions.  
@@ -67,20 +81,6 @@ skyColor       | `rgb decimal`  | color of the sky and fog
 fogStrength    | `decimal`      | strength/attenuation of fog
 
 
-
-## simple 8x8 example level
-finish is on a elevated platform made with walls (`w`), where you can't get without the elevator (`e`)  
-
-```cpp
-########
-#      #
-# s    #
-#      #
-#      #
-#wwweww#
-#wwwwwF#
-########
-```
 
 ## more complex example level
 
