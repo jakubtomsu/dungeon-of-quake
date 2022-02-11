@@ -73,7 +73,6 @@ example attribute declarations:
 
 attribute name | value          | note
 -------------- | -------------- | ----
-mapName        | `text`         | name of the map
 nextMapName    | `text`         | next map to load after this one is finished. Needs to include the `.dqm` extension. Subfolders are ok.
 startPlayerDir | `xy decimal`   | which direction should the player be looking when the game starts
 skyColor       | `rgb decimal`  | color of the sky and fog
