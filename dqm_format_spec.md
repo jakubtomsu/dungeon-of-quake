@@ -31,7 +31,7 @@ finish is on a elevated platform made with walls (`w`), where you can't get with
 ## tiles
 >**NOTE:** some blocks have different lowercase/uppercase versions.  
 for instance: you can use uppercase `S` instead of lowercase `s` if you want the start position to be on the 2nd floor.  
-In that case, only the lowercase version is shown in the table.
+In that case, only the lowercase version is shown in the table, and the tile has the `uppercase` value as `✓`
 >> **NOTE:** some tiles have lowercase/uppercase versions which **do not** change which floor the tile is on, but change something else.
 
 
