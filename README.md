@@ -28,7 +28,7 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 - get the [Odin compiler](https://github.com/odin-lang/Odin)
 - add Odin to `$PATH` enviroment variable
 - use `.\build.bat` command to build the game  
-- use `.\build.bat run` command to build and run the game  
+- or use `.\build.bat run` command to build and run the game  
 
 
 # TODO
