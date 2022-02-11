@@ -128,10 +128,10 @@ _player_update :: proc() {
 	right := linalg.vector_normalize(linalg.matrix_mul_vector(player_data.lookRotMat3, vec3{1, 0, 0}) * vec3{1, 0, 1})
 
 	movedir : vec2 = {}
-	if rl.IsKeyDown(rl.KeyboardKey.W)	do movedir.y += 1.0
-	if rl.IsKeyDown(rl.KeyboardKey.A)	do movedir.x += 1.0
-	if rl.IsKeyDown(rl.KeyboardKey.S)	do movedir.y -= 1.0
-	if rl.IsKeyDown(rl.KeyboardKey.D)	do movedir.x -= 1.0
+	if rl.IsKeyDown(rl.KeyboardKey.W) do movedir.y += 1.0
+	if rl.IsKeyDown(rl.KeyboardKey.A) do movedir.x += 1.0
+	if rl.IsKeyDown(rl.KeyboardKey.S) do movedir.y -= 1.0
+	if rl.IsKeyDown(rl.KeyboardKey.D) do movedir.x -= 1.0
 	//if rl.IsKeyPressed(rl.KeyboardKey.C)do player_data.pos.y -= 2.0
 
 	tilepos := map_worldToTile(player_data.pos)
@@ -140,11 +140,11 @@ _player_update :: proc() {
 
 	player_data.vel.y -= PLAYER_GRAVITY * deltatime // * (player_data.isOnGround ? 0.25 : 1.0)
 
-	isJumpInputOn :: proc() -> bool { return rl.IsKeyPressed(PLAYER_KEY_JUMP) }
+	isJumpInputOn :: proc() -> bool { return rl.IsKeyDown(PLAYER_KEY_JUMP) }
 
 	jumped := isJumpInputOn() && player_data.isOnGround
 	if jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, clamp(player_data.onGroundTimer*18.0, 0.0, 1.0)*42.0)
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*4.0, 0.0, 1.0)-0.08)*45.0)
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
@@ -152,6 +152,7 @@ _player_update :: proc() {
 		playSoundMulti(player_data.jumpSound)
 		player_data.rotImpulse.x -= 0.03
 	}
+
 
 
 	player_accelerate :: proc(dir : vec3, wishspeed : f32, accel : f32) {
@@ -167,7 +168,7 @@ _player_update :: proc() {
 
 	wishdir := forw*movedir.y + right*movedir.x
 	player_accelerate(wishdir, PLAYER_SPEED,
-		player_data.isOnGround ? PLAYER_GROUND_ACCELERATION : PLAYER_AIR_ACCELERATION)
+		player_data.isOnGround ? PLAYER_GROUND_ACCELERATION : (linalg.dot(player_data.vel, wishdir) > 0.0 ? PLAYER_AIR_ACCELERATION : PLAYER_AIR_ACCELERATION*2.0))
 
 	wishpos := player_data.pos + player_data.vel * deltatime
 	
@@ -197,8 +198,8 @@ _player_update :: proc() {
 		player_data.rotImpulse.x += 0.03
 	}
 
-	if prevIsOnGround && !player_data.isOnGround && !jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 40)
+	if prevIsOnGround && !player_data.isOnGround && !jumped && player_data.onGroundTimer>0.1 {
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 42)
 	}
 
 
@@ -312,6 +313,8 @@ _player_update :: proc() {
 		println("depth", depth)
 	}
 
+
+
 	if player_data.isOnGround do player_data.onGroundTimer += deltatime
 	else do player_data.onGroundTimer = 0.0
 }
@@ -408,7 +411,7 @@ gun_calcViewportPos :: proc() -> vec3 {
 	s := math.sin(player_data.stepTimer < 0.0 ? timepassed*PLAYER_HEAD_SIN_TIME*0.5 : player_data.stepTimer*0.5) * clamp(linalg.length(player_data.vel) * 0.01, 0.1, 1.0) *
 		0.04 * (player_data.isOnGround ? 1.0 : 0.05)
 	kick := clamp(gun_data.timer*0.5, 0.0, 1.0)*0.8
-	return vec3{-GUN_POS_X + player_data.lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.48 - kick}
+	return vec3{-settings.gunXOffset + player_data.lookRotEuler.z*0.5,-0.2 + s + kick*0.15, 0.48 - kick}
 }
 
 gun_getMuzzleOffset :: proc() -> vec3 {
@@ -488,7 +491,7 @@ _gun_update :: proc() {
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
-					player_data.vel -= player_data.lookDir*cast(f32)(cl < PLAYER_SIZE.y*2.1 ? 66.0 : 6.0)
+					player_data.vel -= player_data.lookDir*60.0
 					player_data.rotImpulse.x -= 0.15
 					playSound(gun_data.shotgunSound)
 
@@ -503,7 +506,7 @@ _gun_update :: proc() {
 				case gun_kind_t.LASERRIFLE:
 					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
 					player_data.vel /= 1.25
-					player_data.vel -= player_data.lookDir * 50
+					player_data.vel -= player_data.lookDir * 40
 					player_data.rotImpulse.x -= 0.2
 					player_data.rotImpulse.y += 0.04
 					playSound(gun_data.laserrifleSound)

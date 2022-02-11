@@ -201,13 +201,18 @@ menu_updateAndDrawPauseMenu :: proc() {
 			gui_menuButton_t{"exit to desktop",	&app_shouldExitNextFrame},
 
 			gui_menuTitle_t{"settings"},
-			gui_menuFloat_t{"audio volume",		&settings.audioMasterVolume},
-			gui_menuFloat_t{"mouse sensitivity",	&settings.mouseSensitivity},
-			gui_menuFloat_t{"crosshair visibility",	&settings.crosshairOpacity},
-			gui_menuBool_t{"show FPS",		&settings.drawFPS},
-			gui_menuBool_t{"enable debug mode",	&settings.debugIsEnabled},
+			gui_menuFloat_t{"audio volume",			&settings.audioMasterVolume,	0.05},
+			gui_menuFloat_t{"music volume",			&settings.audioMusicVolume,	0.05},
+			gui_menuFloat_t{"mouse sensitivity",		&settings.mouseSensitivity,	0.05},
+			gui_menuFloat_t{"crosshair visibility",		&settings.crosshairOpacity,	0.1},
+			gui_menuFloat_t{"gun X offset",			&settings.gunXOffset,		0.025},
+			gui_menuFloat_t{"fild of view",			&settings.FOV,			10.0},
+			gui_menuFloat_t{"viewmodel field of view",	&settings.viewmodelFOV,		10.0},
+			gui_menuBool_t{"show FPS",			&settings.drawFPS},
+			gui_menuBool_t{"enable debug mode",		&settings.debugIsEnabled},
 		}
 
+		menu_drawNavTips()
 		if gui_updateAndDrawElemBuf(elems[:]) {
 			settings_saveToFile()
 		}
@@ -235,6 +240,7 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.ColorFromNormalized(MENU_BACKGROUND))
+	menu_drawNavTips()
 	menu_drawDebugUI()
 
 	if menu_data.mapSelectIsOpen {
@@ -264,11 +270,15 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 			gui_menuButton_t{"exit to desktop",	&app_shouldExitNextFrame},
 
 			gui_menuTitle_t{"settings"},
-			gui_menuFloat_t{"audio volume",		&settings.audioMasterVolume},
-			gui_menuFloat_t{"mouse sensitivity",	&settings.mouseSensitivity},
-			gui_menuFloat_t{"crosshair visibility",	&settings.crosshairOpacity},
-			gui_menuBool_t{"show FPS",		&settings.drawFPS},
-			gui_menuBool_t{"enable debug mode",	&settings.debugIsEnabled},
+			gui_menuFloat_t{"audio volume",			&settings.audioMasterVolume,	0.05},
+			gui_menuFloat_t{"music volume",			&settings.audioMusicVolume,	0.05},
+			gui_menuFloat_t{"mouse sensitivity",		&settings.mouseSensitivity,	0.05},
+			gui_menuFloat_t{"crosshair visibility",		&settings.crosshairOpacity,	0.1},
+			gui_menuFloat_t{"gun size offset",		&settings.gunXOffset,		0.025},
+			gui_menuFloat_t{"fild of view",			&settings.FOV,			10.0},
+			gui_menuFloat_t{"viewmodel field of view",	&settings.viewmodelFOV,		10.0},
+			gui_menuBool_t{"show FPS",			&settings.drawFPS},
+			gui_menuBool_t{"enable debug mode",		&settings.debugIsEnabled},
 		}
 
 		if gui_updateAndDrawElemBuf(elems[:]) {
@@ -315,7 +325,7 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
 			if fileinfo.name[0] == '_'	do continue // hidden
 			dotindex := strings.index_byte(fileinfo.name, '.')
 			if dotindex == 0 do continue
-			if fileinfo.name[dotindex:] != ".doqm" do continue // check suffix
+			if fileinfo.name[dotindex:] != ".dqm" do continue // check suffix
 			//menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui_menuButton_t{fileinfo.name[:dotindex], &menu_data.mapSelectButtonBool}
 			menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui_menuFileButton_t{
 				fileinfo.name[:dotindex], fileinfo.fullpath, &menu_data.mapSelectButtonBool,
@@ -353,6 +363,7 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 
 	rl.BeginDrawing()
 		rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, MENU_BACKGROUND, unfade)))
+	
 		OFFS :: 200
 		STARTSCALE :: 12.0
 		scale := glsl.min(
@@ -380,6 +391,17 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 
 
 
+// draw info about the menu navigation
+menu_drawNavTips :: proc() {
+	SIZE :: 25.0
+
+	gui_drawText(
+		{SIZE*2.0, f32(windowSizeY)-SIZE*3}, SIZE, {200,200,200,120},
+		"hold CTRL to skip to next title / edit values faster",
+	)
+}
+
+
 
 
 
@@ -405,6 +427,7 @@ gui_menuBool_t :: struct {
 gui_menuFloat_t :: struct {
 	name	: string,
 	val	: ^f32,
+	step	: f32,
 }
 
 gui_menuTitle_t :: struct {
@@ -538,11 +561,14 @@ gui_updateAndDrawElemBuf :: proc(elems : []gui_menuElem_t) -> bool {
 				isEdited = true
 			}
 		case gui_menuFloat_t:
+			step := elem.step
+			if rl.IsKeyDown(rl.KeyboardKey.LEFT_CONTROL) do step *= 5.0
+		
 			if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
-				elem.val^ += 0.1
+				elem.val^ += step
 				isEdited = true
 			} else if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
-				elem.val^ -= 0.1
+				elem.val^ -= step
 				isEdited = true
 			}
 		case gui_menuTitle_t:

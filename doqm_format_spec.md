@@ -1,9 +1,9 @@
-# DOQM map file format specification
+# DQM map file format specification
 
 
 
 ## general info
-Maps are saved as a plain text, but use the `.doqm` file extension. This means you can edit these levels with any text editor. Maps can also be split into two floors, using certain tiles.  
+Maps are saved as a plain text, but use the `.dqm` file extension. This means you can edit these levels with any text editor. Maps can also be split into two floors, using certain tiles.  
 
 > **WARNING:** Text editors don't really use fonts with sqare aspect ratio characters,
 so the resulting level might end up looking a little stretched in-game. In some text
@@ -58,7 +58,7 @@ example attribute declarations:
 attribute name | value          | note
 -------------- | -------------- | ----
 mapName        | `text`         | name of the map
-nextMapName    | `text`         | next map to load after this one is finished. Needs to include the `.doqm` extension. Subfolders are ok.
+nextMapName    | `text`         | next map to load after this one is finished. Needs to include the `.dqm` extension. Subfolders are ok.
 startPlayerDir | `xy decimal`   | which direction should the player be looking when the game starts
 skyColor       | `rgb decimal`  | color of the sky and fog
 fogStrength    | `decimal`      | strength/attenuation of fog

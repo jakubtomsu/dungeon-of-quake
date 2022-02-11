@@ -13,10 +13,10 @@
 **currently work in progress!**
 
 # maps
-#### Info for creating maps is in [DOQM file spec](doqm_format_spec.md)  
+#### Info for creating maps is in [DQM file spec](doqm_format_spec.md)  
 Maps are a top-down, ascii view on the map, and different characters correspond to different
 tiles - this means anyone can edit maps with just a simple text editor.  
-`.doqm` file extension is used, even though the underlying file is just plain text.
+`.dqm` file extension is used, even though the underlying file is just plain text.
 
 > The raw tile table is in [map.odin](/doq/map.odin) as `map_tileKind_t`
 
@@ -32,9 +32,6 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 
 
 # TODO
-- settings:
-  - field of view
-  - background music volume
 - 3D audio
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles

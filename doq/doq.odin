@@ -52,8 +52,12 @@ settings : struct {
 	drawFPS			: bool,
 	debugIsEnabled		: bool,
 	audioMasterVolume	: f32,
+	audioMusicVolume	: f32,
 	crosshairOpacity	: f32,
 	mouseSensitivity	: f32,
+	FOV			: f32,
+	viewmodelFOV		: f32,
+	gunXOffset		: f32,
 }
 
 
@@ -80,10 +84,18 @@ _doq_main :: proc() {
 		println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
 		
-		settings.audioMasterVolume = clamp(settings.audioMasterVolume, 0.0, 1.0)
-		settings.crosshairOpacity = clamp(settings.crosshairOpacity, 0.0, 1.0)
-		settings.mouseSensitivity = clamp(settings.mouseSensitivity, 0.1, 5.0)
+		// fixup
+		settings.audioMasterVolume	= clamp(settings.audioMasterVolume, 0.0, 1.0)
+		settings.audioMusicVolume	= clamp(settings.audioMusicVolume, 0.0, 1.0)
+		settings.crosshairOpacity	= clamp(settings.crosshairOpacity, 0.0, 1.0)
+		settings.mouseSensitivity	= clamp(settings.mouseSensitivity, 0.1, 5.0)
+		settings.FOV			= clamp(settings.FOV,		20.0, 170.0)
+		settings.viewmodelFOV		= clamp(settings.viewmodelFOV,	80.0, 120.0)
+		settings.gunXOffset		= clamp(settings.gunXOffset,	-0.4, 0.4)
 		rl.SetMasterVolume(settings.audioMasterVolume)
+
+		camera.fovy		= settings.FOV
+		viewmodelCamera.fovy	= settings.viewmodelFOV
 	
 		rl.DisableCursor()
 
@@ -92,6 +104,7 @@ _doq_main :: proc() {
 		}
 
 
+		if app_updatePathKind != .GAME do gameStopSounds()
 
 		switch app_updatePathKind {
 			case .LOADSCREEN:
@@ -286,14 +299,12 @@ _app_init :: proc() {
 	camera.position = {0, 3, 0}
 	camera.target = {}
 	camera.up = vec3{0.0, 1.0, 0.0}
-	camera.fovy = PLAYER_FOV
 	camera.projection = rl.CameraProjection.PERSPECTIVE
 	rl.SetCameraMode(camera, rl.CameraMode.CUSTOM)
 
 	viewmodelCamera.position = {0,0,0}
 	viewmodelCamera.target = {0,0,1}
 	viewmodelCamera.up = {0,1,0}
-	viewmodelCamera.fovy = PLAYER_VIEWMODEL_FOV
 	viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
@@ -311,8 +322,8 @@ _app_init :: proc() {
 	
 	map_clearAll()
 	map_data.bounds = {MAP_MAX_WIDTH, MAP_MAX_WIDTH}
-	if os.is_file(appendToAssetPath("maps", "_quickload.doqm")) {
-		map_loadFromFile("_quickload.doqm")
+	if os.is_file(appendToAssetPath("maps", "_quickload.dqm")) {
+		map_loadFromFile("_quickload.dqm")
 		app_setUpdatePathKind(.GAME)
 	}
 	
@@ -445,12 +456,19 @@ world_reset :: proc() {
 
 
 
+
 settings_setDefault :: proc() {
-	settings.drawFPS		= false
-	settings.debugIsEnabled		= false
-	settings.audioMasterVolume	= 0.5
-	settings.crosshairOpacity	= 0.2
-	settings.mouseSensitivity	= 1.0
+	settings = {
+		drawFPS			= false,
+		debugIsEnabled		= false,
+		audioMasterVolume	= 0.5,
+		audioMusicVolume	= 0.4,
+		crosshairOpacity	= 0.2,
+		mouseSensitivity	= 1.0,
+		FOV			= 100.0,
+		viewmodelFOV		= 100.0,
+		gunXOffset		= 0.1,
+	}
 }
 
 settings_getFilePath :: proc() -> string {
@@ -463,8 +481,12 @@ settings_saveToFile :: proc() {
 			"drawFPS",		SERI_ATTRIB_SEPARATOR, " ", settings.drawFPS,		"\n",
 			"debugIsEnabled",	SERI_ATTRIB_SEPARATOR, " ", settings.debugIsEnabled,	"\n",
 			"audioMasterVolume",	SERI_ATTRIB_SEPARATOR, " ", settings.audioMasterVolume,	"\n",
+			"audioMusicVolume",	SERI_ATTRIB_SEPARATOR, " ", settings.audioMusicVolume,	"\n",
 			"crosshairOpacity",	SERI_ATTRIB_SEPARATOR, " ", settings.crosshairOpacity,	"\n",
 			"mouseSensitivity",	SERI_ATTRIB_SEPARATOR, " ", settings.mouseSensitivity,	"\n",
+			"FOV",			SERI_ATTRIB_SEPARATOR, " ", settings.FOV,		"\n",
+			"viewmodelFOV",		SERI_ATTRIB_SEPARATOR, " ", settings.viewmodelFOV,	"\n",
+			"gunXOffset",		SERI_ATTRIB_SEPARATOR, " ", settings.gunXOffset,	"\n",
 		},
 		sep="",
 	)
@@ -487,10 +509,23 @@ settings_loadFromFile :: proc() {
 		if seri_attribMatch(buf, &index, "drawFPS")		do settings.drawFPS		= seri_readBool(buf, &index)
 		if seri_attribMatch(buf, &index, "debugIsEnabled")	do settings.debugIsEnabled	= seri_readBool(buf, &index)
 		if seri_attribMatch(buf, &index, "audioMasterVolume")	do settings.audioMasterVolume	= seri_readF32 (buf, &index)
+		if seri_attribMatch(buf, &index, "audioMusicVolume")	do settings.audioMusicVolume	= seri_readF32 (buf, &index)
 		if seri_attribMatch(buf, &index, "crosshairOpacity")	do settings.crosshairOpacity	= seri_readF32 (buf, &index)
 		if seri_attribMatch(buf, &index, "mouseSensitivity")	do settings.mouseSensitivity	= seri_readF32 (buf, &index)
+		if seri_attribMatch(buf, &index, "FOV")			do settings.FOV			= seri_readF32 (buf, &index)
+		if seri_attribMatch(buf, &index, "viewmodelFOV")	do settings.viewmodelFOV	= seri_readF32 (buf, &index)
+		if seri_attribMatch(buf, &index, "gunXOffset")		do settings.gunXOffset		= seri_readF32 (buf, &index)
 	}
 }
+
+
+
+gameStopSounds :: proc() {
+	rl.StopSound(map_data.elevatorSound)
+	rl.StopSound(player_data.swooshSound)
+}
+
+
 
 
 
