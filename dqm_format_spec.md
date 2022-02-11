@@ -3,7 +3,10 @@
 
 
 ## general info
-Maps are saved as a plain text, but use the `.dqm` file extension. This means you can edit these levels with any text editor. Maps can also be split into two floors, using certain tiles.  
+Maps are a top-down, ascii view on the world, where different characters correspond to different
+tiles - this means anyone can edit maps with just a simple text editor.
+`.dqm` file extension is used for the map files, even though the underlying data in that file is just plain text.
+Maps can also be split into two floors, using specific tiles.  
 
 > **WARNING:** Text editors don't really use fonts with sqare aspect ratio characters,
 so the resulting level might end up looking a little stretched in-game. In some text
