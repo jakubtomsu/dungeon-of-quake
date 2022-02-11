@@ -3,7 +3,10 @@
 
 
 ## general info
-Maps are saved as a plain text, but use the `.dqm` file extension. This means you can edit these levels with any text editor. Maps can also be split into two floors, using certain tiles.  
+Maps are a top-down, ascii view on the world, where different characters correspond to different
+tiles - this means anyone can edit maps with just a simple text editor.
+`.dqm` file extension is used for the map files, even though the underlying data in that file is just plain text.
+Maps can also be split into two floors, using specific tiles.  
 
 > **WARNING:** Text editors don't really use fonts with sqare aspect ratio characters,
 so the resulting level might end up looking a little stretched in-game. In some text
@@ -35,13 +38,13 @@ tile character | tile name | uppercase | note |
 `h`|health pickup      |✓| adds 1/4 of health to player
 `d`|shotgun pickup     |✓| refills **shotgun** ammo. `d` stands for `default`, since it's the default weapon
 `m`|machinegun pickup  |✓| refills **machinegun** ammo
-`l`|laserrifle pickup  |✓| refills **laserrifle** ammo
+`l`|laser rifle pickup |✓| refills **laser rifle** ammo
 `g`|grunt spawn        |✓| place where a grunt enemy spawns
 `k`|knight spawn       |✓| place where a knight enemy spawns
 
 
 
-## map attributes
+## map attributes (advanced)
 Each map can have some attributes which change how it looks or behaves.  
 
 All attributes are alwats defined between a pair of curly braces `{ }`, and each attribute is followed by a colon `:` character.  
@@ -49,6 +52,7 @@ Text attribute value has to be between two quotation marks `"` like this: `"foo"
 example attribute declarations:  
 ```cpp
 {
+	mapName: "foo"
 	skyColor: 1.0 0.5 1
 }
 ```
@@ -56,6 +60,7 @@ example attribute declarations:
 
 attribute name | value          | note
 -------------- | -------------- | ----
+mapName        | `text`         | name of the map
 nextMapName    | `text`         | next map to load after this one is finished. Needs to include the `.dqm` extension. Subfolders are ok.
 startPlayerDir | `xy decimal`   | which direction should the player be looking when the game starts
 skyColor       | `rgb decimal`  | color of the sky and fog
