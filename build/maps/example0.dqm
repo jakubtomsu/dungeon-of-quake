@@ -1,6 +1,6 @@
 {
 	mapName: "example 0"
-	skyColor: 1.0 0.2 0.0
+	skyColor: 0.5 0.2 0.6
 	fogStrength: 1.2
 	startPlayerDir: 0.0 -1.0
 	nextMapName: "parkour0.dqm"

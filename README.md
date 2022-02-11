@@ -42,5 +42,7 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 # screenshots
 <img src="/misc/screenshot0.png">  
 <img src="/misc/screenshot1.png">  
-<img src="/misc/screenshot2.png">  
 <img src="/misc/screenshot3.png">  
+<img src="/misc/screenshot4.png">  
+<img src="/misc/screenshot5.png">  
+<img src="/misc/screenshot6.png">  

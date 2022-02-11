@@ -2,6 +2,8 @@
 # for custom build scripts
 build_.bat
 
+*.png~
+
 build/*.exp
 build/*.lib
 build/*.exe

@@ -165,7 +165,7 @@ menu_updateAndDrawPauseMenu :: proc() {
 		elems : []gui_menuElem_t = {
 			gui_menuButton_t{"continue",		&shouldContinue},
 			gui_menuButton_t{"play again",		&shouldReset},
-			gui_menuButton_t{"go to main menu",	&shouldExitToMainMenu},
+			gui_menuButton_t{"exit to main menu",	&shouldExitToMainMenu},
 		}
 	
 		gui_updateAndDrawElemBuf(elems[:])
