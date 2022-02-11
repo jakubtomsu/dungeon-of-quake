@@ -22,7 +22,7 @@ PLAYER_HEAD_CENTER_OFFSET	:: 0.8
 PLAYER_LOOK_SENSITIVITY		:: 0.001
 PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
-PLAYER_SIZE			:: vec3{1,2,1}
+PLAYER_SIZE			:: vec3{1.5,2.5,1.5}
 PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 
 PLAYER_GRAVITY			:: 220 // 800
@@ -138,7 +138,7 @@ _player_update :: proc() {
 	c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
 	isInElevatorTile := c in map_data.elevatorHeights
 
-	player_data.vel.y -= PLAYER_GRAVITY * deltatime // * (player_data.isOnGround ? 0.25 : 1.0)
+	player_data.vel.y -= (player_data.isOnGround ? PLAYER_GRAVITY/75.0 : PLAYER_GRAVITY * deltatime)
 
 	isJumpInputOn :: proc() -> bool { return rl.IsKeyDown(PLAYER_KEY_JUMP) }
 
@@ -170,19 +170,21 @@ _player_update :: proc() {
 	player_accelerate(wishdir, PLAYER_SPEED,
 		player_data.isOnGround ? PLAYER_GROUND_ACCELERATION : (linalg.dot(player_data.vel, wishdir) > 0.0 ? PLAYER_AIR_ACCELERATION : PLAYER_AIR_ACCELERATION*2.0))
 
+	wishspeed := linalg.length(player_data.vel)
 	wishpos := player_data.pos + player_data.vel * deltatime
 	
 	phy_tn, phy_norm, phy_hit := phy_boxcastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
-	phy_vec := player_data.pos + linalg.normalize(player_data.vel)*phy_tn
-	
-	println("pos", player_data.pos, "vel", player_data.vel)
-	//println("phy vec", phy_vec, "norm", phy_norm, "hit", phy_hit)
-	
+	phy_vec := player_data.pos + (wishspeed == 0.0 ? {} : player_data.vel/wishspeed)*phy_tn
 	player_data.pos = phy_vec
 	if phy_hit do player_data.pos += phy_norm*PHY_BOXCAST_EPS*2.0
 
 	prevIsOnGround := player_data.isOnGround
 	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
+	
+	println("pos", player_data.pos, "vel", player_data.vel)
+	println("phy vec", phy_vec, "tn", phy_tn, "norm", phy_norm, "hit", phy_hit)
+	println("isOnGround", player_data.isOnGround)
+	
 
 
 	if player_data.isOnGround {
@@ -204,7 +206,11 @@ _player_update :: proc() {
 
 
 
-	if phy_hit do player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 1.02)
+	if phy_hit {
+		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : clamp(deltatime*math.sqrt(wishspeed)*10.0, 0.001, 0.99))
+		player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 0.99)
+		//player_data.vel -= phy_norm*deltatime*wishspeed
+	}
 
 	frictmul : f32 = 1.0
 	forwdepth := phy_raycastDepth(player_data.pos + player_data.vel*vec3{1,0,1}*deltatime*6.0)
@@ -215,7 +221,7 @@ _player_update :: proc() {
 
 	player_data.vel = phy_applyFrictionToVelocity(
 		player_data.vel,
-		f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)*frictmul + player_data.slowness*15.0,
+		(f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)*frictmul + player_data.slowness*15.0)*deltatime*75,
 	)
 
 

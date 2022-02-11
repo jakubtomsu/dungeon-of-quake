@@ -70,7 +70,6 @@ map_tileKind_t :: enum u8 {
 }
 
 map_data : struct {
-	mapName		: string,
 	nextMapName	: string,
 	authorName	: string, // TODO
 	startMessage	: string, // TODO
@@ -255,7 +254,6 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 map_clearAll :: proc() {
 	map_data.bounds[0] = 0
 	map_data.bounds[1] = 0
-	map_data.mapName = "_cleared_map"
 	map_data.nextMapName = ""
 	map_data.skyColor = {0.6, 0.5, 0.8} * 0.6
 	map_data.fogStrength = 2.0
@@ -321,7 +319,6 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 				for data[index] != '}' {
 					if !seri_skipWhitespace(data, &index) do index += 1
 					println("index", index, "ch", cast(rune)data[index])
-					if seri_attribMatch(data, &index, "mapName")		do map_data.mapName = seri_readString(data, &index)
 					if seri_attribMatch(data, &index, "nextMapName")	do map_data.nextMapName = seri_readString(data, &index)
 					
 					if seri_attribMatch(data, &index, "startPlayerDir") {
@@ -427,7 +424,6 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 	println("end")
 
 	println("bounds[0]", map_data.bounds[0], "bounds[1]", map_data.bounds[1])
-	println("mapName", map_data.mapName)
 	println("nextMapName", map_data.nextMapName)
 
 	player_startMap()

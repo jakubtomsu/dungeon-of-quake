@@ -103,6 +103,9 @@ _doq_main :: proc() {
 			rl.UpdateMusicStream(playingMusic^)
 		}
 
+		if settings.debugIsEnabled do rl.SetTraceLogLevel(rl.TraceLogLevel.ALL)
+		else do rl.SetTraceLogLevel(rl.TraceLogLevel.NONE)
+
 
 		if app_updatePathKind != .GAME do gameStopSounds()
 
@@ -211,7 +214,7 @@ _app_init :: proc() {
 	windowSizeY = rl.GetScreenHeight()
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
-	rl.SetTargetFPS(75)
+	//rl.SetTargetFPS(75)
 
 	rl.InitAudioDevice()
 

@@ -128,7 +128,6 @@ menu_drawDebugUI :: proc() {
 		debugtext("    gameIsPaused",		gameIsPaused)
 		debugtext("map")
 		debugtext("    bounds",			map_data.bounds)
-		debugtext("    mapName",		map_data.mapName)
 		debugtext("    nextMapName",		map_data.nextMapName)
 		debugtext("    startPlayerDir",		map_data.startPlayerDir)
 		debugtext("    gunPickupCount",		map_data.gunPickupCount,
