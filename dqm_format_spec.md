@@ -62,7 +62,7 @@ tile character | tile name | uppercase | note |
 Each map can have some attributes which change how it looks or behaves.  
 
 All attributes are alwats defined between a pair of curly braces `{ }`, and each attribute is followed by a colon `:` character.  
-Text attribute value has to be between two quotation marks `"` like this: `"foo"`.  
+Text attribute value has to be between two quotation marks `"` like this: `"foo"`. Multiple values, like numbers, are always separated by a space (or tab, multiple spaces, ...)  
 example attribute declarations:  
 ```cpp
 {
@@ -79,19 +79,14 @@ skyColor       | `rgb decimal`  | color of the sky and fog
 fogStrength    | `decimal`      | strength/attenuation of fog
 
 
-## map directory info
-Maps with underscore `_` as a first character are hidden in the map selection menu.  
-
-You can use `_quickload.dqm` map file to instantly load a level, and bypass all the menu's.  
-Subdirectories are supported in the map selection menu, but their name isn't relative to this folder, it's just the last folder in path.
-
 ## more complex example level
 
 ```cpp
 {
+	nextMapName: "map.dqm"
+	startPlayerDir: 0.0 -1.0
 	skyColor: 1.0 0.2 0.0
 	fogStrength: 1.2
-	startPlayerDir: 0.0 -1.0
 }
 
 #######-------#######
@@ -107,3 +102,19 @@ c     c-------c   k c
 #wwwKww########wwGww#
 ##w#w###------##w#w##
 ```
+
+
+## map directory info
+Maps with underscore `_` as a first character are hidden in the map selection menu.  
+
+You can use `_quickload.dqm` map file to instantly load a level, and bypass all the menu's.  
+Subdirectories are supported in the map selection menu, but their name isn't relative to this folder, it's just the last folder in path.
+
+
+## random gameplay/player/movement information
+- you can use shotgun to jump to the top of `obstacle` (or any other 1-tile-tall block)
+- player can't jump over hole that is wider than 1 tile
+- headshots always do 2x the damage, and make a sort of bell *zing* sound effect
+- enemies can't go over an edge
+- ground friction is increased multiple times when the player get's close to an edge
+- player can hold space to bunny hop and gain speed, but changing direction is difficult

@@ -36,7 +36,6 @@ menu_data : struct {
 	startOffs	: f32,
 
 	normalFont	: rl.Font,
-	titleFont	: rl.Font,
 
 	selectSound		: rl.Sound,
 	setValSound		: rl.Sound,
@@ -452,11 +451,6 @@ gui_menuElem_t :: union {
 gui_drawText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
 	cstr := strings.clone_to_cstring(text, context.temp_allocator)
 	rl.DrawTextEx(menu_data.normalFont, cstr, pos, size, 0.0, color)
-}
-
-gui_drawTitleText :: proc(pos : vec2, size : f32, color : rl.Color, text : string) {
-	cstr := strings.clone_to_cstring(text, context.temp_allocator)
-	rl.DrawTextEx(menu_data.titleFont, cstr, pos, size, 0.0, color)
 }
 
 // @retunrs: true if any value changed

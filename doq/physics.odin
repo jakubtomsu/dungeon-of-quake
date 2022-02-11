@@ -5,6 +5,7 @@ package doq
 //
 // PHYSICS
 // really simple, but fairly stable collision detection (also continuous)
+// also utils for collision resolution
 //
 // ray intersectors by Inigo Quilez:
 // https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
@@ -299,6 +300,18 @@ phy_clipVelocity :: proc(vel : vec3, normal : vec3, overbounce : f32) -> vec3 {
 	backoff := linalg.vector_dot(vel, normal) * overbounce
 	change := normal*backoff
 	return vel - change
+}
+
+// retains speed
+phy_slideVelocityOnSurf :: proc(vel : vec3, normal : vec3, impactFriction : f32) -> vec3 {
+	using linalg
+	d := dot(vel, normal)
+	if d > 0.0 do return vel
+	vlen := length(vel)
+	slidevec := vel - normal*d
+	if slidevec == {} do return {}
+	slidevel := normalize(slidevec) * vlen
+	return slidevel
 }
 
 phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32) -> vec3 {

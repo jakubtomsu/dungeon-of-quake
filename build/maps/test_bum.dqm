@@ -1,0 +1,20 @@
+{
+	mapName: "example 0"
+	skyColor: 1.0 0.2 0.0
+	fogStrength: 1.2
+	startPlayerDir: 0.0 -1.0
+	nextMapName: "parkour0.dqm"
+}
+######F######
+#GGGGGGGGGGG#
+#GwwwwwwwwwG#
+#Gw-------wG#
+#Gw-eeeee-wG#
+#Gw-eLeLe-wG#
+#Gw-eeSee-wG#
+#Gw-eLeLe-wG#
+#Gw-eeeee-wG#
+#Gw-------wG#
+#GwwwwwwwwwG#
+#GGGGGGGGGGG#
+#############

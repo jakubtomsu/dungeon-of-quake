@@ -206,7 +206,7 @@ _app_init :: proc() {
 		.WINDOW_RESIZABLE,
 		.FULLSCREEN_MODE,
 		//.WINDOW_HIGHDPI,
-		.VSYNC_HINT,
+		//.VSYNC_HINT,
 	})
 	rl.InitWindow(0, 0, "Dungeon of Quake")
 	rl.ToggleFullscreen()
@@ -214,7 +214,7 @@ _app_init :: proc() {
 	windowSizeY = rl.GetScreenHeight()
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
-	//rl.SetTargetFPS(75)
+	rl.SetTargetFPS(75)
 
 	rl.InitAudioDevice()
 
@@ -312,7 +312,6 @@ _app_init :: proc() {
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
 	//normalFont = loadFont("metalord.ttf")
-	menu_data.titleFont		= loadFont("eurcntrc.ttf")
 	menu_data.normalFont		= loadFont("germania_one.ttf")
 	menu_data.selectSound		= loadSound("button4.wav")
 	menu_data.setValSound		= loadSound("button3.wav")
@@ -675,7 +674,7 @@ ENEMY_HEADSHOT_HALF_OFFSET	:: 0.0
 ENEMY_GRAVITY			:: 5.0
 
 ENEMY_GRUNT_SIZE		:: vec3{2.5, 4.5, 2.5}
-ENEMY_GRUNT_ACCELERATION	:: 13
+ENEMY_GRUNT_ACCELERATION	:: 130
 ENEMY_GRUNT_MAX_SPEED		:: 14
 ENEMY_GRUNT_FRICTION		:: 5
 ENEMY_GRUNT_MIN_GOOD_DIST	:: 30
@@ -688,7 +687,7 @@ ENEMY_GRUNT_DIST_RAND		:: 0.7
 ENEMY_GRUNT_MAX_DIST		:: 250.0
 
 ENEMY_KNIGHT_SIZE		:: vec3{2.0, 3.5, 2.0}
-ENEMY_KNIGHT_ACCELERATION	:: 12
+ENEMY_KNIGHT_ACCELERATION	:: 120
 ENEMY_KNIGHT_MAX_SPEED		:: 12
 ENEMY_KNIGHT_FRICTION		:: 4
 ENEMY_KNIGHT_DAMAGE		:: 0.8
@@ -826,7 +825,7 @@ _enemy_updateDataAndRender :: proc() {
 			enemy_data.grunts[i].vel = speed < ENEMY_GRUNT_MAX_SPEED ? enemy_data.grunts[i].vel : (enemy_data.grunts[i].vel/speed)*ENEMY_GRUNT_MAX_SPEED
 			speed = max(speed, ENEMY_GRUNT_MAX_SPEED)
 			
-			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.grunts[i].vel, ENEMY_GRUNT_SIZE)
+			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.grunts[i].vel*deltatime, ENEMY_GRUNT_SIZE)
 			if mov_hit && mov_norm.y > 0.2 { // if on ground
 				enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
 	
@@ -900,13 +899,13 @@ _enemy_updateDataAndRender :: proc() {
 			} else {
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
 			}
-		
+
 			enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
 			speed := linalg.length(enemy_data.knights[i].vel)
 			enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
 			speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
-			
-			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.knights[i].vel, ENEMY_KNIGHT_SIZE)
+
+			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.knights[i].vel*deltatime, ENEMY_KNIGHT_SIZE)
 			if mov_hit && mov_norm.y > 0.2 { // if on ground
 				enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
 				if enemy_data.knights[i].isMoving {

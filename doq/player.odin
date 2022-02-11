@@ -144,7 +144,7 @@ _player_update :: proc() {
 
 	jumped := isJumpInputOn() && player_data.isOnGround
 	if jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*4.0, 0.0, 1.0)-0.08)*45.0)
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*4.0, 0.0, 1.0)-0.0)*45.0)
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
@@ -207,9 +207,16 @@ _player_update :: proc() {
 
 
 	if phy_hit {
+		//player_data.vel = linalg.lerp(
+		//	player_data.vel,
+		//	//phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 1.0),
+		//	clamp(deltatime*PLAYER_SPEED*20.0/wishspeed, 0.01, 0.99),
+		//)
+		player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
+		player_data.vel -= phy_norm*0.05
+
 		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : clamp(deltatime*math.sqrt(wishspeed)*10.0, 0.001, 0.99))
-		player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 0.99)
-		//player_data.vel -= phy_norm*deltatime*wishspeed
+		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : clamp(deltatime*wishspeed, 0.01, 0.99))
 	}
 
 	frictmul : f32 = 1.0
