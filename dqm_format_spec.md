@@ -118,3 +118,4 @@ Subdirectories are supported in the map selection menu, but their name isn't rel
 - enemies can't go over an edge
 - ground friction is increased multiple times when the player get's close to an edge
 - player can hold space to bunny hop and gain speed, but changing direction is difficult
+- player can quick-switch weapons, and the delay between shots is 0.1s

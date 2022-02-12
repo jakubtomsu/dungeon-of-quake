@@ -23,7 +23,7 @@ TILE_MIN_HEIGHT	:: TILE_WIDTH
 TILEMAP_Y_TILES	:: 7
 TILE_HEIGHT	:: TILE_WIDTH * TILEMAP_Y_TILES
 TILEMAP_MID	:: 4
-TILE_OUT_OF_BOUNDS_SIZE :: 15000.0
+TILE_OUT_OF_BOUNDS_SIZE :: 2000.0
 
 TILE_ELEVATOR_MOVE_FACTOR	:: 0.55
 TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
@@ -261,6 +261,9 @@ map_clearAll :: proc() {
 	map_data.gunPickupCount = 0
 	map_data.healthPickupSpawnCount = 0
 	map_data.healthPickupCount = 0
+
+	enemy_data.gruntCount = 0
+	enemy_data.knightCount = 0
 
 	delete(map_data.elevatorHeights)
 

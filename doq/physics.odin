@@ -69,6 +69,7 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	posxz := vec2{pos.x, pos.z}
 	dir := wishpos - pos
 	linelen := linalg.length(dir)
+	println("PHY: linelen", linelen)
 	if !map_isTilePosValid(map_worldToTile(pos)) do return linelen, {0,0.1,0}, false
 	lowerleft := map_tilePosClamp(map_worldToTile(pos - vec3{dir.x>0.0 ? 1.0:-1.0, 0.0, dir.z>0.0 ? 1.0:-1.0}*TILE_WIDTH))
 	tilepos := lowerleft
@@ -90,6 +91,8 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	}
 
 	ctx : phy_boxcastContext_t = {}
+
+	//linelen = glsl.max(linelen, PHY_BOXCAST_EPS*2.0)
 
 	ctx.pos		= pos
 	ctx.dirsign	= vec3{sign(dir.x), sign(dir.y), sign(dir.z)}
@@ -291,6 +294,7 @@ phy_boxcastWorld :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (res_tn 
 		res_hit		= t_hit
 		res_enemykind	= enemy_kind_t.NONE
 	}
+
 	return
 }
 
@@ -303,7 +307,7 @@ phy_clipVelocity :: proc(vel : vec3, normal : vec3, overbounce : f32) -> vec3 {
 }
 
 // retains speed
-phy_slideVelocityOnSurf :: proc(vel : vec3, normal : vec3, impactFriction : f32) -> vec3 {
+phy_slideVelocityOnSurf :: proc(vel : vec3, normal : vec3) -> vec3 {
 	using linalg
 	d := dot(vel, normal)
 	if d > 0.0 do return vel
@@ -314,8 +318,11 @@ phy_slideVelocityOnSurf :: proc(vel : vec3, normal : vec3, impactFriction : f32)
 	return slidevel
 }
 
-phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32) -> vec3 {
-	len := linalg.vector_length(vel)
+
+
+phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32, disallowNegative : bool = true) -> vec3 {
+	len := linalg.length(vel)
 	drop := len * friction * deltatime
+	if disallowNegative do return (len == 0.0 ? {} : vel / len) * glsl.max(0.0, len - drop)
 	return (len == 0.0 ? {} : vel / len) * (len - drop)
 }

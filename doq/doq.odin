@@ -7,6 +7,7 @@ package doq
 
 
 
+import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
 import "core:fmt"
@@ -89,7 +90,7 @@ _doq_main :: proc() {
 		settings.audioMusicVolume	= clamp(settings.audioMusicVolume, 0.0, 1.0)
 		settings.crosshairOpacity	= clamp(settings.crosshairOpacity, 0.0, 1.0)
 		settings.mouseSensitivity	= clamp(settings.mouseSensitivity, 0.1, 5.0)
-		settings.FOV			= clamp(settings.FOV,		20.0, 170.0)
+		settings.FOV			= clamp(settings.FOV,		60.0, 160.0)
 		settings.viewmodelFOV		= clamp(settings.viewmodelFOV,	80.0, 120.0)
 		settings.gunXOffset		= clamp(settings.gunXOffset,	-0.4, 0.4)
 		rl.SetMasterVolume(settings.audioMasterVolume)
@@ -214,7 +215,8 @@ _app_init :: proc() {
 	windowSizeY = rl.GetScreenHeight()
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
-	rl.SetTargetFPS(75)
+	rl.SetTargetFPS(144)
+	rl.SetTargetFPS(60)
 
 	rl.InitAudioDevice()
 
@@ -245,7 +247,7 @@ _app_init :: proc() {
 	map_data.ambientMusic		= loadMusic("wind.wav")
 	map_data.elevatorSound		= loadSound("elevator.wav")
 	map_data.elevatorEndSound	= loadSound("elevator_end0.wav")
-	rl.SetSoundVolume(map_data.elevatorSound, 0.1)
+	rl.SetSoundVolume(map_data.elevatorSound, 0.4)
 	//rl.PlayMusicStream(map_data.backgroundMusic)
 	rl.PlayMusicStream(map_data.ambientMusic)
 	rl.SetMasterVolume(0.5)
@@ -574,10 +576,12 @@ bullet_createBulletLine :: proc(start : vec3, end : vec3, rad : f32, col : vec4,
 	bullet_data.bulletLines[index].duration	= duration
 }
 
-bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) -> f32 {
-	tn, hit, enemykind, enemyindex := phy_boxcastWorld(start, start + dir*1e6, vec3{rad,rad,rad})
+// @returns: tn, hitenemy
+bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4, effectDuration : f32) -> (f32, bool) {
+	tn, hit, enemykind, enemyindex := phy_boxcastWorld(start, start + dir*1e6, {0,0,0}) //vec3{rad,rad,rad})
 	hitpos := start + dir*tn
-	bullet_createBulletLine(start + dir*rad*2.0, hitpos, rad, col, effectDuration)
+	hitenemy := enemykind != enemy_kind_t.NONE
+	bullet_createBulletLine(start + dir*rad*2.0, hitpos, hitenemy?rad:rad*0.65, hitenemy?col:col*vec4{0.5,0.5,0.5,1.0}, hitenemy?effectDuration:effectDuration*0.7)
 	if hit {
 		switch enemykind {
 			case enemy_kind_t.NONE:
@@ -597,7 +601,8 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 				enemy_data.knights[enemyindex].vel += dir * 10.0 * damage
 		}
 	}
-	return tn
+
+	return tn, hitenemy
 }
 
 bullet_shootProjectile :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, col : vec4) {
@@ -629,7 +634,22 @@ _bullet_updateDataAndRender :: proc() {
 	for i : i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
 		fade := (bullet_data.bulletLines[i].timeToLive / bullet_data.bulletLines[i].duration)
 		col := bullet_data.bulletLines[i].color
+		sphfade := fade*fade
 
+		// thin white
+		rl.DrawSphere(
+			bullet_data.bulletLines[i].end,
+			sphfade * bullet_data.bulletLines[i].radius * 2.0,
+			rl.ColorFromNormalized(vec4{1,1,1,0.5 + sphfade*0.5}),
+		)
+
+		rl.DrawSphere(
+			bullet_data.bulletLines[i].end,
+			sphfade * bullet_data.bulletLines[i].radius * 4.0,
+			rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a*sphfade}),
+		)
+
+		// thin white
 		rl.DrawCylinderEx(
 			bullet_data.bulletLines[i].start,
 			bullet_data.bulletLines[i].end,
@@ -670,7 +690,7 @@ ENEMY_GRUNT_MAX_COUNT	:: 64
 ENEMY_KNIGHT_MAX_COUNT	:: 64
 
 ENEMY_HEALTH_MULTIPLIER		:: 1.5
-ENEMY_HEADSHOT_HALF_OFFSET	:: 0.0
+ENEMY_HEADSHOT_HALF_OFFSET	:: 0.2
 ENEMY_GRAVITY			:: 5.0
 
 ENEMY_GRUNT_SIZE		:: vec3{2.5, 4.5, 2.5}
@@ -693,7 +713,7 @@ ENEMY_KNIGHT_FRICTION		:: 4
 ENEMY_KNIGHT_DAMAGE		:: 0.8
 ENEMY_KNIGHT_ATTACK_TIME	:: 0.6
 ENEMY_KNIGHT_HEALTH		:: 1.0
-ENEMY_KNIGHT_RANGE		:: 8.0
+ENEMY_KNIGHT_RANGE		:: 5.0
 
 enemy_kind_t :: enum u8 {
 	NONE = 0,
@@ -718,6 +738,7 @@ enemy_data : struct {
 		target			: vec3,
 		isMoving		: bool,
 		vel			: vec3,
+		rot			: f32, // angle in radians around Y axis
 	},
 
 	knightCount : i32,
@@ -726,9 +747,10 @@ enemy_data : struct {
 		health		: f32,
 		pos		: vec3,
 		attackTimer	: f32,
-		isMoving	: bool,
 		vel		: vec3,
+		rot		: f32, // angle in radians around Y axis
 		target		: vec3,
+		isMoving	: bool,
 	},
 }
 
@@ -795,6 +817,9 @@ _enemy_updateDataAndRender :: proc() {
 
 			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
 
+			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x) // * math.sign(flatdir.x)
+			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 6.0/math.PI), clamp(deltatime*3.0, 0.0, 1.0))
+
 			if p_tn < ENEMY_GRUNT_SIZE.y {
 				player_data.vel = flatdir * 50.0
 				player_data.slowness = 0.1
@@ -827,7 +852,7 @@ _enemy_updateDataAndRender :: proc() {
 			
 			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.grunts[i].vel*deltatime, ENEMY_GRUNT_SIZE)
 			if mov_hit && mov_norm.y > 0.2 { // if on ground
-				enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION)
+				enemy_data.grunts[i].vel = phy_applyFrictionToVelocity(enemy_data.grunts[i].vel, ENEMY_GRUNT_FRICTION, true)
 	
 				if enemy_data.grunts[i].isMoving {
 					if !seeplayer {
@@ -855,14 +880,14 @@ _enemy_updateDataAndRender :: proc() {
 				enemy_data.grunts[i].pos += mov_norm*PHY_BOXCAST_EPS*2.0
 				enemy_data.grunts[i].vel += mov_norm*deltatime
 			}
-	
+
 			if speed > 1e-6 {
 				enemy_data.grunts[i].pos += (enemy_data.grunts[i].vel/speed) * mov_tn
 			}
 		}
-	
-	
-	
+
+
+
 		// update knights
 		for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 			if enemy_data.knights[i].health <= 0.0 do continue
@@ -887,6 +912,10 @@ _enemy_updateDataAndRender :: proc() {
 	
 	
 			flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
+
+			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x)
+			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 6.0/math.PI), clamp(deltatime*4.0, 0.0, 1.0))
+			//enemy_data.knights[i].rot += 1.0
 	
 			if seeplayer {
 				if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
@@ -907,7 +936,7 @@ _enemy_updateDataAndRender :: proc() {
 
 			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.knights[i].vel*deltatime, ENEMY_KNIGHT_SIZE)
 			if mov_hit && mov_norm.y > 0.2 { // if on ground
-				enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION)
+				enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION, true)
 				if enemy_data.knights[i].isMoving {
 					enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
 				}
@@ -936,13 +965,26 @@ _enemy_updateDataAndRender :: proc() {
 	for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 		if enemy_data.grunts[i].health <= 0.0 do continue
 		//rl.DrawCube(enemy_data.grunts[i].pos, ENEMY_GRUNT_SIZE.x*2, ENEMY_GRUNT_SIZE.y*2, ENEMY_GRUNT_SIZE.z*2, rl.PINK)
-		rl.DrawModel(enemy_data.gruntModel, enemy_data.grunts[i].pos, 1.0, rl.WHITE)
+		rl.DrawModelEx(
+			enemy_data.gruntModel,
+			enemy_data.grunts[i].pos,
+			{0,1,0}, math.to_degrees(enemy_data.grunts[i].rot), // rot
+			1.0,
+			rl.WHITE,
+		)
 	}
 
 	// render knights
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 		if enemy_data.knights[i].health <= 0.0 do continue
-		rl.DrawCube(enemy_data.knights[i].pos, ENEMY_KNIGHT_SIZE.x*2, ENEMY_KNIGHT_SIZE.y*2, ENEMY_KNIGHT_SIZE.z*2, rl.PINK)
+		rl.DrawModelEx(
+			enemy_data.knightModel,
+			enemy_data.knights[i].pos,
+			{0,1,0}, enemy_data.knights[i].rot*180.0/math.PI, // rot
+			//{0,1,0}, timepassed*360.0, // rot
+			1.0,
+			rl.WHITE,
+		)
 	}
 
 
@@ -1049,6 +1091,10 @@ randVec3 :: proc() -> vec3 {
 		rand.float32_range(-1.0, 1.0, &randData),
 		rand.float32_range(-1.0, 1.0, &randData),
 	}
+}
+
+roundstep :: proc(a : f32, step : f32) -> f32 {
+	return math.round(a * step) / step
 }
 
 

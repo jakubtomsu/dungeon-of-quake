@@ -18,17 +18,17 @@ import rl "vendor:raylib"
 
 
 PLAYER_MAX_HEALTH		:: 10
-PLAYER_HEAD_CENTER_OFFSET	:: 0.8
+PLAYER_HEAD_CENTER_OFFSET	:: 0.9
 PLAYER_LOOK_SENSITIVITY		:: 0.001
 PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
-PLAYER_SIZE			:: vec3{1.5,2.5,1.5}
+PLAYER_SIZE			:: vec3{1.2,2.2,1.2}
 PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 
 PLAYER_GRAVITY			:: 220 // 800
 PLAYER_SPEED			:: 105 // 320
 PLAYER_GROUND_ACCELERATION	:: 10 // 10
-PLAYER_GROUND_FRICTION		:: 4 // 6
+PLAYER_GROUND_FRICTION		:: 3 // 6
 PLAYER_AIR_ACCELERATION		:: 0.6 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
 PLAYER_JUMP_SPEED		:: 70 // 270
@@ -52,7 +52,7 @@ player_data : struct {
 	lastValidPos	: vec3,
 	lastValidVel	: vec3,
 	slowness	: f32,
-	onGroundTimer	: f32,
+	onGroundTimer	: f32, // timer after onGround state has changed
 
 	jumpSound		: rl.Sound,
 	footstepSound		: rl.Sound,
@@ -102,7 +102,7 @@ _player_update :: proc() {
 	vellen := linalg.length(player_data.vel)
 
 	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 3.0, 0.0, 1.0))
-	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.003, 2.0), 0.0, 1.0) * 0.8)
+	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0) * 0.8)
 	if !rl.IsSoundPlaying(player_data.swooshSound) do playSound(player_data.swooshSound)
 
 	if player_data.isOnGround && linalg.length(player_data.vel * vec3{1,0,1}) > 5.0 {
@@ -138,13 +138,13 @@ _player_update :: proc() {
 	c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
 	isInElevatorTile := c in map_data.elevatorHeights
 
-	player_data.vel.y -= (player_data.isOnGround ? PLAYER_GRAVITY/75.0 : PLAYER_GRAVITY * deltatime)
+	player_data.vel.y -= (player_data.isOnGround ? PLAYER_GRAVITY*0.001 : PLAYER_GRAVITY*deltatime)
 
 	isJumpInputOn :: proc() -> bool { return rl.IsKeyDown(PLAYER_KEY_JUMP) }
 
 	jumped := isJumpInputOn() && player_data.isOnGround
 	if jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*4.0, 0.0, 1.0)-0.0)*45.0)
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*10.0, 0.0, 1.0))*28.0)
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
@@ -155,6 +155,7 @@ _player_update :: proc() {
 
 
 
+	// acceleration is frame-rate independent
 	player_accelerate :: proc(dir : vec3, wishspeed : f32, accel : f32) {
 		currentspeed := linalg.dot(player_data.vel, dir)
 		addspeed := wishspeed - currentspeed
@@ -172,20 +173,38 @@ _player_update :: proc() {
 
 	wishspeed := linalg.length(player_data.vel)
 	wishpos := player_data.pos + player_data.vel * deltatime
-	
-	phy_tn, phy_norm, phy_hit := phy_boxcastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
-	phy_vec := player_data.pos + (wishspeed == 0.0 ? {} : player_data.vel/wishspeed)*phy_tn
-	player_data.pos = phy_vec
-	if phy_hit do player_data.pos += phy_norm*PHY_BOXCAST_EPS*2.0
 
+	phy_tn, phy_norm, phy_hit := phy_boxcastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
 	prevIsOnGround := player_data.isOnGround
 	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
+
+	veldir : vec3 = (wishspeed == 0.0 ? {} : player_data.vel/wishspeed)
+	phy_vec := player_data.pos + veldir*phy_tn
+	player_data.pos = phy_vec
+	//player_data.vel = linalg.lerp(player_data.vel, veldir*(phy_tn + f32(player_data.isOnGround?PHY_BOXCAST_EPS:0.0))/deltatime, 1.0)
+
+	if !prevIsOnGround && player_data.isOnGround && movedir != {} { // just landed
+		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 0.5)
+		player_data.vel = linalg.lerp(player_data.vel, phy_slideVelocityOnSurf(player_data.vel, phy_norm), 0.8)
+	}
+
+	if phy_hit {
+		player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.99
+		if !player_data.isOnGround && player_data.onGroundTimer > 0.05 {
+			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.1) // bounce off of a wall if player has been in air for some time
+		} else {
+			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5), 0.05, 0.99))
+		}
+		//player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
+		//player_data.vel.y -= (phy_norm.y + 0.1)*0.2*(wishspeed/PLAYER_SPEED + 1.0)/2.0
+	}
 	
-	println("pos", player_data.pos, "vel", player_data.vel)
+	println("pos", player_data.pos, "vel", player_data.vel, "vellen", linalg.length(player_data.vel))
 	println("phy vec", phy_vec, "tn", phy_tn, "norm", phy_norm, "hit", phy_hit)
 	println("isOnGround", player_data.isOnGround)
 	
 
+	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0
 
 	if player_data.isOnGround {
 		player_data.lastValidPos = player_data.pos
@@ -199,38 +218,6 @@ _player_update :: proc() {
 		}
 		player_data.rotImpulse.x += 0.03
 	}
-
-	if prevIsOnGround && !player_data.isOnGround && !jumped && player_data.onGroundTimer>0.1 {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 42)
-	}
-
-
-
-	if phy_hit {
-		//player_data.vel = linalg.lerp(
-		//	player_data.vel,
-		//	//phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : 1.0),
-		//	clamp(deltatime*PLAYER_SPEED*20.0/wishspeed, 0.01, 0.99),
-		//)
-		player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
-		player_data.vel -= phy_norm*0.05
-
-		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : clamp(deltatime*math.sqrt(wishspeed)*10.0, 0.001, 0.99))
-		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, !player_data.isOnGround && phy_hit ? 1.3 : clamp(deltatime*wishspeed, 0.01, 0.99))
-	}
-
-	frictmul : f32 = 1.0
-	forwdepth := phy_raycastDepth(player_data.pos + player_data.vel*vec3{1,0,1}*deltatime*6.0)
-	println("forwdepth", forwdepth)
-	if forwdepth > PLAYER_SIZE.y*2.0 && movedir == {} {
-		frictmul += 5.0
-	}
-
-	player_data.vel = phy_applyFrictionToVelocity(
-		player_data.vel,
-		(f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION : PLAYER_AIR_FRICTION)*frictmul + player_data.slowness*15.0)*deltatime*75,
-	)
-
 
 
 
@@ -262,11 +249,12 @@ _player_update :: proc() {
 
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
-				player_data.vel.y = -PLAYER_GRAVITY * deltatime
+				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 8)
+				player_data.vel.y = -PLAYER_GRAVITY * deltatime * 2.0 // also slows down elevator movement
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
-				player_data.vel.y = PLAYER_JUMP_SPEED + TILE_ELEVATOR_SPEED*deltatime*20.0
+				player_data.vel.y = PLAYER_JUMP_SPEED + TILE_ELEVATOR_SPEED
 				player_data.pos.y += 0.02
 				height -= 0.02
 				elevatorIsMoving = false
@@ -284,6 +272,37 @@ _player_update :: proc() {
 	}
 
 	player_data.isOnGround |= elevatorIsMoving
+
+
+	// friction when walking off of edge
+	if prevIsOnGround && !player_data.isOnGround && !jumped && player_data.onGroundTimer>0.1 {
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, elevatorIsMoving ? 100.0 : 42.0, true)
+	}
+
+
+	// apply main friction
+	{
+		START_FRICT_ADD :: 0.01
+		frictadd : f32 = START_FRICT_ADD
+		forwdepth := phy_raycastDepth(player_data.pos + player_data.vel*vec3{1,0,1}*deltatime*6.0*PLAYER_SIZE.x*2.0)
+		println("forwdepth", forwdepth)
+		if forwdepth > PLAYER_SIZE.y*2.0 && movedir == {} && player_data.isOnGround {
+			frictadd += 5.0
+		}
+
+		player_data.vel = phy_applyFrictionToVelocity(
+			player_data.vel,
+			(f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION*(1.0 + (frictadd-START_FRICT_ADD)) : PLAYER_AIR_FRICTION) + player_data.slowness*10.0),
+		)
+
+		// this should fixe some weird jittering when friction is increased
+		// (just a garbage formula)
+		player_data.vel -= phy_norm*frictadd*0.1
+	
+		//if player_data.isOnGround do player_data.vel.y = -PLAYER_GRAVITY * deltatime
+	}
+
+
 
 
 
@@ -328,8 +347,7 @@ _player_update :: proc() {
 
 
 
-	if player_data.isOnGround do player_data.onGroundTimer += deltatime
-	else do player_data.onGroundTimer = 0.0
+	player_data.onGroundTimer += deltatime
 }
 
 
@@ -350,7 +368,7 @@ player_initData :: proc() {
 	player_data.vel = {}
 	gun_data.timer = 0
 	player_data.health = PLAYER_MAX_HEALTH
-	player_data.vel = {0, 0.1, 0}
+	player_data.vel = {0, 0.1, 0.5}
 	player_data.lookDir = {0,0,1}
 
 	gun_data.ammoCounts = gun_startAmmoCounts
@@ -430,9 +448,9 @@ gun_calcViewportPos :: proc() -> vec3 {
 gun_getMuzzleOffset :: proc() -> vec3 {
 	offs := vec3{}
 	switch gun_data.equipped {
-		case gun_kind_t.SHOTGUN:	offs = {0,0,0.6}
+		case gun_kind_t.SHOTGUN:	offs = {0,0,0.7}
 		case gun_kind_t.MACHINEGUN:	offs = {0,0,0.9}
-		case gun_kind_t.LASERRIFLE:	offs = {0,0,0.5}
+		case gun_kind_t.LASERRIFLE:	offs = {0,0,0.7}
 	}
 	return offs
 }
@@ -449,8 +467,8 @@ gun_drawModel :: proc(pos : vec3) {
 	rl.DrawModel(gun_data.gunModels[gunindex], pos, GUN_SCALE, rl.WHITE)
 
 	// flare
-	FADETIME :: 0.15
-	fade := (gun_data.timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME
+	FADETIME :: 0.07
+	fade := math.pow((gun_data.timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME, 1.0)
 	if fade > 0.0 {
 		rnd := randVec3() * f32(gameIsPaused ? 0.0 : 1.0)
 		muzzleoffs := gun_getMuzzleOffset() + rnd*0.02
@@ -474,7 +492,7 @@ _gun_update :: proc() {
 
 
 	if gun_data.equipped != prevgun {
-		gun_data.timer = -1.0
+		gun_data.timer = 0.1
 		if gun_data.ammoCounts[gunindex] <= 0 {
 			playSoundMulti(gun_data.emptyMagSound)
 		}
@@ -494,7 +512,7 @@ _gun_update :: proc() {
 					RAD :: 0.5
 					COL :: vec4{1,0.7,0.2,0.9}
 					DUR :: 0.7
-					cl := bullet_shootRaycast(muzzlepos, player_data.lookDir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
+					cl, _ := bullet_shootRaycast(muzzlepos, player_data.lookDir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
@@ -511,15 +529,19 @@ _gun_update :: proc() {
 				case gun_kind_t.MACHINEGUN:
 					rnd := randVec3()
 					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + rnd*GUN_MACHINEGUN_SPREAD), GUN_MACHINEGUN_DAMAGE, 1.1, {0.6,0.7,0.8, 1.0}, 0.7)
-					if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 6.0
+					if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 2.0
 					player_data.rotImpulse.x -= 0.035
 					player_data.rotImpulse -= rnd * 0.01
 					playSoundMulti(gun_data.machinegunSound)
 
 				case gun_kind_t.LASERRIFLE:
-					bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
+					_, hitenemy := bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
 					player_data.vel /= 1.25
 					player_data.vel -= player_data.lookDir * 40
+					if hitenemy && !player_data.isOnGround {
+						player_data.vel -= player_data.lookDir * 50
+						player_data.vel.y += 50
+					}
 					player_data.rotImpulse.x -= 0.2
 					player_data.rotImpulse.y += 0.04
 					playSound(gun_data.laserrifleSound)

@@ -100,11 +100,11 @@ void main() {
 	vec2 griduv = floor(uv*64.0)/64.0;
 	//col += vec3(abs(fragNormal.x)*0.04 + fragNormal.y*0.04);
 	vec3 gridpos = toGridPos(fragPosition*1.0001/TILE_WIDTH);
-	float gridnoise = simplex3d(gridpos*1.0/5.0);
+	float gridnoise = simplex3d(gridpos*1.0/4.0);
 	gridnoise += sign(gridnoise)*0.2;
-	gridnoise += simplex3d(gridpos*vec3(1,0.25,1));
+	gridnoise += simplex3d(gridpos*vec3(2,0.5,2));
 	gridnoise += sign(gridnoise)*0.3;
-	col += vec3(gridnoise*0.02);
+	col += vec3(gridnoise*0.03);
 	//float tileCenterDist = (pow(abs(mod(griduv.x,1.0) - 0.5)*2.0, 3.0)+pow(abs(mod(griduv.y,1.0) - 0.5)*2.0, 3.0))*0.5;
 	//col = vec3(pow(tileCenterDist, 0.5));
 	//col *= vec3(1.0) + vec3(abs(gridnoise)*tileCenterDist*simplex3d(toGridPos(fragPosition/TILE_WIDTH)*0.4)*10.0);

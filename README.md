@@ -32,6 +32,7 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 
 
 # TODO
+- fix: physics is weird on high frame rates
 - 3D audio
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles

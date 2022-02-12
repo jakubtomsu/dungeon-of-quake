@@ -363,7 +363,7 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 		rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, MENU_BACKGROUND, unfade)))
 	
 		OFFS :: 200
-		STARTSCALE :: 12.0
+		STARTSCALE :: 4.0
 		scale := glsl.min(
 			f32(windowSizeX) / f32(menu_data.loadScreenLogo.width),
 			f32(windowSizeY) / f32(menu_data.loadScreenLogo.height),
