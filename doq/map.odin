@@ -17,7 +17,7 @@ import rl "vendor:raylib"
 
 
 
-MAP_MAX_WIDTH	:: 128
+MAP_SIDE_TILE_COUNT	:: 128
 TILE_WIDTH	:: 30.0
 TILE_MIN_HEIGHT	:: TILE_WIDTH
 TILEMAP_Y_TILES	:: 7
@@ -77,7 +77,7 @@ map_data : struct {
 	skyColor	: vec3, // normalized rgb
 	fogStrength	: f32,
 
-	tiles		: [MAP_MAX_WIDTH][MAP_MAX_WIDTH]map_tileKind_t, // TODO: allocate exact-size buffer on loadtime
+	tiles		: [MAP_SIDE_TILE_COUNT][MAP_SIDE_TILE_COUNT]map_tileKind_t, // TODO: allocate exact-size buffer on loadtime
 	bounds		: ivec2,
 	startPos	: vec3,
 	finishPos	: vec3,
@@ -100,10 +100,13 @@ map_data : struct {
 	tileShader			: rl.Shader,
 	tileShaderCamPosUniformIndex	: rl.ShaderLocationIndex,
 	portalShader			: rl.Shader,
+	cloudShader			: rl.Shader,
 
 	wallTexture		: rl.Texture2D,
 	portalTexture		: rl.Texture2D,
 	elevatorTexture		: rl.Texture2D,
+	cloudTexture		: rl.Texture2D,
+
 	backgroundMusic		: rl.Music,
 	ambientMusic		: rl.Music,
 	elevatorSound		: rl.Sound,
@@ -128,7 +131,7 @@ map_tileToWorld :: proc(p : ivec2) -> vec3 {
 }
 
 map_isTilePosInBufferBounds :: proc(coord : ivec2) -> bool {
-	return coord.x >= 0 && coord.y >= 0 && coord.x < MAP_MAX_WIDTH && coord.y < MAP_MAX_WIDTH
+	return coord.x >= 0 && coord.y >= 0 && coord.x < MAP_SIDE_TILE_COUNT && coord.y < MAP_SIDE_TILE_COUNT
 }
 
 map_isTilePosValid :: proc(coord : ivec2) -> bool {
@@ -249,6 +252,29 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 	return 0
 }
 
+map_translateTile :: proc(srctile : map_tileKind_t) -> map_tileKind_t {
+	#partial switch srctile {
+		case .START_LOWER:		return .EMPTY
+		case .START_UPPER:		return .WALL_MID
+		case .FINISH_LOWER:		return .EMPTY
+		case .FINISH_UPPER:		return .WALL_MID
+		case .ENEMY_GRUNT_LOWER:	return .EMPTY
+		case .ENEMY_GRUNT_UPPER:	return .WALL_MID
+		case .ENEMY_KNIGHT_LOWER:	return .EMPTY
+		case .ENEMY_KNIGHT_UPPER:	return .WALL_MID
+		case .GUN_SHOTGUN_LOWER:	return .EMPTY
+		case .GUN_SHOTGUN_UPPER:	return .WALL_MID
+		case .GUN_MACHINEGUN_LOWER:	return .EMPTY
+		case .GUN_MACHINEGUN_UPPER:	return .WALL_MID
+		case .GUN_LASERRIFLE_LOWER:	return .EMPTY
+		case .GUN_LASERRIFLE_UPPER:	return .WALL_MID
+		case .PICKUP_HEALTH_LOWER:	return .EMPTY
+		case .PICKUP_HEALTH_UPPER:	return .WALL_MID
+	}
+
+	return srctile
+}
+
 
 
 map_clearAll :: proc() {
@@ -267,8 +293,8 @@ map_clearAll :: proc() {
 
 	delete(map_data.elevatorHeights)
 
-	for x : u32 = 0; x < MAP_MAX_WIDTH; x += 1 {
-		for y : u32 = 0; y < MAP_MAX_WIDTH; y += 1 {
+	for x : u32 = 0; x < MAP_SIDE_TILE_COUNT; x += 1 {
+		for y : u32 = 0; y < MAP_SIDE_TILE_COUNT; y += 1 {
 			map_data.tiles[x][y] = map_tileKind_t.NONE
 		}
 	}
@@ -347,67 +373,29 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/2 - TILE_WIDTH, 0}
 			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH*0.5, 0}
 		
-			// tile translation
 			#partial switch tile {
-				case map_tileKind_t.START_LOWER:
-					map_data.startPos = lowpos + vec3{0, PLAYER_SIZE.y*2, 0}
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.START_UPPER:
-					map_data.startPos = highpos + vec3{0, PLAYER_SIZE.y*2, 0}
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.FINISH_LOWER:
-					map_data.finishPos = lowpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.FINISH_UPPER:
-					map_data.finishPos = highpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.ELEVATOR: map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
-
-				case map_tileKind_t.ENEMY_GRUNT_LOWER:
-					enemy_spawnGrunt(lowpos + vec3{0, ENEMY_GRUNT_SIZE.y*1.2, 0})
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.ENEMY_GRUNT_UPPER:
-					enemy_spawnGrunt(highpos + vec3{0, ENEMY_GRUNT_SIZE.y*1.2, 0})
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.ENEMY_KNIGHT_LOWER:
-					enemy_spawnKnight(lowpos + vec3{0, ENEMY_KNIGHT_SIZE.y*2.0, 0})
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.ENEMY_KNIGHT_UPPER:
-					enemy_spawnKnight(highpos + vec3{0, ENEMY_KNIGHT_SIZE.y*2.0, 0})
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.GUN_SHOTGUN_LOWER:
-					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.GUN_SHOTGUN_UPPER:
-					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.GUN_MACHINEGUN_LOWER:
-					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.GUN_MACHINEGUN_UPPER:
-					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.GUN_LASERRIFLE_LOWER:
-					map_addGunPickup(lowpos + vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.GUN_LASERRIFLE_UPPER:
-					map_addGunPickup(highpos + vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
-					tile = map_tileKind_t.WALL_MID
-
-				case map_tileKind_t.PICKUP_HEALTH_LOWER:
+				case .START_LOWER:		map_data.startPos = lowpos + vec3{0, PLAYER_SIZE.y*2, 0}
+				case .START_UPPER:		map_data.startPos = highpos + vec3{0, PLAYER_SIZE.y*2, 0}
+				case .FINISH_LOWER:		map_data.finishPos = lowpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
+				case .FINISH_UPPER:		map_data.finishPos = highpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
+				case .ELEVATOR:			map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
+				case .ENEMY_GRUNT_LOWER:	enemy_spawnGrunt (lowpos  + vec3{0,ENEMY_GRUNT_SIZE.y*1.2 , 0})
+				case .ENEMY_GRUNT_UPPER:	enemy_spawnGrunt (highpos + vec3{0,ENEMY_GRUNT_SIZE.y*1.2 , 0})
+				case .ENEMY_KNIGHT_LOWER:	enemy_spawnKnight(lowpos  + vec3{0,ENEMY_KNIGHT_SIZE.y*2.0, 0})
+				case .ENEMY_KNIGHT_UPPER:	enemy_spawnKnight(highpos + vec3{0,ENEMY_KNIGHT_SIZE.y*2.0, 0})
+				case .GUN_SHOTGUN_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .SHOTGUN)
+				case .GUN_SHOTGUN_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .SHOTGUN)
+				case .GUN_MACHINEGUN_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .MACHINEGUN)
+				case .GUN_MACHINEGUN_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .MACHINEGUN)
+				case .GUN_LASERRIFLE_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .LASERRIFLE)
+				case .GUN_LASERRIFLE_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .LASERRIFLE)
+				case .PICKUP_HEALTH_LOWER:
 					rnd := vec2{
 						rand.float32_range(-1.0, 1.0, &randData),
 						rand.float32_range(-1.0, 1.0, &randData),
 					} * TILE_WIDTH * 0.3
 					map_addHealthPickup(lowpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
-					tile = map_tileKind_t.EMPTY
-				case map_tileKind_t.PICKUP_HEALTH_UPPER:
+				case .PICKUP_HEALTH_UPPER:
 					rnd := vec2{
 						rand.float32_range(-1.0, 1.0, &randData),
 						rand.float32_range(-1.0, 1.0, &randData),
@@ -416,7 +404,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 					tile = map_tileKind_t.WALL_MID
 			}
 
-			map_data.tiles[x][y] = tile
+			map_data.tiles[x][y] = map_translateTile(tile)
 			//println("post", tile)
 		}
 
@@ -501,10 +489,28 @@ map_drawTilemap :: proc() {
 	}
 	rl.EndShaderMode()
 
+	if settings.debugIsEnabled {
+		for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
+			for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
+				tilekind := map_data.tiles[x][y]
+				boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
+				boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
+				for i : i32 = 0; i < boxcount; i += 1 {
+					rl.DrawCubeWiresV(boxbuf[i].pos, boxbuf[i].size*2.0 + vec3{0.1,0.1,0.1}, rl.Fade(rl.GREEN, 0.25))
+				}
+			}
+		}
+
+		rl.DrawGrid(MAP_SIDE_TILE_COUNT, TILE_WIDTH)
+	}
+
 	rl.BeginShaderMode(map_data.portalShader)
 	// draw finish
 	rl.DrawCubeTexture(map_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
 	rl.EndShaderMode()
+	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-4,-MAP_TILE_FINISH_SIZE.y*2-4,-MAP_TILE_FINISH_SIZE.z*2-4, {0,0,0,40})
+	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-2,-MAP_TILE_FINISH_SIZE.y*2-2,-MAP_TILE_FINISH_SIZE.z*2-2, {0,0,0,60})
+	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-1,-MAP_TILE_FINISH_SIZE.y*2-1,-MAP_TILE_FINISH_SIZE.z*2-1, {0,0,0,90})
 
 	// draw pickups and update them
 	{
@@ -561,8 +567,20 @@ map_drawTilemap :: proc() {
 		}
 	}
 
-	//circpos := vec3{player_data.pos.x, -TILE_HEIGHT*0.5 + TILE_WIDTH*0.5, player_data.pos.z}
 	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*2,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
 	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*1,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
 	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*0,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
+
+	{
+		W :: 2048
+		c : vec3 = player_data.pos
+		rl.BeginShaderMode(map_data.cloudShader)
+		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,25})
+		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,20})
+		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
+		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {100,100,100,50})
+		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,30})
+		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
+		rl.EndShaderMode()
+	}
 }

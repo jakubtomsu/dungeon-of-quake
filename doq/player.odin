@@ -26,12 +26,12 @@ PLAYER_SIZE			:: vec3{1.2,2.2,1.2}
 PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 
 PLAYER_GRAVITY			:: 220 // 800
-PLAYER_SPEED			:: 105 // 320
-PLAYER_GROUND_ACCELERATION	:: 10 // 10
-PLAYER_GROUND_FRICTION		:: 3 // 6
+PLAYER_SPEED			:: 100 // 320
+PLAYER_GROUND_ACCELERATION	:: 8 // 10
+PLAYER_GROUND_FRICTION		:: 5.5 // 6
 PLAYER_AIR_ACCELERATION		:: 0.6 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
-PLAYER_JUMP_SPEED		:: 70 // 270
+PLAYER_JUMP_SPEED		:: 60 // 270
 PLAYER_MIN_NORMAL_Y		:: 0.25
 
 PLAYER_FALL_DEATH_Y :: -TILE_HEIGHT*1.8
@@ -101,8 +101,9 @@ _player_update :: proc() {
 
 	vellen := linalg.length(player_data.vel)
 
-	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 3.0, 0.0, 1.0))
-	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0) * 0.8)
+	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 4.0, 0.0, 1.0))
+	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0))
+	rl.SetSoundPitch (player_data.swooshSound, clamp(player_data.swooshStrength*0.003, 0.0, 2.0)+0.5)
 	if !rl.IsSoundPlaying(player_data.swooshSound) do playSound(player_data.swooshSound)
 
 	if player_data.isOnGround && linalg.length(player_data.vel * vec3{1,0,1}) > 5.0 {
@@ -144,7 +145,7 @@ _player_update :: proc() {
 
 	jumped := isJumpInputOn() && player_data.isOnGround
 	if jumped {
-		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*10.0, 0.0, 1.0))*28.0)
+		player_data.vel = phy_applyFrictionToVelocity(player_data.vel, (clamp(player_data.onGroundTimer*10.0, 0.0, 1.0))*31.0)
 		player_data.vel.y = PLAYER_JUMP_SPEED
 		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
@@ -189,11 +190,16 @@ _player_update :: proc() {
 	}
 
 	if phy_hit {
-		player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.99
+		player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
 		if !player_data.isOnGround && player_data.onGroundTimer > 0.05 {
 			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.1) // bounce off of a wall if player has been in air for some time
 		} else {
-			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5), 0.05, 0.99))
+			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5)*1.5, 0.05, 0.99))
+			player_data.vel = phy_clipVelocity(
+				player_data.vel,
+				phy_norm,
+				clamp(deltatime*144.0*0.07, 0.002,0.98),
+			)
 		}
 		//player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
 		//player_data.vel.y -= (phy_norm.y + 0.1)*0.2*(wishspeed/PLAYER_SPEED + 1.0)/2.0
@@ -202,7 +208,6 @@ _player_update :: proc() {
 	println("pos", player_data.pos, "vel", player_data.vel, "vellen", linalg.length(player_data.vel))
 	println("phy vec", phy_vec, "tn", phy_tn, "norm", phy_norm, "hit", phy_hit)
 	println("isOnGround", player_data.isOnGround)
-	
 
 	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0
 
@@ -250,7 +255,7 @@ _player_update :: proc() {
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
 				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 8)
-				player_data.vel.y = -PLAYER_GRAVITY * deltatime * 2.0 // also slows down elevator movement
+				player_data.vel.y = -PLAYER_GRAVITY * 0.01 // also slows down elevator movement
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
@@ -336,10 +341,6 @@ _player_update :: proc() {
 	}
 
 	if settings.debugIsEnabled {
-		rl.DrawCubeWires(map_tileToWorld(tilepos), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GREEN)
-	}
-
-	if settings.debugIsEnabled {
 		depth := phy_raycastDepth(player_data.pos)
 		rl.DrawCube(player_data.pos + vec3{0, -depth, 0}, 1,1,1, rl.GREEN)
 		println("depth", depth)
@@ -421,6 +422,7 @@ gun_shootTimes : [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
 
 gun_data : struct {
 	equipped	: gun_kind_t,
+	lastEquipped	: gun_kind_t,
 	timer		: f32,
 
 	ammoCounts	: [GUN_COUNT]i32,
@@ -434,6 +436,7 @@ gun_data : struct {
 	headshotSound	: rl.Sound,
 	emptyMagSound	: rl.Sound,
 	ammoPickupSound	: rl.Sound,
+	gunSwitchSound	: rl.Sound,
 }
 
 
@@ -490,9 +493,15 @@ _gun_update :: proc() {
 	gun_data.equipped = cast(gun_kind_t)gunindex
 	gunindex = cast(i32)gun_data.equipped
 
+	if rl.IsKeyPressed(rl.KeyboardKey.Q) {
+		gun_data.equipped	= gun_data.lastEquipped
+		gun_data.lastEquipped	= prevgun
+	}
+
 
 	if gun_data.equipped != prevgun {
 		gun_data.timer = 0.1
+		playSound(gun_data.gunSwitchSound)
 		if gun_data.ammoCounts[gunindex] <= 0 {
 			playSoundMulti(gun_data.emptyMagSound)
 		}

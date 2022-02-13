@@ -185,7 +185,7 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 		}
 	}
 	
-	ctx.tmin = clamp(ctx.tmin, -MAP_MAX_WIDTH*TILE_WIDTH, MAP_MAX_WIDTH*TILE_WIDTH)
+	ctx.tmin = clamp(ctx.tmin, -MAP_SIDE_TILE_COUNT*TILE_WIDTH, MAP_SIDE_TILE_COUNT*TILE_WIDTH)
 
 	return ctx.tmin, ctx.normal, ctx.hit
 }

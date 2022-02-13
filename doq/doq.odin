@@ -17,6 +17,7 @@ import "core:path/filepath"
 import "core:strings"
 import "core:strconv"
 import rl "vendor:raylib"
+import "gui"
 
 
 
@@ -27,6 +28,8 @@ vec4 :: rl.Vector4
 ivec2 :: [2]i32
 ivec3 :: [3]i32
 mat3 :: linalg.Matrix3f32
+
+DOQ_VERSION_STRING :: "pre-alpha-3"
 
 
 
@@ -79,8 +82,6 @@ app_updatePathKind : app_updatePathKind_t
 _doq_main :: proc() {
 	_app_init()
 
-	menu_data.startOffs = -10
-
 	for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
 		println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
@@ -99,6 +100,10 @@ _doq_main :: proc() {
 		viewmodelCamera.fovy	= settings.viewmodelFOV
 	
 		rl.DisableCursor()
+
+		gui.menuContext.windowSizeX = windowSizeX
+		gui.menuContext.windowSizeY = windowSizeY
+		gui.menuContext.deltatime = deltatime
 
 		if playingMusic != nil {
 			rl.UpdateMusicStream(playingMusic^)
@@ -207,7 +212,7 @@ _app_init :: proc() {
 		.WINDOW_RESIZABLE,
 		.FULLSCREEN_MODE,
 		//.WINDOW_HIGHDPI,
-		//.VSYNC_HINT,
+		.VSYNC_HINT,
 	})
 	rl.InitWindow(0, 0, "Dungeon of Quake")
 	rl.ToggleFullscreen()
@@ -216,7 +221,7 @@ _app_init :: proc() {
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
 	rl.SetTargetFPS(144)
-	rl.SetTargetFPS(60)
+	//rl.SetTargetFPS(20)
 
 	rl.InitAudioDevice()
 
@@ -232,6 +237,7 @@ _app_init :: proc() {
 	postprocessShader		= loadFragShader("postprocess.frag")
 	map_data.tileShader		= loadShader("tile.vert", "tile.frag")
 	map_data.portalShader		= loadShader("portal.vert", "portal.frag")
+	map_data.cloudShader		= loadShader("primitive.vert", "cloud.frag")
 	bullet_data.bulletLineShader	= loadShader("bulletLine.vert", "bulletLine.frag")
 	map_data.tileShaderCamPosUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "camPos")
 
@@ -240,6 +246,7 @@ _app_init :: proc() {
 	map_data.wallTexture		= loadTexture("tile0.png")
 	map_data.portalTexture		= loadTexture("portal.png")
 	map_data.elevatorTexture	= loadTexture("metal.png")
+	map_data.cloudTexture		= loadTexture("clouds.png")
 
 	if !rl.IsAudioDeviceReady() do time.sleep(10)
 
@@ -258,6 +265,7 @@ _app_init :: proc() {
 	gun_data.headshotSound		= loadSound("headshot.wav")
 	gun_data.emptyMagSound		= loadSound("emptymag.wav")
 	gun_data.ammoPickupSound	= loadSound("ammo_pickup.wav")
+	gun_data.gunSwitchSound		= loadSound("gun_switch.wav")
 	rl.SetSoundVolume(gun_data.headshotSound, 1.0)
 	rl.SetSoundPitch (gun_data.headshotSound, 0.85)
 	rl.SetSoundVolume(gun_data.shotgunSound, 0.55)
@@ -292,14 +300,15 @@ _app_init :: proc() {
 	map_data.boxModel.materials[1].shader		= map_data.defaultShader
 	//rl.SetMaterialTexture(&map_data.boxModel.materials[1], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
 
-	enemy_data.gruntHitSound	= loadSound("death2.wav")
+	enemy_data.gruntHitSound	= loadSound("death3.wav")
 	enemy_data.gruntDeathSound	= enemy_data.gruntHitSound
 	enemy_data.knightHitSound	= enemy_data.gruntHitSound
 	enemy_data.knightDeathSound	= enemy_data.gruntHitSound
 	enemy_data.gruntModel		= loadModel("grunt.glb")
-	enemy_data.knightModel		= enemy_data.gruntModel
-	rl.SetSoundVolume(enemy_data.gruntHitSound, 0.3)
-
+	enemy_data.knightModel		= loadModel("guy.imq")
+	enemy_data.knightAnim		= loadModelAnim("guy.iqm", &enemy_data.knightAnimCount)
+	rl.SetSoundVolume(enemy_data.gruntHitSound, 0.35)
+	rl.SetSoundPitch(enemy_data.gruntHitSound, 1.3)
 
 	camera.position = {0, 3, 0}
 	camera.target = {}
@@ -313,19 +322,20 @@ _app_init :: proc() {
 	viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
+	gui.menuContext.normalFont		= loadFont("germania_one.ttf")
+	gui.menuContext.selectSound		= loadSound("button4.wav")
+	gui.menuContext.setValSound		= loadSound("button3.wav")
+	rl.SetSoundVolume(gui.menuContext.selectSound, 0.6)
+	rl.SetSoundVolume(gui.menuContext.setValSound, 0.8)
+
 	//normalFont = loadFont("metalord.ttf")
-	menu_data.normalFont		= loadFont("germania_one.ttf")
-	menu_data.selectSound		= loadSound("button4.wav")
-	menu_data.setValSound		= loadSound("button3.wav")
 	menu_data.loadScreenMusic	= loadMusic("ambient0.wav")
-	rl.SetSoundVolume(menu_data.selectSound, 0.6)
-	rl.SetSoundVolume(menu_data.setValSound, 0.8)
 	rl.PlayMusicStream(menu_data.loadScreenMusic)
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 	
 	map_clearAll()
-	map_data.bounds = {MAP_MAX_WIDTH, MAP_MAX_WIDTH}
+	map_data.bounds = {MAP_SIDE_TILE_COUNT, MAP_SIDE_TILE_COUNT}
 	if os.is_file(appendToAssetPath("maps", "_quickload.dqm")) {
 		map_loadFromFile("_quickload.dqm")
 		app_setUpdatePathKind(.GAME)
@@ -414,7 +424,22 @@ _app_render3d :: proc() {
 		&timepassed,
 		rl.ShaderUniformDataType.FLOAT,
 	)
-	
+
+	rl.SetShaderValue(
+		map_data.cloudShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.cloudShader, "timePassed"),
+		&timepassed,
+		rl.ShaderUniformDataType.FLOAT,
+	)
+	rl.SetShaderValue(
+		map_data.cloudShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.cloudShader, "camPos"),
+		&camera.position,
+		rl.ShaderUniformDataType.VEC3,
+	)
+
+
+
 	map_drawTilemap()
 }
 
@@ -589,14 +614,14 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 				headshot := hitpos.y > enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.grunts[enemyindex].health -= headshot ? damage*2 : damage
 				if headshot do playSound(gun_data.headshotSound)
-				playSoundMulti(enemy_data.gruntHitSound)
+				playSound(enemy_data.gruntHitSound)
 				if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.gruntDeathSound)
 				enemy_data.grunts[enemyindex].vel += dir * 10.0 * damage
 			case enemy_kind_t.KNIGHT:
 				headshot := hitpos.y > enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.knights[enemyindex].health -= headshot ? damage*2 : damage
 				if headshot do playSound(gun_data.headshotSound)
-				playSoundMulti(enemy_data.knightHitSound)
+				playSound(enemy_data.knightHitSound)
 				if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.knightDeathSound)
 				enemy_data.knights[enemyindex].vel += dir * 10.0 * damage
 		}
@@ -645,7 +670,7 @@ _bullet_updateDataAndRender :: proc() {
 
 		rl.DrawSphere(
 			bullet_data.bulletLines[i].end,
-			sphfade * bullet_data.bulletLines[i].radius * 4.0,
+			(sphfade+2.0)/3.0 * bullet_data.bulletLines[i].radius * 4.0,
 			rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a*sphfade}),
 		)
 
@@ -721,6 +746,14 @@ enemy_kind_t :: enum u8 {
 	KNIGHT,
 }
 
+enemy_animState_t :: enum u8 {
+	BASE = 0, // idle
+	STEP_RIGHT,
+	STEP_MID,
+	STEP_LEFT,
+	HIT,
+}
+
 enemy_data : struct {
 	gruntHitSound		: rl.Sound,
 	gruntDeathSound		: rl.Sound,
@@ -728,6 +761,9 @@ enemy_data : struct {
 	knightDeathSound	: rl.Sound,
 	gruntModel		: rl.Model,
 	knightModel		: rl.Model,
+	knightAnim		: [^]rl.ModelAnimation,
+	knightAnimCount		: i32,
+	knightAnimFrame		: i32,
 
 	gruntCount : i32,
 	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
@@ -788,12 +824,15 @@ _enemy_updateDataAndRender :: proc() {
 	assert(enemy_data.gruntCount  < ENEMY_GRUNT_MAX_COUNT)
 	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
 
-
 	if !gameIsPaused {
+		enemy_data.knightAnimFrame += 1
+		rl.UpdateModelAnimation(enemy_data.knightModel, enemy_data.knightAnim[0], enemy_data.knightAnimFrame)
+		if enemy_data.knightAnimFrame >= enemy_data.knightAnim[0].frameCount do enemy_data.knightAnimFrame = 0
+
 		// update grunts
 		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 			if enemy_data.grunts[i].health <= 0.0 do continue
-	
+
 			pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y*0.5, 0}
 			dir := linalg.normalize(player_data.pos - pos)
 			// cast player
@@ -818,7 +857,7 @@ _enemy_updateDataAndRender :: proc() {
 			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
 
 			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x) // * math.sign(flatdir.x)
-			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 6.0/math.PI), clamp(deltatime*3.0, 0.0, 1.0))
+			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 5.0/math.PI), clamp(deltatime*3.0, 0.0, 1.0))
 
 			if p_tn < ENEMY_GRUNT_SIZE.y {
 				player_data.vel = flatdir * 50.0
@@ -833,7 +872,7 @@ _enemy_updateDataAndRender :: proc() {
 					// cast bullet
 					bulletdir := linalg.normalize(dir + randVec3()*rndstrength + player_data.vel*deltatime/PLAYER_SPEED)
 					bullet_tn, bullet_norm, bullet_hit := phy_boxcastTilemap(pos, pos + bulletdir*1e6, {EPS,EPS,EPS})
-					bullet_createBulletLine(pos, pos + bulletdir*bullet_tn, 2.0, vec4{1.0, 0.0, 0.5, 0.9}, 1.0)
+					bullet_createBulletLine(pos, pos + bulletdir*bullet_tn, 2.0, vec4{1.0, 0.0, 0.0, 1.0}, 1.0)
 					bulletplayer_tn, bulletplayer_hit := phy_boxcastPlayer(pos, bulletdir, {0,0,0})
 					if bulletplayer_hit && bulletplayer_tn < bullet_tn { // if the ray actually hit player first
 						player_damage(ENEMY_GRUNT_DAMAGE)
@@ -914,7 +953,7 @@ _enemy_updateDataAndRender :: proc() {
 			flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
 
 			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x)
-			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 6.0/math.PI), clamp(deltatime*4.0, 0.0, 1.0))
+			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 5.0/math.PI), clamp(deltatime*4.0, 0.0, 1.0))
 			//enemy_data.knights[i].rot += 1.0
 	
 			if seeplayer {
@@ -1056,6 +1095,12 @@ loadModel :: proc(path : string) -> rl.Model {
 	fullpath := appendToAssetPathCstr("models", path)
 	println("! loading model: ", fullpath)
 	return rl.LoadModel(fullpath)
+}
+
+loadModelAnim :: proc(path : string, outCount : ^i32) -> [^]rl.ModelAnimation {
+	fullpath := appendToAssetPathCstr("anim", path)
+	println("! loading anim: ", fullpath)
+	return rl.LoadModelAnimations(fullpath, outCount)
 }
 
 loadShader :: proc(vertpath : string, fragpath : string) -> rl.Shader {
