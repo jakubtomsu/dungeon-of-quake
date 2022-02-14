@@ -28,7 +28,7 @@ PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 PLAYER_GRAVITY			:: 220 // 800
 PLAYER_SPEED			:: 100 // 320
 PLAYER_GROUND_ACCELERATION	:: 8 // 10
-PLAYER_GROUND_FRICTION		:: 5.5 // 6
+PLAYER_GROUND_FRICTION		:: 0.0 // 6
 PLAYER_AIR_ACCELERATION		:: 0.6 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
 PLAYER_JUMP_SPEED		:: 60 // 270
@@ -94,7 +94,7 @@ _player_update :: proc() {
 	vellen := linalg.length(player_data.vel)
 
 	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 4.0, 0.0, 1.0))
-	rl.SetSoundVolume(asset_data.player.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0))
+	rl.SetSoundVolume(asset_data.player.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0)*0.75)
 	rl.SetSoundPitch (asset_data.player.swooshSound, clamp(player_data.swooshStrength*0.003, 0.0, 2.0)+0.5)
 	if !rl.IsSoundPlaying(asset_data.player.swooshSound) do playSound(asset_data.player.swooshSound)
 
@@ -171,8 +171,11 @@ _player_update :: proc() {
 	prevIsOnGround := player_data.isOnGround
 	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
 
+
 	veldir : vec3 = (wishspeed == 0.0 ? {} : player_data.vel/wishspeed)
 	phy_vec := player_data.pos + veldir*phy_tn
+
+	/*
 	player_data.pos = phy_vec
 	//player_data.vel = linalg.lerp(player_data.vel, veldir*(phy_tn + f32(player_data.isOnGround?PHY_BOXCAST_EPS:0.0))/deltatime, 1.0)
 
@@ -180,6 +183,7 @@ _player_update :: proc() {
 		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 0.5)
 		player_data.vel = linalg.lerp(player_data.vel, phy_slideVelocityOnSurf(player_data.vel, phy_norm), 0.8)
 	}
+	*/
 
 	if phy_hit {
 		player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
@@ -187,15 +191,17 @@ _player_update :: proc() {
 			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.1) // bounce off of a wall if player has been in air for some time
 		} else {
 			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5)*1.5, 0.05, 0.99))
-			player_data.vel = phy_clipVelocity(
-				player_data.vel,
-				phy_norm,
-				clamp(deltatime*144.0*0.07, 0.002,0.98),
-			)
+			//player_data.vel = phy_clipVelocity(
+			//	player_data.vel,
+			//	phy_norm,
+			//	clamp(deltatime*144.0*0.07, 0.002,0.98),
+			//)
 		}
 		//player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
 		//player_data.vel.y -= (phy_norm.y + 0.1)*0.2*(wishspeed/PLAYER_SPEED + 1.0)/2.0
 	}
+
+	player_data.pos, player_data.vel = phy_simulateMovingBody(player_data.pos, player_data.vel, 0.0, PLAYER_SIZE)
 	
 	println("pos", player_data.pos, "vel", player_data.vel, "vellen", linalg.length(player_data.vel))
 	println("phy vec", phy_vec, "tn", phy_tn, "norm", phy_norm, "hit", phy_hit)
@@ -246,8 +252,8 @@ _player_update :: proc() {
 
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
-				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 8)
-				player_data.vel.y = -PLAYER_GRAVITY * 0.01 // also slows down elevator movement
+				//player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 8)
+				player_data.vel.y = -PLAYER_GRAVITY * 0.1
 			}
 
 			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
@@ -278,6 +284,7 @@ _player_update :: proc() {
 
 
 	// apply main friction
+	/*
 	{
 		START_FRICT_ADD :: 0.01
 		frictadd : f32 = START_FRICT_ADD
@@ -289,7 +296,7 @@ _player_update :: proc() {
 
 		player_data.vel = phy_applyFrictionToVelocity(
 			player_data.vel,
-			(f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION*(1.0 + (frictadd-START_FRICT_ADD)) : PLAYER_AIR_FRICTION) + player_data.slowness*10.0),
+			(f32(player_data.isOnGround ? PLAYER_GROUND_FRICTION+(frictadd-START_FRICT_ADD) : PLAYER_AIR_FRICTION) + player_data.slowness*10.0),
 		)
 
 		// this should fixe some weird jittering when friction is increased
@@ -298,9 +305,7 @@ _player_update :: proc() {
 	
 		//if player_data.isOnGround do player_data.vel.y = -PLAYER_GRAVITY * deltatime
 	}
-
-
-
+	*/
 
 
 	cam_forw := linalg.matrix_mul_vector(player_data.lookRotMat3, vec3{0, 0, 1})
@@ -358,7 +363,6 @@ player_startMap :: proc() {
 
 player_initData :: proc() {
 	player_data.rotImpulse = {}
-	player_data.vel = {}
 	gun_data.timer = 0
 	player_data.health = PLAYER_MAX_HEALTH
 	player_data.vel = {0, 0.1, 0.5}
@@ -371,8 +375,6 @@ player_initData :: proc() {
 player_die :: proc() {
 	println("player died")
 	player_damage(1.0)
-	player_startMap()
-	player_initData()
 	world_reset()
 }
 

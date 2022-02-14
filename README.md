@@ -3,10 +3,12 @@
 </p>
 
 <p align="center">
-  Dungeon of Quake is a simple first person shooter, inspired by Quake.
-  </br>
-  Written in the <a href="https://odin-lang.org">Odin</a> programming language
-  and using <a href="https://raylib.com">Raylib</a>
+Dungeon of Quake is a simple first person shooter, inspired by Quake.
+</br>
+made with
+<a href="https://odin-lang.org">Odin programming language</a> 
+and
+<a href="https://raylib.com">Raylib</a>
 </p>
 </br>
 </br>
@@ -26,7 +28,7 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 
 
 # how to build
-- get the [Odin compiler](https://github.com/odin-lang/Odin)
+- get the [Odin compiler](https://github.com/odin-lang/Odin) (builds are usually tested on the last official release)
 - add Odin to `$PATH` enviroment variable
 - use `.\build.bat` command to build the game  
 - or use `.\build.bat run` command to build and run the game  
@@ -38,6 +40,7 @@ health pickup `h` is translated to `empty` tile, and the pickup itself gets spaw
 - 3D audio
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles
+- eventually render to G-buffer
 - (?) map editor, probaly as a separate program
 
 

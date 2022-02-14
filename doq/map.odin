@@ -56,6 +56,8 @@ map_tileKind_t :: enum u8 {
 	PICKUP_HEALTH_LOWER	= 'h', // translated
 	PICKUP_HEALTH_UPPER	= 'H', // translated
 
+	THORNS_LOWER		= 't',
+
 	GUN_SHOTGUN_LOWER	= 'd', // translated // as default
 	GUN_SHOTGUN_UPPER	= 'D', // translated
 	GUN_MACHINEGUN_LOWER	= 'm', // translated
@@ -172,40 +174,40 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 	posxz := vec2{cast(f32)coord[0]+0.5, cast(f32)coord[1]+0.5}*TILE_WIDTH
 
 	#partial switch tileKind {
-		case map_tileKind_t.NONE:
+		case .NONE:
 			return 0
 
-		case map_tileKind_t.FULL:
+		case .FULL:
 			boxbuf[0] = box_t{vec3{posxz[0], TILE_WIDTH*0.5, posxz[1]}, vec3{TILE_WIDTH/2, TILE_OUT_OF_BOUNDS_SIZE/2, TILE_WIDTH/2}}
 			return 1
 
-		case map_tileKind_t.EMPTY:
+		case .EMPTY:
 			boxbuf[0] = map_floorTilePosSize(posxz)
 			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
 
-		case map_tileKind_t.WALL_MID:
+		case .WALL_MID:
 			boxbuf[0] = phy_calcBox(posxz, -2, 5)
 			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
 
-		case map_tileKind_t.PLATFORM_SMALL:
+		case .PLATFORM_SMALL:
 			boxbuf[0] = map_floorTilePosSize(posxz)
 			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			boxbuf[2] = phy_calcBox(posxz, 0, 1)
 			return 3
-		case map_tileKind_t.PLATFORM_LARGE:
+		case .PLATFORM_LARGE:
 			boxbuf[0] = map_floorTilePosSize(posxz)
 			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			boxbuf[2] = phy_calcBox(posxz, 0, 3)
 			return 3
 
-		case map_tileKind_t.CEILING:
+		case .CEILING:
 			boxbuf[0] = map_floorTilePosSize(posxz)
 			boxbuf[1] = phy_calcBox(posxz, 2, 5)
 			return 2
 
-		case map_tileKind_t.ELEVATOR: // the actual moving elevator box is at index 0
+		case .ELEVATOR: // the actual moving elevator box is at index 0
 			boxsize := vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
 			height, ok := map_data.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
 			if !ok do height = 0.0
@@ -217,15 +219,16 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 			boxbuf[2] = map_floorTilePosSize(posxz)
 			return 3
 
-		case map_tileKind_t.OBSTACLE_LOWER:
+		case .OBSTACLE_LOWER:
 			boxbuf[0] = phy_calcBox(posxz, -3, 3)
 			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
-		case map_tileKind_t.OBSTACLE_UPPER:
+		case .OBSTACLE_UPPER:
 			boxbuf[0] = phy_calcBox(posxz, -2, 3)
 			boxbuf[1] = map_ceilingTilePosSize(posxz)
 			return 2
-		
+
+		case .THORNS_LOWER: // TODO
 	}
 
 	return 0
@@ -435,12 +438,12 @@ map_drawTilemap :: proc() {
 					for i : i32 = 0; i < boxcount; i += 1 {
 						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
-				case map_tileKind_t.ELEVATOR:
+				case .ELEVATOR:
 					rl.DrawModelEx(asset_data.elevatorModel, boxbuf[0].pos, {0,1,0}, 0.0, boxbuf[0].size*2.0, rl.WHITE)
 					for i : i32 = 1; i < boxcount; i += 1 {
 						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
-				case map_tileKind_t.OBSTACLE_LOWER:
+				case .OBSTACLE_LOWER:
 					rl.DrawModelEx(asset_data.boxModel,
 						boxbuf[0].pos+{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
@@ -450,7 +453,7 @@ map_drawTilemap :: proc() {
 					for i : i32 = 1; i < boxcount; i += 1 {
 						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
-				case map_tileKind_t.OBSTACLE_UPPER:
+				case .OBSTACLE_UPPER:
 					rl.DrawModelEx(asset_data.boxModel,
 						boxbuf[0].pos+{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
@@ -463,6 +466,8 @@ map_drawTilemap :: proc() {
 					for i : i32 = 1; i < boxcount; i += 1 {
 						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
+
+				case .THORNS_LOWER: // TODO
 			}
 		}
 	}

@@ -232,7 +232,7 @@ _app_init :: proc() {
 
 	renderTextureMain = rl.LoadRenderTexture(windowSizeX, windowSizeY)
 
-    asset_loadPersistent()
+	asset_loadPersistent()
 
 	camera.position = {0, 3, 0}
 	camera.target = {}
@@ -493,8 +493,6 @@ bullet_data : struct {
 		color		: vec4,
 		duration	: f32,
 	},
-
-	bulletLineShader	: rl.Shader,
 }
 
 // @param timeToLive: in seconds
@@ -566,7 +564,7 @@ _bullet_updateDataAndRender :: proc() {
 	}
 
 	// draw
-	rl.BeginShaderMode(bullet_data.bulletLineShader)
+	rl.BeginShaderMode(asset_data.bulletLineShader)
 	for i : i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
 		fade := (bullet_data.bulletLines[i].timeToLive / bullet_data.bulletLines[i].duration)
 		col := bullet_data.bulletLines[i].color
@@ -732,6 +730,8 @@ _enemy_updateDataAndRender :: proc() {
 		rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[0], enemy_data.knightAnimFrame)
 		if enemy_data.knightAnimFrame >= asset_data.enemy.knightAnim[0].frameCount do enemy_data.knightAnimFrame = 0
 
+		if !rl.IsModelAnimationValid(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[0]) do println("! error: KNIGHT ANIM INVALID")
+
 		// update grunts
 		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
 			if enemy_data.grunts[i].health <= 0.0 do continue
@@ -892,12 +892,12 @@ _enemy_updateDataAndRender :: proc() {
 			}
 	
 			if mov_hit {
-				enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, mov_norm.y>0.5 ? 1.0 : 1.5)
+				enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, 0.99)
 			}
 
 	
 			if speed > 1e-6 {
-				enemy_data.knights[i].pos += (enemy_data.knights[i].vel/speed) * mov_tn
+				enemy_data.knights[i].pos += enemy_data.knights[i].vel * deltatime
 			}
 		}
 	} // if !gameIsPaused

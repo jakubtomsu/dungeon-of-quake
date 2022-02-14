@@ -51,6 +51,12 @@ phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : ve
 	return tn, tf
 }
 
+// @param rpos: relative to a point on the plane
+phy_rayPlane :: proc(rpos : vec3, rdir : vec3, pnorm : vec3) -> f32 {
+	using linalg
+	return -dot(rpos, pnorm) / dot(rdir, pnorm)
+}
+
 // @returns: true if hit or inside
 phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 	return tn<tf && tf>0
@@ -64,12 +70,13 @@ phy_nearFarHit :: proc(tn : f32, tf : f32) -> bool {
 //
 // uses custom DDA for traversing the uniform grid, but also looks at the skipped tile so we don't miss them.
 // The boxes queried from a given tile then get expaned by the original boxcast volume, and then raycasted.
+// TODO: input pos, dir and length
 phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, vec3, bool) {
 	using math
 	posxz := vec2{pos.x, pos.z}
 	dir := wishpos - pos
 	linelen := linalg.length(dir)
-	println("PHY: linelen", linelen)
+	//println("PHY: linelen", linelen)
 	if !map_isTilePosValid(map_worldToTile(pos)) do return linelen, {0,0.1,0}, false
 	lowerleft := map_tilePosClamp(map_worldToTile(pos - vec3{dir.x>0.0 ? 1.0:-1.0, 0.0, dir.z>0.0 ? 1.0:-1.0}*TILE_WIDTH))
 	tilepos := lowerleft
@@ -102,7 +109,7 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 		dir.z==0.0?1e6:1.0/dir.z,
 	}//vec3{1,1,1}/dir
 	ctx.dirinvabs	= vec3{abs(ctx.dirinv.x), abs(ctx.dirinv.y), abs(ctx.dirinv.z)}
-	ctx.boxoffs	= boxsize - {PHY_BOXCAST_EPS, PHY_BOXCAST_EPS, PHY_BOXCAST_EPS}
+	ctx.boxoffs	= boxsize + {PHY_BOXCAST_EPS, PHY_BOXCAST_EPS, PHY_BOXCAST_EPS}
 	ctx.tmin	= linelen
 	ctx.normal	= vec3{0,0.1,0} // debug value
 	ctx.boxlen	= linalg.length(boxsize)
@@ -325,4 +332,51 @@ phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32, disallowNegative
 	drop := len * friction * deltatime
 	if disallowNegative do return (len == 0.0 ? {} : vel / len) * glsl.max(0.0, len - drop)
 	return (len == 0.0 ? {} : vel / len) * (len - drop)
+}
+
+
+
+
+// collides only with static geo!
+phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize : vec3) -> (newpos : vec3, newvel : vec3) {
+	using linalg
+	dir := normalize(vel)
+	wishpos := pos + vel*deltatime
+	cast_tn, cast_norm, cast_hit := phy_boxcastTilemap(pos, wishpos, boxsize)
+
+	if !cast_hit {
+		newpos = wishpos
+		newvel = vel
+		return newpos, newvel
+	}
+
+	//contact_point := pos + dir*cast_tn
+
+
+	//slop_tn := phy_rayPlane(pos - (cast_point - cast_norm*PHY_BOXCAST_EPS), dir, cast_norm)
+
+	// constraint solver attempt.
+	// works, but glitches sometimes :(
+	/*
+	delta_v := vel
+	penetration_depth : f32 = dot(pos - contact_point, cast_norm) //!!!
+	delta_v_dot_n : f32 = dot(delta_v, cast_norm)
+	RESTITUTUION_BIAS :: 0.0
+	SOLVER_BETA :: 0.2
+	SOLVER_SLOP :: 0.01
+	bias_penetration_depth : f32 = -(SOLVER_BETA / deltatime) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
+	constraint_bias : f32 = bias_penetration_depth + RESTITUTUION_BIAS
+	speculative_offset := cast_tn
+	_ = speculative_offset
+	penetration_delta_lambda : f32 = -(delta_v_dot_n + constraint_bias + speculative_offset)
+	linear_impulse := cast_norm * penetration_delta_lambda
+	newvel = vel + linear_impulse
+	newpos = pos + newvel*deltatime
+	*/
+
+	newpos = pos + dir*cast_tn + cast_norm*PHY_BOXCAST_EPS
+	newvel = dir * glsl.max(0.0, cast_tn) / deltatime
+	//newvel = phy_clipVelocity(vel, cast_norm, 0.5)
+
+	return newpos, newvel
 }
