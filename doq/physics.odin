@@ -122,7 +122,7 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	for {
 		if !map_isTilePosValid(tilepos) ||
 		(linalg.length(vec2{cast(f32)(tilepos.x - lowerleft.x), cast(f32)(tilepos.y - lowerleft.y)})-3.0)*TILE_WIDTH > ctx.tmin {
-				break
+			break
 		}
 
 		checktiles : [2]ivec2

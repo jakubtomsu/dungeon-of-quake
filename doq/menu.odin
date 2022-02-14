@@ -20,11 +20,8 @@ MENU_MAX_MAP_SELECT_FILES :: 256
 MENU_BACKGROUND :: vec4{0.08,0.08,0.1,1.0}
 
 menu_data : struct {
-	loadScreenLogo	: rl.Texture,
 	loadScreenTimer	: f32,
-
 	pauseMenuIsOpen	: bool,
-	loadScreenMusic		: rl.Music,
 	
 	mapSelectFileElemsCount : i32,
 	mapSelectFileElems	: [MENU_MAX_MAP_SELECT_FILES]gui.menuElem_t,
@@ -129,9 +126,9 @@ menu_drawDebugUI :: proc() {
 		debugtext("enemies")
 		debugtext(" grunt count",		enemy_data.gruntCount)
 		debugtext(" knight count",		enemy_data.knightCount)
-		debugtext(" knight anim count",		enemy_data.knightAnimCount)
-		debugtext(" knight anim[0] bone count",	enemy_data.knightAnim[0].boneCount)
-		debugtext(" knight anim[0] frame count",enemy_data.knightAnim[0].frameCount)
+		debugtext(" knight anim count",		asset_data.enemy.knightAnimCount)
+		debugtext(" knight anim[0] bone count",	asset_data.enemy.knightAnim[0].boneCount)
+		debugtext(" knight anim[0] frame count",asset_data.enemy.knightAnim[0].frameCount)
 		debugtext(" knight anim frame",		enemy_data.knightAnimFrame)
 		debugtext("menus")
 		debugtext(" pauseMenuIsOpen",		menu_data.pauseMenuIsOpen)
@@ -205,7 +202,7 @@ menu_updateAndDrawPauseMenu :: proc() {
 			settings_saveToFile()
 		}
 
-		rl.SetSoundVolume(player_data.swooshSound, 0.0)
+		rl.SetSoundVolume(asset_data.player.swooshSound, 0.0)
 
 		screenTint = linalg.lerp(screenTint, vec3{0.1,0.1,0.1}, clamp(deltatime*5.0, 0.0, 1.0))
 
@@ -223,8 +220,8 @@ menu_updateAndDrawPauseMenu :: proc() {
 
 
 menu_updateAndDrawMainMenuUpdatePath :: proc() {
-	rl.SetMusicVolume(menu_data.loadScreenMusic, 1.0)
-	playingMusic = &menu_data.loadScreenMusic
+	rl.SetMusicVolume(asset_data.loadScreenMusic, 1.0)
+	playingMusic = &asset_data.loadScreenMusic
 
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.ColorFromNormalized(MENU_BACKGROUND))
@@ -346,8 +343,8 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 
 	unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, menu_data.loadScreenTimer * 0.5))
 
-	rl.SetMusicVolume(menu_data.loadScreenMusic, unfade*unfade*unfade)
-	playingMusic = &menu_data.loadScreenMusic
+	rl.SetMusicVolume(asset_data.loadScreenMusic, unfade*unfade*unfade)
+	playingMusic = &asset_data.loadScreenMusic
 
 	rl.BeginDrawing()
 		rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, MENU_BACKGROUND, unfade)))
@@ -355,13 +352,16 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 		OFFS :: 200
 		STARTSCALE :: 4.0
 		scale := glsl.min(
-			f32(windowSizeX) / f32(menu_data.loadScreenLogo.width),
-			f32(windowSizeY) / f32(menu_data.loadScreenLogo.height),
+			f32(windowSizeX) / f32(asset_data.loadScreenLogo.width),
+			f32(windowSizeY) / f32(asset_data.loadScreenLogo.height),
 		) * (STARTSCALE + math.sqrt(unfade)) / (1.0 + STARTSCALE)
 		col := rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, unfade))
 		rl.DrawTextureEx(
-			menu_data.loadScreenLogo,
-			{f32(windowSizeX)/2 - f32(menu_data.loadScreenLogo.width)*scale/4, f32(windowSizeY)/2 - f32(menu_data.loadScreenLogo.height)*scale/4},
+			asset_data.loadScreenLogo,
+			{
+                f32(windowSizeX)/2 - f32(asset_data.loadScreenLogo.width)*scale/4,
+                f32(windowSizeY)/2 - f32(asset_data.loadScreenLogo.height)*scale/4,
+            },
 			0.0, // rot
 			scale * 0.5, // scale
 			col,
@@ -370,7 +370,9 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 		gui.drawText(
 			{f32(windowSizeX)/2-100, f32(windowSizeY)-130},
 			25,
-			rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, clamp(unfade-0.4 + math.sin(timepassed*4.0)*0.1, 0.0, 1.0))),
+			rl.ColorFromNormalized(
+                linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, clamp(unfade-0.4 + math.sin(timepassed*4.0)*0.1, 0.0, 1.0)),
+            ),
 			"press any key to continue",
 		)
 

@@ -225,90 +225,14 @@ _app_init :: proc() {
 
 	rl.InitAudioDevice()
 
+	if !rl.IsAudioDeviceReady() || !rl.IsWindowReady() do time.sleep(10)
+
 	rl.SetMasterVolume(settings.audioMasterVolume)
 
 
 	renderTextureMain = rl.LoadRenderTexture(windowSizeX, windowSizeY)
 
-	menu_data.loadScreenLogo	= loadTexture("dungeon_of_quake_logo.png")
-	rl.SetTextureFilter(menu_data.loadScreenLogo, rl.TextureFilter.TRILINEAR)
-
-	map_data.defaultShader		= loadShader("default.vert", "default.frag")
-	postprocessShader		= loadFragShader("postprocess.frag")
-	map_data.tileShader		= loadShader("tile.vert", "tile.frag")
-	map_data.portalShader		= loadShader("portal.vert", "portal.frag")
-	map_data.cloudShader		= loadShader("primitive.vert", "cloud.frag")
-	bullet_data.bulletLineShader	= loadShader("bulletLine.vert", "bulletLine.frag")
-	map_data.tileShaderCamPosUniformIndex = cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "camPos")
-
-
-
-	map_data.wallTexture		= loadTexture("tile0.png")
-	map_data.portalTexture		= loadTexture("portal.png")
-	map_data.elevatorTexture	= loadTexture("metal.png")
-	map_data.cloudTexture		= loadTexture("clouds.png")
-
-	if !rl.IsAudioDeviceReady() do time.sleep(10)
-
-	map_data.backgroundMusic	= loadMusic("music0.wav")
-	map_data.ambientMusic		= loadMusic("wind.wav")
-	map_data.elevatorSound		= loadSound("elevator.wav")
-	map_data.elevatorEndSound	= loadSound("elevator_end0.wav")
-	rl.SetSoundVolume(map_data.elevatorSound, 0.4)
-	//rl.PlayMusicStream(map_data.backgroundMusic)
-	rl.PlayMusicStream(map_data.ambientMusic)
-	rl.SetMasterVolume(0.5)
-
-	gun_data.shotgunSound		= loadSound("shotgun.wav")
-	gun_data.machinegunSound	= loadSound("machinegun.wav")
-	gun_data.laserrifleSound	= loadSound("laserrifle.wav")
-	gun_data.headshotSound		= loadSound("headshot.wav")
-	gun_data.emptyMagSound		= loadSound("emptymag.wav")
-	gun_data.ammoPickupSound	= loadSound("ammo_pickup.wav")
-	gun_data.gunSwitchSound		= loadSound("gun_switch.wav")
-	rl.SetSoundVolume(gun_data.headshotSound, 1.0)
-	rl.SetSoundPitch (gun_data.headshotSound, 0.85)
-	rl.SetSoundVolume(gun_data.shotgunSound, 0.55)
-	rl.SetSoundPitch (gun_data.shotgunSound, 1.1)
-	rl.SetSoundVolume(gun_data.laserrifleSound, 0.2)
-	rl.SetSoundPitch(gun_data.laserrifleSound, 0.8)
-	rl.SetSoundVolume(gun_data.emptyMagSound, 0.6)
-	rl.SetSoundVolume(gun_data.ammoPickupSound, 1.2)
-
-	player_data.jumpSound		= loadSound("jump.wav")
-	player_data.footstepSound	= loadSound("footstep.wav")
-	player_data.landSound		= loadSound("land.wav")
-	player_data.damageSound		= loadSound("death0.wav")
-	player_data.swooshSound		= loadSound("swoosh.wav")
-	player_data.healthPickupSound	= loadSound("heal.wav")
-	rl.SetSoundVolume(player_data.landSound, 0.45)
-	rl.SetSoundPitch (player_data.landSound, 0.8)
-
-	gun_data.gunModels[cast(i32)gun_kind_t.SHOTGUN]		= loadModel("shotgun.glb")
-	gun_data.gunModels[cast(i32)gun_kind_t.MACHINEGUN]	= loadModel("machinegun.glb")
-	gun_data.gunModels[cast(i32)gun_kind_t.LASERRIFLE]	= loadModel("laserrifle.glb")
-	gun_data.flareModel		= loadModel("flare.glb")
-
-	map_data.tileModel		= rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
-	map_data.elevatorModel		= loadModel("elevator.glb")
-	map_data.healthPickupModel	= loadModel("healthpickup.glb")
-	map_data.boxModel		= loadModel("box.glb")
-	rl.SetMaterialTexture(&map_data.tileModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
-	rl.SetMaterialTexture(&map_data.elevatorModel.materials[0], rl.MaterialMapIndex.DIFFUSE, map_data.elevatorTexture)
-	map_data.tileModel.materials[0].shader		= map_data.tileShader
-	map_data.elevatorModel.materials[0].shader	= map_data.tileShader
-	map_data.boxModel.materials[1].shader		= map_data.defaultShader
-	//rl.SetMaterialTexture(&map_data.boxModel.materials[1], rl.MaterialMapIndex.DIFFUSE, map_data.wallTexture)
-
-	enemy_data.gruntHitSound	= loadSound("death3.wav")
-	enemy_data.gruntDeathSound	= enemy_data.gruntHitSound
-	enemy_data.knightHitSound	= enemy_data.gruntHitSound
-	enemy_data.knightDeathSound	= enemy_data.gruntHitSound
-	enemy_data.gruntModel		= loadModel("grunt.glb")
-	enemy_data.knightModel		= loadModel("guy.imq")
-	enemy_data.knightAnim		= loadModelAnim("guy.iqm", &enemy_data.knightAnimCount)
-	rl.SetSoundVolume(enemy_data.gruntHitSound, 0.35)
-	rl.SetSoundPitch(enemy_data.gruntHitSound, 1.3)
+    asset_loadPersistent()
 
 	camera.position = {0, 3, 0}
 	camera.target = {}
@@ -322,15 +246,7 @@ _app_init :: proc() {
 	viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
 	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
-	gui.menuContext.normalFont		= loadFont("germania_one.ttf")
-	gui.menuContext.selectSound		= loadSound("button4.wav")
-	gui.menuContext.setValSound		= loadSound("button3.wav")
-	rl.SetSoundVolume(gui.menuContext.selectSound, 0.6)
-	rl.SetSoundVolume(gui.menuContext.setValSound, 0.8)
 
-	//normalFont = loadFont("metalord.ttf")
-	menu_data.loadScreenMusic	= loadMusic("ambient0.wav")
-	rl.PlayMusicStream(menu_data.loadScreenMusic)
 
 	rand.init(&randData, cast(u64)time.now()._nsec)
 	
@@ -340,8 +256,6 @@ _app_init :: proc() {
 		map_loadFromFile("_quickload.dqm")
 		app_setUpdatePathKind(.GAME)
 	}
-	
-	//map_debugPrint()
 
 	player_startMap()
 
@@ -370,9 +284,7 @@ _app_update :: proc() {
 }
 
 _app_render2d :: proc() {
-	
 	menu_drawPlayerUI()
-
 	menu_drawDebugUI()
 }
 
@@ -390,7 +302,7 @@ _app_render3d :: proc() {
 
 	//rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
-	rl.SetShaderValue(map_data.tileShader, map_data.tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
+	rl.SetShaderValue(asset_data.tileShader, asset_data.tileShaderCamPosUniformIndex, &camera.position, rl.ShaderUniformDataType.VEC3)
 	fogColor := vec4{
 		map_data.skyColor.r,
 		map_data.skyColor.g,
@@ -399,45 +311,44 @@ _app_render3d :: proc() {
 	}
 	
 	rl.SetShaderValue(
-		map_data.defaultShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.defaultShader, "camPos"),
+		asset_data.defaultShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.defaultShader, "camPos"),
 		&camera.position,
 		rl.ShaderUniformDataType.VEC3,
 	)
 	rl.SetShaderValue(
-		map_data.defaultShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.defaultShader, "fogColor"),
+		asset_data.defaultShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.defaultShader, "fogColor"),
 		&fogColor,
 		rl.ShaderUniformDataType.VEC4,
 	)
 
 	rl.SetShaderValue(
-		map_data.tileShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.tileShader, "fogColor"),
+		asset_data.tileShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.tileShader, "fogColor"),
 		&fogColor,
 		rl.ShaderUniformDataType.VEC4,
 	)
 
 	rl.SetShaderValue(
-		map_data.portalShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.portalShader, "timePassed"),
+		asset_data.portalShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.portalShader, "timePassed"),
 		&timepassed,
 		rl.ShaderUniformDataType.FLOAT,
 	)
 
 	rl.SetShaderValue(
-		map_data.cloudShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.cloudShader, "timePassed"),
+		asset_data.cloudShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.cloudShader, "timePassed"),
 		&timepassed,
 		rl.ShaderUniformDataType.FLOAT,
 	)
 	rl.SetShaderValue(
-		map_data.cloudShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.cloudShader, "camPos"),
+		asset_data.cloudShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.cloudShader, "camPos"),
 		&camera.position,
 		rl.ShaderUniformDataType.VEC3,
 	)
-
 
 
 	map_drawTilemap()
@@ -550,8 +461,8 @@ settings_loadFromFile :: proc() {
 
 
 gameStopSounds :: proc() {
-	rl.StopSound(map_data.elevatorSound)
-	rl.StopSound(player_data.swooshSound)
+	rl.StopSound(asset_data.elevatorSound)
+	rl.StopSound(asset_data.player.swooshSound)
 }
 
 
@@ -613,16 +524,16 @@ bullet_shootRaycast :: proc(start : vec3, dir : vec3, damage : f32, rad : f32, c
 			case enemy_kind_t.GRUNT:
 				headshot := hitpos.y > enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.grunts[enemyindex].health -= headshot ? damage*2 : damage
-				if headshot do playSound(gun_data.headshotSound)
-				playSound(enemy_data.gruntHitSound)
-				if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.gruntDeathSound)
+				if headshot do playSound(asset_data.gun.headshotSound)
+				playSound(asset_data.enemy.gruntHitSound)
+				if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(asset_data.enemy.gruntDeathSound)
 				enemy_data.grunts[enemyindex].vel += dir * 10.0 * damage
 			case enemy_kind_t.KNIGHT:
 				headshot := hitpos.y > enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y*ENEMY_HEADSHOT_HALF_OFFSET
 				enemy_data.knights[enemyindex].health -= headshot ? damage*2 : damage
-				if headshot do playSound(gun_data.headshotSound)
-				playSound(enemy_data.knightHitSound)
-				if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(enemy_data.knightDeathSound)
+				if headshot do playSound(asset_data.gun.headshotSound)
+				playSound(asset_data.enemy.knightHitSound)
+				if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(asset_data.enemy.knightDeathSound)
 				enemy_data.knights[enemyindex].vel += dir * 10.0 * damage
 		}
 	}
@@ -755,15 +666,7 @@ enemy_animState_t :: enum u8 {
 }
 
 enemy_data : struct {
-	gruntHitSound		: rl.Sound,
-	gruntDeathSound		: rl.Sound,
-	knightHitSound		: rl.Sound,
-	knightDeathSound	: rl.Sound,
-	gruntModel		: rl.Model,
-	knightModel		: rl.Model,
-	knightAnim		: [^]rl.ModelAnimation,
-	knightAnimCount		: i32,
-	knightAnimFrame		: i32,
+    knightAnimFrame		: i32,
 
 	gruntCount : i32,
 	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
@@ -826,8 +729,8 @@ _enemy_updateDataAndRender :: proc() {
 
 	if !gameIsPaused {
 		enemy_data.knightAnimFrame += 1
-		rl.UpdateModelAnimation(enemy_data.knightModel, enemy_data.knightAnim[0], enemy_data.knightAnimFrame)
-		if enemy_data.knightAnimFrame >= enemy_data.knightAnim[0].frameCount do enemy_data.knightAnimFrame = 0
+		rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[0], enemy_data.knightAnimFrame)
+		if enemy_data.knightAnimFrame >= asset_data.enemy.knightAnim[0].frameCount do enemy_data.knightAnimFrame = 0
 
 		// update grunts
 		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
@@ -1005,7 +908,7 @@ _enemy_updateDataAndRender :: proc() {
 		if enemy_data.grunts[i].health <= 0.0 do continue
 		//rl.DrawCube(enemy_data.grunts[i].pos, ENEMY_GRUNT_SIZE.x*2, ENEMY_GRUNT_SIZE.y*2, ENEMY_GRUNT_SIZE.z*2, rl.PINK)
 		rl.DrawModelEx(
-			enemy_data.gruntModel,
+			asset_data.enemy.gruntModel,
 			enemy_data.grunts[i].pos,
 			{0,1,0}, math.to_degrees(enemy_data.grunts[i].rot), // rot
 			1.0,
@@ -1017,7 +920,7 @@ _enemy_updateDataAndRender :: proc() {
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 		if enemy_data.knights[i].health <= 0.0 do continue
 		rl.DrawModelEx(
-			enemy_data.knightModel,
+			asset_data.enemy.knightModel,
 			enemy_data.knights[i].pos,
 			{0,1,0}, enemy_data.knights[i].rot*180.0/math.PI, // rot
 			//{0,1,0}, timepassed*360.0, // rot

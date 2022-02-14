@@ -95,27 +95,6 @@ map_data : struct {
 	healthPickupCount	: i32,
 	healthPickupSpawnCount	: i32,
 	healthPickups		: [MAP_HEALTH_PICKUP_MAX_COUNT]vec3,
-
-	defaultShader			: rl.Shader,
-	tileShader			: rl.Shader,
-	tileShaderCamPosUniformIndex	: rl.ShaderLocationIndex,
-	portalShader			: rl.Shader,
-	cloudShader			: rl.Shader,
-
-	wallTexture		: rl.Texture2D,
-	portalTexture		: rl.Texture2D,
-	elevatorTexture		: rl.Texture2D,
-	cloudTexture		: rl.Texture2D,
-
-	backgroundMusic		: rl.Music,
-	ambientMusic		: rl.Music,
-	elevatorSound		: rl.Sound,
-	elevatorEndSound	: rl.Sound,
-
-	tileModel		: rl.Model,
-	elevatorModel		: rl.Model,
-	healthPickupModel	: rl.Model,
-	boxModel		: rl.Model,
 }
 
 
@@ -420,8 +399,8 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 	player_startMap()
 
 	rl.SetShaderValue(
-		map_data.portalShader,
-		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(map_data.portalShader, "portalPos"),
+		asset_data.portalShader,
+		cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.portalShader, "portalPos"),
 		&map_data.finishPos,
 		rl.ShaderUniformDataType.VEC3,
 	)
@@ -442,7 +421,7 @@ map_debugPrint :: proc() {
 
 // draw tilemap, pickups, etc.
 map_drawTilemap :: proc() {
-	rl.BeginShaderMode(map_data.tileShader)
+	rl.BeginShaderMode(asset_data.tileShader)
 	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
 		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
 			//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
@@ -454,35 +433,35 @@ map_drawTilemap :: proc() {
 			#partial switch tilekind {
 				case:
 					for i : i32 = 0; i < boxcount; i += 1 {
-						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
 				case map_tileKind_t.ELEVATOR:
-					rl.DrawModelEx(map_data.elevatorModel, boxbuf[0].pos, {0,1,0}, 0.0, boxbuf[0].size*2.0, rl.WHITE)
+					rl.DrawModelEx(asset_data.elevatorModel, boxbuf[0].pos, {0,1,0}, 0.0, boxbuf[0].size*2.0, rl.WHITE)
 					for i : i32 = 1; i < boxcount; i += 1 {
-						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
 				case map_tileKind_t.OBSTACLE_LOWER:
-					rl.DrawModelEx(map_data.boxModel,
+					rl.DrawModelEx(asset_data.boxModel,
 						boxbuf[0].pos+{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
-					rl.DrawModelEx(map_data.tileModel,
+					rl.DrawModelEx(asset_data.tileModel,
 						boxbuf[0].pos-{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
 					for i : i32 = 1; i < boxcount; i += 1 {
-						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
 				case map_tileKind_t.OBSTACLE_UPPER:
-					rl.DrawModelEx(map_data.boxModel,
+					rl.DrawModelEx(asset_data.boxModel,
 						boxbuf[0].pos+{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
-					rl.DrawModelEx(map_data.boxModel,
+					rl.DrawModelEx(asset_data.boxModel,
 						boxbuf[0].pos, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
-					rl.DrawModelEx(map_data.tileModel,
+					rl.DrawModelEx(asset_data.tileModel,
 						boxbuf[0].pos-{0,TILE_WIDTH,0}, {0,1,0}, 0.0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE,
 					)
 					for i : i32 = 1; i < boxcount; i += 1 {
-						rl.DrawModelEx(map_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
+						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
 			}
 		}
@@ -504,9 +483,9 @@ map_drawTilemap :: proc() {
 		rl.DrawGrid(MAP_SIDE_TILE_COUNT, TILE_WIDTH)
 	}
 
-	rl.BeginShaderMode(map_data.portalShader)
+	rl.BeginShaderMode(asset_data.portalShader)
 	// draw finish
-	rl.DrawCubeTexture(map_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
+	rl.DrawCubeTexture(asset_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
 	rl.EndShaderMode()
 	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-4,-MAP_TILE_FINISH_SIZE.y*2-4,-MAP_TILE_FINISH_SIZE.z*2-4, {0,0,0,40})
 	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-2,-MAP_TILE_FINISH_SIZE.y*2-2,-MAP_TILE_FINISH_SIZE.z*2-2, {0,0,0,60})
@@ -522,7 +501,7 @@ map_drawTilemap :: proc() {
 		for i : i32 = 0; i < map_data.gunPickupCount; i += 1 {
 			pos := map_data.gunPickups[i].pos + vec3{0, math.sin(timepassed*8.0)*0.2, 0}
 			gunindex := cast(i32)map_data.gunPickups[i].kind
-			rl.DrawModelEx(gun_data.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
+			rl.DrawModelEx(asset_data.gun.gunModels[gunindex], pos, {0,1,0}, timepassed*ROTSPEED, SCALE, rl.WHITE)
 			rl.DrawSphere(pos, -2.0, {255,230,180,40})
 		
 			RAD :: 6.5
@@ -530,7 +509,7 @@ map_drawTilemap :: proc() {
 				gun_data.ammoCounts[gunindex] < gun_maxAmmoCounts[gunindex] {
 				gun_data.equipped = map_data.gunPickups[i].kind
 				gun_data.ammoCounts[gunindex] = gun_maxAmmoCounts[gunindex]
-				playSoundMulti(gun_data.ammoPickupSound)
+				playSoundMulti(asset_data.gun.ammoPickupSound)
 
 				temp := map_data.gunPickups[i]
 				map_data.gunPickupCount -= 1
@@ -551,14 +530,14 @@ map_drawTilemap :: proc() {
 			//	rl.WHITE,
 			//)
 
-			rl.DrawModel(map_data.healthPickupModel, map_data.healthPickups[i], MAP_HEALTH_PICKUP_SIZE.x, rl.WHITE)
+			rl.DrawModel(asset_data.healthPickupModel, map_data.healthPickups[i], MAP_HEALTH_PICKUP_SIZE.x, rl.WHITE)
 			
 			RAD :: 6.5
 			if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD*RAD && player_data.health < PLAYER_MAX_HEALTH {
 				player_data.health += PLAYER_MAX_HEALTH*0.25
 				player_data.health = clamp(player_data.health, 0.0, PLAYER_MAX_HEALTH)
 				screenTint = {1.0,0.8,0.0}
-				playSound(player_data.healthPickupSound)
+				playSound(asset_data.player.healthPickupSound)
 				temp := map_data.healthPickups[i]
 				map_data.healthPickupCount -= 1
 				map_data.healthPickups[i] = map_data.healthPickups[map_data.healthPickupCount]
@@ -574,13 +553,13 @@ map_drawTilemap :: proc() {
 	{
 		W :: 2048
 		c : vec3 = player_data.pos
-		rl.BeginShaderMode(map_data.cloudShader)
-		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,25})
-		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,20})
-		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
-		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {100,100,100,50})
-		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,30})
-		rl.DrawCubeTexture(map_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
+		rl.BeginShaderMode(asset_data.cloudShader)
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,25})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,20})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {100,100,100,50})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,30})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
 		rl.EndShaderMode()
 	}
 }

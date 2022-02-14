@@ -53,14 +53,6 @@ player_data : struct {
 	lastValidVel	: vec3,
 	slowness	: f32,
 	onGroundTimer	: f32, // timer after onGround state has changed
-
-	jumpSound		: rl.Sound,
-	footstepSound		: rl.Sound,
-	landSound		: rl.Sound,
-	damageSound		: rl.Sound,
-	swooshSound		: rl.Sound,
-	healthPickupSound	: rl.Sound,
-
 	swooshStrength	: f32, // just lerped velocity length
 }
 
@@ -68,7 +60,7 @@ player_data : struct {
 
 player_damage :: proc(damage : f32) {
 	player_data.health -= damage
-	playSoundMulti(player_data.damageSound)
+	playSoundMulti(asset_data.player.damageSound)
 	screenTint = {1,0.3,0.2}
 	player_data.slowness += damage * 0.25
 }
@@ -102,15 +94,15 @@ _player_update :: proc() {
 	vellen := linalg.length(player_data.vel)
 
 	player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(deltatime * 4.0, 0.0, 1.0))
-	rl.SetSoundVolume(player_data.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0))
-	rl.SetSoundPitch (player_data.swooshSound, clamp(player_data.swooshStrength*0.003, 0.0, 2.0)+0.5)
-	if !rl.IsSoundPlaying(player_data.swooshSound) do playSound(player_data.swooshSound)
+	rl.SetSoundVolume(asset_data.player.swooshSound, clamp(math.pow(0.001 + player_data.swooshStrength*0.008, 2.0), 0.0, 1.0))
+	rl.SetSoundPitch (asset_data.player.swooshSound, clamp(player_data.swooshStrength*0.003, 0.0, 2.0)+0.5)
+	if !rl.IsSoundPlaying(asset_data.player.swooshSound) do playSound(asset_data.player.swooshSound)
 
 	if player_data.isOnGround && linalg.length(player_data.vel * vec3{1,0,1}) > 5.0 {
 		player_data.stepTimer += deltatime * PLAYER_HEAD_SIN_TIME
 		if player_data.stepTimer > math.PI*2.0 {
 			player_data.stepTimer = 0.0
-			playSoundMulti(player_data.footstepSound)
+			playSoundMulti(asset_data.player.footstepSound)
 		}
 	} else {
 		player_data.stepTimer = -0.01
@@ -150,7 +142,7 @@ _player_update :: proc() {
 		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		//player_data.isOnGround = false
-		playSoundMulti(player_data.jumpSound)
+		playSoundMulti(asset_data.player.jumpSound)
 		player_data.rotImpulse.x -= 0.03
 	}
 
@@ -217,9 +209,9 @@ _player_update :: proc() {
 	}
 
 	if !prevIsOnGround && player_data.isOnGround { // just landed
-		if !rl.IsSoundPlaying(player_data.landSound) {
-			playSound(player_data.landSound)
-			playSoundMulti(player_data.footstepSound)
+		if !rl.IsSoundPlaying(asset_data.player.landSound) {
+			playSound(asset_data.player.landSound)
+			playSoundMulti(asset_data.player.footstepSound)
 		}
 		player_data.rotImpulse.x += 0.03
 	}
@@ -270,9 +262,9 @@ _player_update :: proc() {
 		}
 
 		if elevatorIsMoving && !gameIsPaused {
-			if !rl.IsSoundPlaying(map_data.elevatorSound) do playSound(map_data.elevatorSound)
+			if !rl.IsSoundPlaying(asset_data.elevatorSound) do playSound(asset_data.elevatorSound)
 		} else {
-			rl.StopSound(map_data.elevatorSound)
+			rl.StopSound(asset_data.elevatorSound)
 		}
 	}
 
@@ -424,19 +416,7 @@ gun_data : struct {
 	equipped	: gun_kind_t,
 	lastEquipped	: gun_kind_t,
 	timer		: f32,
-
 	ammoCounts	: [GUN_COUNT]i32,
-
-	flareModel	: rl.Model,
-	gunModels	: [GUN_COUNT]rl.Model,
-
-	shotgunSound	: rl.Sound,
-	machinegunSound	: rl.Sound,
-	laserrifleSound	: rl.Sound,
-	headshotSound	: rl.Sound,
-	emptyMagSound	: rl.Sound,
-	ammoPickupSound	: rl.Sound,
-	gunSwitchSound	: rl.Sound,
 }
 
 
@@ -467,7 +447,7 @@ gun_drawModel :: proc(pos : vec3) {
 	if gun_data.ammoCounts[cast(i32)gun_data.equipped] <= 0 do return
 
 	gunindex := cast(i32)gun_data.equipped
-	rl.DrawModel(gun_data.gunModels[gunindex], pos, GUN_SCALE, rl.WHITE)
+	rl.DrawModel(asset_data.gun.gunModels[gunindex], pos, GUN_SCALE, rl.WHITE)
 
 	// flare
 	FADETIME :: 0.07
@@ -475,7 +455,7 @@ gun_drawModel :: proc(pos : vec3) {
 	if fade > 0.0 {
 		rnd := randVec3() * f32(gameIsPaused ? 0.0 : 1.0)
 		muzzleoffs := gun_getMuzzleOffset() + rnd*0.02
-		rl.DrawModel(gun_data.flareModel, pos + muzzleoffs, 0.4 - fade*fade*0.2, rl.Fade(rl.WHITE, clamp(fade, 0.0, 1.0)*0.9))
+		rl.DrawModel(asset_data.gun.flareModel, pos + muzzleoffs, 0.4 - fade*fade*0.2, rl.Fade(rl.WHITE, clamp(fade, 0.0, 1.0)*0.9))
 	}
 }
 
@@ -501,9 +481,9 @@ _gun_update :: proc() {
 
 	if gun_data.equipped != prevgun {
 		gun_data.timer = 0.1
-		playSound(gun_data.gunSwitchSound)
+		playSound(asset_data.gun.gunSwitchSound)
 		if gun_data.ammoCounts[gunindex] <= 0 {
-			playSoundMulti(gun_data.emptyMagSound)
+			playSoundMulti(asset_data.gun.emptyMagSound)
 		}
 	}
 
@@ -533,7 +513,7 @@ _gun_update :: proc() {
 
 					player_data.vel -= player_data.lookDir*60.0
 					player_data.rotImpulse.x -= 0.15
-					playSound(gun_data.shotgunSound)
+					playSound(asset_data.gun.shotgunSound)
 
 				case gun_kind_t.MACHINEGUN:
 					rnd := randVec3()
@@ -541,7 +521,7 @@ _gun_update :: proc() {
 					if !player_data.isOnGround do player_data.vel -= player_data.lookDir * 2.0
 					player_data.rotImpulse.x -= 0.035
 					player_data.rotImpulse -= rnd * 0.01
-					playSoundMulti(gun_data.machinegunSound)
+					playSoundMulti(asset_data.gun.machinegunSound)
 
 				case gun_kind_t.LASERRIFLE:
 					_, hitenemy := bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
@@ -553,7 +533,7 @@ _gun_update :: proc() {
 					}
 					player_data.rotImpulse.x -= 0.2
 					player_data.rotImpulse.y += 0.04
-					playSound(gun_data.laserrifleSound)
+					playSound(asset_data.gun.laserrifleSound)
 
 			}
 
@@ -565,7 +545,7 @@ _gun_update :: proc() {
 				case gun_kind_t.LASERRIFLE:	gun_data.timer = gun_shootTimes[gunindex]
 			}
 		} else if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
-			playSoundMulti(gun_data.emptyMagSound)
+			playSoundMulti(asset_data.gun.emptyMagSound)
 		}
 	}
 }
