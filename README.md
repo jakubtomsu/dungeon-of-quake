@@ -5,8 +5,8 @@
 <p align="center">
   Dungeon of Quake is a simple first person shooter, inspired by Quake.
   </br>
-  Written in the <a href="odin-lang.org">Odin</a> programming language
-  and using <a href="raylib.com">Raylib</a>
+  Written in the <a href="https://odin-lang.org">Odin</a> programming language
+  and using <a href="https://raylib.com">Raylib</a>
 </p>
 </br>
 </br>
