@@ -1,6 +1,7 @@
 
 # for custom build scripts
 build_.bat
+dqmake_build_.bat
 
 *.png~
 
