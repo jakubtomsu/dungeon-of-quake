@@ -30,6 +30,8 @@ TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
 TILE_ELEVATOR_Y1		:: cast(f32)-1.5*TILE_WIDTH - 2.0
 TILE_ELEVATOR_SPEED		:: (TILE_ELEVATOR_Y1 - TILE_ELEVATOR_Y0) * TILE_ELEVATOR_MOVE_FACTOR
 
+MAP_THORNS_RAD_MULTIPLIER :: 1.0
+
 MAP_GUN_PICKUP_MAX_COUNT	:: 32
 MAP_HEALTH_PICKUP_MAX_COUNT	:: 32
 MAP_HEALTH_PICKUP_SIZE :: vec3{2,1.5,2}
@@ -142,20 +144,24 @@ map_addHealthPickup :: proc(pos : vec3) {
 
 
 
-map_floorTilePosSize :: proc(posxz : vec2) -> box_t {
+map_floorTileBox :: proc(posxz : vec2) -> box_t {
 	return {
 		vec3{posxz[0],(-TILE_HEIGHT-TILE_OUT_OF_BOUNDS_SIZE)/2.0, posxz[1]},
 		vec3{TILE_WIDTH, TILE_OUT_OF_BOUNDS_SIZE+TILE_WIDTH*2, TILE_WIDTH}/2.0,
 	}
 }
 
-map_ceilingTilePosSize :: proc(posxz : vec2) -> box_t {
+map_ceilTileBox :: proc(posxz : vec2) -> box_t {
 	//return vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]},
 	//	vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
 	return {
 		vec3{posxz[0],(+TILE_HEIGHT+TILE_OUT_OF_BOUNDS_SIZE)/2.0, posxz[1]},
 		vec3{TILE_WIDTH, TILE_OUT_OF_BOUNDS_SIZE+TILE_WIDTH*2, TILE_WIDTH}/2.0,
 	}
+}
+
+map_fullTileBox :: proc(posxz : vec2) -> box_t {
+	return {vec3{posxz[0], TILE_WIDTH*0.5, posxz[1]}, vec3{TILE_WIDTH/2, TILE_OUT_OF_BOUNDS_SIZE/2, TILE_WIDTH/2}}
 }
 
 
@@ -177,33 +183,33 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 		case .NONE:
 			return 0
 
-		case .FULL:
-			boxbuf[0] = box_t{vec3{posxz[0], TILE_WIDTH*0.5, posxz[1]}, vec3{TILE_WIDTH/2, TILE_OUT_OF_BOUNDS_SIZE/2, TILE_WIDTH/2}}
+		case .FULL, .THORNS_LOWER:
+			boxbuf[0] = map_fullTileBox(posxz)
 			return 1
 
 		case .EMPTY:
-			boxbuf[0] = map_floorTilePosSize(posxz)
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[0] = map_floorTileBox(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
 			return 2
 
 		case .WALL_MID:
 			boxbuf[0] = phy_calcBox(posxz, -2, 5)
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
 			return 2
 
 		case .PLATFORM_SMALL:
-			boxbuf[0] = map_floorTilePosSize(posxz)
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[0] = map_floorTileBox(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
 			boxbuf[2] = phy_calcBox(posxz, 0, 1)
 			return 3
 		case .PLATFORM_LARGE:
-			boxbuf[0] = map_floorTilePosSize(posxz)
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[0] = map_floorTileBox(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
 			boxbuf[2] = phy_calcBox(posxz, 0, 3)
 			return 3
 
 		case .CEILING:
-			boxbuf[0] = map_floorTilePosSize(posxz)
+			boxbuf[0] = map_floorTileBox(posxz)
 			boxbuf[1] = phy_calcBox(posxz, 2, 5)
 			return 2
 
@@ -215,20 +221,18 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 				vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]},
 				vec3{TILE_WIDTH, TILE_WIDTH*TILEMAP_MID, TILE_WIDTH}/2,
 			}
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
-			boxbuf[2] = map_floorTilePosSize(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
+			boxbuf[2] = map_floorTileBox(posxz)
 			return 3
 
 		case .OBSTACLE_LOWER:
 			boxbuf[0] = phy_calcBox(posxz, -3, 3)
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
 			return 2
 		case .OBSTACLE_UPPER:
 			boxbuf[0] = phy_calcBox(posxz, -2, 3)
-			boxbuf[1] = map_ceilingTilePosSize(posxz)
+			boxbuf[1] = map_ceilTileBox(posxz)
 			return 2
-
-		case .THORNS_LOWER: // TODO
 	}
 
 	return 0
@@ -467,7 +471,21 @@ map_drawTilemap :: proc() {
 						rl.DrawModelEx(asset_data.tileModel, boxbuf[i].pos, {0,1,0}, 0.0, boxbuf[i].size*2.0, rl.WHITE)
 					}
 
-				case .THORNS_LOWER: // TODO
+				case .THORNS_LOWER:
+					yoffs := math.floor(player_data.pos.y / TILE_WIDTH) * TILE_WIDTH
+					p := map_tileToWorld({x, y})
+					floorbox := map_floorTileBox({p.x, p.z})
+					ceilbox  := map_ceilTileBox ({p.x, p.z})
+					THORN_DRAW_COUNT :: 32
+
+					rl.DrawModelEx(asset_data.tileModel, floorbox.pos, {0,1,0}, 0.0, floorbox.size*2.0, rl.WHITE)
+					rl.DrawModelEx(asset_data.tileModel, ceilbox.pos , {0,1,0}, 0.0, ceilbox.size *2.0, rl.WHITE)
+				
+					for i : i32 = 0; i < TILEMAP_Y_TILES-2; i += 1 {
+						rl.DrawModelEx(asset_data.thornsModel, p + vec3{0, (f32(i) - f32(TILEMAP_Y_TILES-2)*0.5 + 0.5)*TILE_WIDTH, 0}, {0,1,0}, 0, {TILE_WIDTH,TILE_WIDTH,TILE_WIDTH}, rl.WHITE)
+					}
+				
+
 			}
 		}
 	}
@@ -559,12 +577,45 @@ map_drawTilemap :: proc() {
 		W :: 2048
 		c : vec3 = player_data.pos
 		rl.BeginShaderMode(asset_data.cloudShader)
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,25})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,20})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {100,100,100,50})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,30})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,15})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,50})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,40})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,20})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {200,200,200,60})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,40})
+		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,20})
 		rl.EndShaderMode()
 	}
+}
+
+
+calcThornsCollision :: proc(pos : vec3, rad : f32) -> (isColliding : bool, pushdir : vec3) {
+	if abs(pos.y) > (TILEMAP_Y_TILES-2)*TILE_WIDTH*0.5 {
+		isColliding = false
+		pushdir = {}
+		return isColliding, pushdir
+	}
+	tilepos := map_worldToTile(pos)
+	rad2 := rad*rad
+
+	for x : i32 = -1; x <= 1; x += 1 {
+		for y : i32 = -1; y <= 1; y += 1 {
+			p := tilepos + {x, y}
+			
+			if !map_isTilePosValid(p) do continue
+			if map_data.tiles[p.x][p.y] == .THORNS_LOWER {
+				posxz := vec2{f32(p.x)+0.5, f32(p.y)+0.5}*TILE_WIDTH
+				dir := vec2{pos.x - posxz.x, pos.z - posxz.y}
+				length2 := linalg.length2(dir)
+				sd := length2 - (TILE_WIDTH*TILE_WIDTH*0.5*MAP_THORNS_RAD_MULTIPLIER) // subtract tile radius
+				if sd < rad2 {
+					isColliding = true
+					pushdir += {dir.x, 0.0, dir.y}
+				}
+			}
+		}
+	}
+
+	if isColliding do pushdir = linalg.normalize(pushdir)
+
+	return isColliding, pushdir
 }

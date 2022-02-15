@@ -164,6 +164,68 @@ _player_update :: proc() {
 	player_accelerate(wishdir, PLAYER_SPEED,
 		player_data.isOnGround ? PLAYER_GROUND_ACCELERATION : (linalg.dot(player_data.vel, wishdir) > 0.0 ? PLAYER_AIR_ACCELERATION : PLAYER_AIR_ACCELERATION*2.0))
 
+
+
+	// elevator update
+	elevatorIsMoving := false
+	{
+		tilepos = map_worldToTile(player_data.pos)
+		c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
+		isInElevatorTile = c in map_data.elevatorHeights
+
+		if isInElevatorTile {
+			height := map_data.elevatorHeights[c]
+			elevatorIsMoving = false
+
+			y := math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
+
+			if player_data.pos.y - PLAYER_SIZE.y - 0.02 < y {
+				height += TILE_ELEVATOR_MOVE_FACTOR * deltatime
+				elevatorIsMoving = true
+			}
+
+			if height > 1.0 {
+				height = 1.0
+				elevatorIsMoving = false
+			} else if height < 0.0 {
+				height = 0.0
+				elevatorIsMoving = false
+			}
+
+			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
+				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
+				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 16)
+				//player_data.vel.y -= TILE_ELEVATOR_SPEED*deltatime
+				player_data.vel.y = 0.0
+				//player_data.vel.y = PLAYER_GRAVITY*deltatime
+			}
+
+			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
+				player_data.vel.y = PLAYER_JUMP_SPEED + TILE_ELEVATOR_SPEED
+				player_data.pos.y += 0.02
+				height -= 0.02
+				elevatorIsMoving = false
+				player_data.isOnGround = false
+			}
+		
+			map_data.elevatorHeights[c] = height
+		}
+
+		if elevatorIsMoving && !gameIsPaused {
+			if !rl.IsSoundPlaying(asset_data.elevatorSound) do playSound(asset_data.elevatorSound)
+		} else {
+			rl.StopSound(asset_data.elevatorSound)
+		}
+	}
+
+	if hitthorns, dir := calcThornsCollision(player_data.pos, PLAYER_SIZE.x); hitthorns {
+		player_data.vel = dir * 100.0
+		player_damage(0.5)
+	}
+
+
+
+
 	wishspeed := linalg.length(player_data.vel)
 	wishpos := player_data.pos + player_data.vel * deltatime
 
@@ -209,11 +271,6 @@ _player_update :: proc() {
 
 	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0
 
-	if player_data.isOnGround {
-		player_data.lastValidPos = player_data.pos
-		player_data.lastValidVel = player_data.vel
-	}
-
 	if !prevIsOnGround && player_data.isOnGround { // just landed
 		if !rl.IsSoundPlaying(asset_data.player.landSound) {
 			playSound(asset_data.player.landSound)
@@ -223,55 +280,9 @@ _player_update :: proc() {
 	}
 
 
-
-	// elevator update
-	elevatorIsMoving := false
-	{
-		tilepos = map_worldToTile(player_data.pos)
-		c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
-		isInElevatorTile = c in map_data.elevatorHeights
-
-		if isInElevatorTile {
-			height := map_data.elevatorHeights[c]
-			elevatorIsMoving = false
-
-			y := math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height) + TILE_WIDTH*TILEMAP_MID/2.0 + PLAYER_SIZE.y+0.01
-
-			if player_data.pos.y - PLAYER_SIZE.y - 0.02 < y {
-				height += TILE_ELEVATOR_MOVE_FACTOR * deltatime
-				elevatorIsMoving = true
-			}
-
-			if height > 1.0 {
-				height = 1.0
-				elevatorIsMoving = false
-			} else if height < 0.0 {
-				height = 0.0
-				elevatorIsMoving = false
-			}
-
-			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
-				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
-				//player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 8)
-				player_data.vel.y = -PLAYER_GRAVITY * 0.1
-			}
-
-			if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
-				player_data.vel.y = PLAYER_JUMP_SPEED + TILE_ELEVATOR_SPEED
-				player_data.pos.y += 0.02
-				height -= 0.02
-				elevatorIsMoving = false
-				player_data.isOnGround = false
-			}
-		
-			map_data.elevatorHeights[c] = height
-		}
-
-		if elevatorIsMoving && !gameIsPaused {
-			if !rl.IsSoundPlaying(asset_data.elevatorSound) do playSound(asset_data.elevatorSound)
-		} else {
-			rl.StopSound(asset_data.elevatorSound)
-		}
+	if player_data.isOnGround && !isInElevatorTile {
+		player_data.lastValidPos = player_data.pos
+		player_data.lastValidVel = player_data.vel
 	}
 
 	player_data.isOnGround |= elevatorIsMoving

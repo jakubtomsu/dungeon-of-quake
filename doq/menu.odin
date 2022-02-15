@@ -130,7 +130,6 @@ menu_drawDebugUI :: proc() {
 		debugtext(" knight anim[0] bone count",	asset_data.enemy.knightAnim[0].boneCount)
 		debugtext(" knight anim[0] frame count",asset_data.enemy.knightAnim[0].frameCount)
 		debugtext(" knight model bone count",	asset_data.enemy.knightModel.boneCount)
-		debugtext(" knight anim frame",		enemy_data.knightAnimFrame)
 		debugtext("menus")
 		debugtext(" pauseMenuIsOpen",		menu_data.pauseMenuIsOpen)
 		debugtext(" mapSelectFileElemsCount",	menu_data.mapSelectFileElemsCount)

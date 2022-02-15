@@ -645,7 +645,7 @@ ENEMY_KNIGHT_ACCELERATION	:: 120
 ENEMY_KNIGHT_MAX_SPEED		:: 12
 ENEMY_KNIGHT_FRICTION		:: 4
 ENEMY_KNIGHT_DAMAGE		:: 0.8
-ENEMY_KNIGHT_ATTACK_TIME	:: 0.6
+ENEMY_KNIGHT_ATTACK_TIME	:: 1.0
 ENEMY_KNIGHT_HEALTH		:: 1.0
 ENEMY_KNIGHT_RANGE		:: 5.0
 
@@ -664,8 +664,6 @@ enemy_animState_t :: enum u8 {
 }
 
 enemy_data : struct {
-    knightAnimFrame		: i32,
-
 	gruntCount : i32,
 	grunts : [ENEMY_GRUNT_MAX_COUNT]struct {
 		spawnPos		: vec3,
@@ -688,6 +686,12 @@ enemy_data : struct {
 		rot		: f32, // angle in radians around Y axis
 		target		: vec3,
 		isMoving	: bool,
+		animFrame	: i32,
+		animState	: enum u8 { // also index to animation
+			RUN = 0,
+			ATTACK = 1,
+			IDLE = 2,
+		},
 	},
 }
 
@@ -726,11 +730,12 @@ _enemy_updateDataAndRender :: proc() {
 	assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
 
 	if !gameIsPaused {
-		enemy_data.knightAnimFrame += 1
-		rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[0], enemy_data.knightAnimFrame)
-		if enemy_data.knightAnimFrame >= asset_data.enemy.knightAnim[0].frameCount do enemy_data.knightAnimFrame = 0
+		//enemy_data.knightAnimFrame += 1
+		//animindex := 1
+		//rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex], enemy_data.knightAnimFrame)
+		//if enemy_data.knightAnimFrame >= asset_data.enemy.knightAnim[animindex].frameCount do enemy_data.knightAnimFrame = 0
 
-		if !rl.IsModelAnimationValid(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[0]) do println("! error: KNIGHT ANIM INVALID")
+		//if !rl.IsModelAnimationValid(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex]) do println("! error: KNIGHT ANIM INVALID")
 
 		// update grunts
 		for i : i32 = 0; i < enemy_data.gruntCount; i += 1 {
@@ -760,7 +765,7 @@ _enemy_updateDataAndRender :: proc() {
 			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
 
 			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x) // * math.sign(flatdir.x)
-			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 5.0/math.PI), clamp(deltatime*3.0, 0.0, 1.0))
+			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 2.0/math.PI), clamp(deltatime*1.0, 0.0, 1.0))
 
 			if p_tn < ENEMY_GRUNT_SIZE.y {
 				player_data.vel = flatdir * 50.0
@@ -845,7 +850,7 @@ _enemy_updateDataAndRender :: proc() {
 			// println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 			
 			enemy_data.knights[i].attackTimer -= deltatime
-	
+
 	
 			if seeplayer {
 				enemy_data.knights[i].target = player_data.pos
@@ -856,16 +861,18 @@ _enemy_updateDataAndRender :: proc() {
 			flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
 
 			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x)
-			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 5.0/math.PI), clamp(deltatime*4.0, 0.0, 1.0))
+			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 2.0/math.PI), clamp(deltatime*3, 0.0, 1.0))
 			//enemy_data.knights[i].rot += 1.0
 	
 			if seeplayer {
 				if enemy_data.knights[i].attackTimer < 0.0 && p_tn < ENEMY_KNIGHT_RANGE { // attack
 					enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
 					player_damage(ENEMY_KNIGHT_DAMAGE)
-					player_data.vel = flatdir * 100.0
-					player_data.vel.y += 30.0
-					enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED * 0.1
+					player_data.vel = flatdir * 40.0
+					player_data.vel.y += 20.0
+					enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED
+					enemy_data.knights[i].animState = .ATTACK
+					enemy_data.knights[i].animFrame = 0
 				}
 			} else {
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
@@ -919,6 +926,28 @@ _enemy_updateDataAndRender :: proc() {
 	// render knights
 	for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 		if enemy_data.knights[i].health <= 0.0 do continue
+
+		// anim
+		{
+			// update
+			if !gameIsPaused {
+				prevanim := enemy_data.knights[i].animState
+				if !enemy_data.knights[i].isMoving do enemy_data.knights[i].animState = .IDLE
+				else {
+					if enemy_data.knights[i].attackTimer < 0.0 do enemy_data.knights[i].animState = .RUN
+				}
+				if enemy_data.knights[i].animState != prevanim do enemy_data.knights[i].animFrame = 0
+				enemy_data.knights[i].animFrame += 1
+			}
+		
+			animindex := i32(enemy_data.knights[i].animState)
+			rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex], enemy_data.knights[i].animFrame)
+			if enemy_data.knights[i].animFrame >= asset_data.enemy.knightAnim[animindex].frameCount {
+				enemy_data.knights[i].animFrame = 0
+				if enemy_data.knights[i].animState == .ATTACK do enemy_data.knights[i].animState = .RUN
+			}
+		}
+
 		rl.DrawModelEx(
 			asset_data.enemy.knightModel,
 			enemy_data.knights[i].pos,

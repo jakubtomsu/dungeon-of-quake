@@ -58,6 +58,11 @@ tile character | tile name | uppercase | note |
 
 
 
+Some tiles get translated into a different tile when loading the level. It's mostly pickups, enemies, etc.
+> the translation table is in [map.odin](/doq/map.odin) inside `map_translateTile` procedure
+
+
+
 ## map attributes
 Each map can have some attributes which change how it looks or behaves.  
 

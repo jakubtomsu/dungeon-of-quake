@@ -21,7 +21,7 @@ float sdBox(in vec2 p, in vec2 b) {
 
 void main() {
 	// Texel color fetching from texture sampler
-	vec2 uv = (fragPosition.xz*0.004) + vec2(timePassed*0.06) + vec2(fragPosition.y/50.0) + vec2(cos(timePassed+fragPosition.y), sin(timePassed+fragPosition.y))*0.02;
+	vec2 uv = (fragPosition.xz*0.003) + vec2(timePassed*0.06) + vec2(fragPosition.y/50.0) + vec2(cos(timePassed+fragPosition.y), sin(timePassed+fragPosition.y))*0.02;
 	vec4 texelColor = texture(texture0, uv)*colDiffuse*fragColor;
 	float box = 0.5;
 	float fade = smoothstep(0.0, 1.0, max(0.0, 1.0 - (length(fragPosition.xz-camPos.xz)*0.001)));

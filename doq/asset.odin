@@ -145,6 +145,7 @@ asset_loadPersistent :: proc() {
 	asset_data.tileModel.materials[0].shader	= asset_data.tileShader
 	asset_data.elevatorModel.materials[0].shader	= asset_data.tileShader
 	asset_data.boxModel.materials[1].shader		= asset_data.defaultShader
+	asset_data.thornsModel.materials[1].shader	= asset_data.defaultShader
 
 	asset_data.enemy.gruntHitSound		= loadSound("death3.wav")
 	asset_data.enemy.gruntDeathSound	= asset_data.enemy.gruntHitSound
