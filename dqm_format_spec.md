@@ -8,7 +8,7 @@ tiles - this means anyone can edit maps with just a simple text editor.
 `.dqm` file extension is used for the map files, even though the underlying data in that file is just plain text.
 Maps can also be split into two floors, using specific tiles.  
 
-> **WARNING:** Text editors don't really use fonts with sqare aspect ratio characters,
+> **NOTE:** Text editors don't really use fonts with sqare aspect ratio characters,
 so the resulting level might end up looking a little stretched in-game. In some text
 editors, you can change text spacing to circumvent the issue.
 
@@ -58,7 +58,7 @@ tile character | tile name | uppercase | note |
 
 
 
-## map attributes (advanced)
+## map attributes
 Each map can have some attributes which change how it looks or behaves.  
 
 All attributes are alwats defined between a pair of curly braces `{ }`, and each attribute is followed by a colon `:` character.  
@@ -83,7 +83,7 @@ fogStrength    | `decimal`      | strength/attenuation of fog
 
 ```cpp
 {
-	nextMapName: "map.dqm"
+	nextMapName: "some_map.dqm"
 	startPlayerDir: 0.0 -1.0
 	skyColor: 1.0 0.2 0.0
 	fogStrength: 1.2
