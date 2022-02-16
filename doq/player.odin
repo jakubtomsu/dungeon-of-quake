@@ -28,7 +28,7 @@ PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 PLAYER_GRAVITY			:: 220 // 800
 PLAYER_SPEED			:: 100 // 320
 PLAYER_GROUND_ACCELERATION	:: 8 // 10
-PLAYER_GROUND_FRICTION		:: 0.0 // 6
+PLAYER_GROUND_FRICTION		:: 4 // 6
 PLAYER_AIR_ACCELERATION		:: 0.6 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
 PLAYER_JUMP_SPEED		:: 60 // 270
@@ -143,12 +143,12 @@ _player_update :: proc() {
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		//player_data.isOnGround = false
 		playSoundMulti(asset_data.player.jumpSound)
-		player_data.rotImpulse.x -= 0.03
+		player_data.rotImpulse.x -= 0.05
 	}
 
 
 
-	// acceleration is frame-rate independent
+	// frame-rate independent
 	player_accelerate :: proc(dir : vec3, wishspeed : f32, accel : f32) {
 		currentspeed := linalg.dot(player_data.vel, dir)
 		addspeed := wishspeed - currentspeed
@@ -194,7 +194,7 @@ _player_update :: proc() {
 
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
-				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 16)
+				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 28)
 				//player_data.vel.y -= TILE_ELEVATOR_SPEED*deltatime
 				player_data.vel.y = 0.0
 				//player_data.vel.y = PLAYER_GRAVITY*deltatime
@@ -236,9 +236,10 @@ _player_update :: proc() {
 
 	if phy_hit {
 		//player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
-		if !player_data.isOnGround && player_data.onGroundTimer > 0.1 {
-			//player_data.vel += phy_norm*10.0
-			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.2) // bounce off of a wall if player has been in air for some time
+		if !player_data.isOnGround && player_data.onGroundTimer > deltatime*5.0 {
+			//player_data.vel -= phy_norm * linalg.dot(player_data.vel, phy_norm) // project onto the wall plane
+			//player_data.vel += phy_norm*30.0
+			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.2) // bounce off of a wall if player has been in air for some time
 		} else {
 			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5)*1.5, 0.05, 0.99))
 			//player_data.vel = phy_clipVelocity(
@@ -254,16 +255,20 @@ _player_update :: proc() {
 	println("pos", player_data.pos, "vel", player_data.vel, "vellen", linalg.length(player_data.vel))
 	println("isOnGround", player_data.isOnGround)
 
-	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0
 
 	if !prevIsOnGround && player_data.isOnGround { // just landed
 		if !rl.IsSoundPlaying(asset_data.player.landSound) {
 			playSound(asset_data.player.landSound)
 			playSoundMulti(asset_data.player.footstepSound)
 		}
-		player_data.rotImpulse.x += 0.03
+		if player_data.onGroundTimer > 0.1 {
+			player_data.rotImpulse.x += 0.03
+		}
+
+		// if player_data.onGroundTimer < 0.1 do player_data.vel.y = 20.0 // this is just to prevent a weird physics bug
 	}
 
+	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0
 
 	if player_data.isOnGround && !isInElevatorTile {
 		player_data.lastValidPos = player_data.pos
@@ -406,9 +411,9 @@ GUN_MACHINEGUN_SPREAD		:: 0.02
 GUN_MACHINEGUN_DAMAGE		:: 0.2
 GUN_LASERRIFLE_DAMAGE		:: 1.0
 
-gun_startAmmoCounts : [GUN_COUNT]i32 = {32, 0, 0}
-gun_maxAmmoCounts : [GUN_COUNT]i32 = {64, 128, 18}
-gun_shootTimes : [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
+gun_startAmmoCounts	: [GUN_COUNT]i32 = {32, 0, 0}
+gun_maxAmmoCounts	: [GUN_COUNT]i32 = {64, 128, 18}
+gun_shootTimes		: [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
 
 gun_data : struct {
 	equipped	: gun_kind_t,

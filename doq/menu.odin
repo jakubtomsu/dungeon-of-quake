@@ -17,8 +17,6 @@ import "gui"
 
 MENU_MAX_MAP_SELECT_FILES :: 256
 
-MENU_BACKGROUND :: vec4{0.08,0.08,0.1,1.0}
-
 menu_data : struct {
 	loadScreenTimer	: f32,
 	pauseMenuIsOpen	: bool,
@@ -186,13 +184,13 @@ menu_updateAndDrawPauseMenu :: proc() {
 			gui.menuButton_t{"exit to desktop",	&app_shouldExitNextFrame},
 
 			gui.menuTitle_t{"settings"},
-			gui.menuFloat_t{"audio volume",			&settings.audioMasterVolume,	0.05},
-			gui.menuFloat_t{"music volume",			&settings.audioMusicVolume,	0.05},
-			gui.menuFloat_t{"mouse sensitivity",		&settings.mouseSensitivity,	0.05},
-			gui.menuFloat_t{"crosshair visibility",		&settings.crosshairOpacity,	0.1},
-			gui.menuFloat_t{"gun X offset",			&settings.gunXOffset,		0.025},
-			gui.menuFloat_t{"fild of view",			&settings.FOV,			10.0},
-			gui.menuFloat_t{"viewmodel field of view",	&settings.viewmodelFOV,		10.0},
+			gui.menuF32_t{"audio volume",			&settings.audioMasterVolume,	0.05},
+			gui.menuF32_t{"music volume",			&settings.audioMusicVolume,	0.05},
+			gui.menuF32_t{"mouse sensitivity",		&settings.mouseSensitivity,	0.05},
+			gui.menuF32_t{"crosshair visibility",		&settings.crosshairOpacity,	0.1},
+			gui.menuF32_t{"gun X offset",			&settings.gunXOffset,		0.025},
+			gui.menuF32_t{"fild of view",			&settings.FOV,			10.0},
+			gui.menuF32_t{"viewmodel field of view",	&settings.viewmodelFOV,		10.0},
 			gui.menuBool_t{"show FPS",			&settings.drawFPS},
 			gui.menuBool_t{"enable debug mode",		&settings.debugIsEnabled},
 		}
@@ -224,7 +222,7 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 	playingMusic = &asset_data.loadScreenMusic
 
 	rl.BeginDrawing()
-	rl.ClearBackground(rl.ColorFromNormalized(MENU_BACKGROUND))
+	rl.ClearBackground(rl.ColorFromNormalized(gui.BACKGROUND))
 	menu_drawNavTips()
 	menu_drawDebugUI()
 
@@ -255,13 +253,13 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 			gui.menuButton_t{"exit to desktop",	&app_shouldExitNextFrame},
 
 			gui.menuTitle_t{"settings"},
-			gui.menuFloat_t{"audio volume",			&settings.audioMasterVolume,	0.05},
-			gui.menuFloat_t{"music volume",			&settings.audioMusicVolume,	0.05},
-			gui.menuFloat_t{"mouse sensitivity",		&settings.mouseSensitivity,	0.05},
-			gui.menuFloat_t{"crosshair visibility",		&settings.crosshairOpacity,	0.1},
-			gui.menuFloat_t{"gun size offset",		&settings.gunXOffset,		0.025},
-			gui.menuFloat_t{"fild of view",			&settings.FOV,			10.0},
-			gui.menuFloat_t{"viewmodel field of view",	&settings.viewmodelFOV,		10.0},
+			gui.menuF32_t{"audio volume",			&settings.audioMasterVolume,	0.05},
+			gui.menuF32_t{"music volume",			&settings.audioMusicVolume,	0.05},
+			gui.menuF32_t{"mouse sensitivity",		&settings.mouseSensitivity,	0.05},
+			gui.menuF32_t{"crosshair visibility",		&settings.crosshairOpacity,	0.1},
+			gui.menuF32_t{"gun size offset",		&settings.gunXOffset,		0.025},
+			gui.menuF32_t{"fild of view",			&settings.FOV,			10.0},
+			gui.menuF32_t{"viewmodel field of view",	&settings.viewmodelFOV,		10.0},
 			gui.menuBool_t{"show FPS",			&settings.drawFPS},
 			gui.menuBool_t{"enable debug mode",		&settings.debugIsEnabled},
 		}
@@ -349,7 +347,7 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 	playingMusic = &asset_data.loadScreenMusic
 
 	rl.BeginDrawing()
-		rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, MENU_BACKGROUND, unfade)))
+		rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(vec4{0,0,0,0}, gui.BACKGROUND, unfade)))
 	
 		OFFS :: 200
 		STARTSCALE :: 4.0
@@ -361,9 +359,9 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 		rl.DrawTextureEx(
 			asset_data.loadScreenLogo,
 			{
-                f32(windowSizeX)/2 - f32(asset_data.loadScreenLogo.width)*scale/4,
-                f32(windowSizeY)/2 - f32(asset_data.loadScreenLogo.height)*scale/4,
-            },
+				f32(windowSizeX)/2 - f32(asset_data.loadScreenLogo.width)*scale/4,
+				f32(windowSizeY)/2 - f32(asset_data.loadScreenLogo.height)*scale/4,
+			},
 			0.0, // rot
 			scale * 0.5, // scale
 			col,
@@ -373,8 +371,8 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 			{f32(windowSizeX)/2-100, f32(windowSizeY)-130},
 			25,
 			rl.ColorFromNormalized(
-                linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, clamp(unfade-0.4 + math.sin(timepassed*4.0)*0.1, 0.0, 1.0)),
-            ),
+				linalg.lerp(vec4{0,0,0,0}, vec4{1,1,1,1}, clamp(unfade-0.4 + math.sin(timepassed*4.0)*0.1, 0.0, 1.0)),
+			),
 			"press any key to continue",
 		)
 

@@ -26,6 +26,15 @@ tiles - this means anyone can edit maps with just a simple text editor.
 Some tiles are translated to different tiles when the map gets loaded into memory. For instance, lowercase
 health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.
 
+# dqmake (WIP)
+`dqmake` is a simple map editor
+#### controls
+- **left mouse** to place selected tile
+- **right mouse** to place `none` tile
+- **middle mouse** to move view
+- hold **B** and drag mouse to use `Box` tool. Fills area of box with selected tile
+- hold **E** and drag mouse to use `Box Edge` tool. Draws rectangle edges using selected tile.
+
 
 # how to build
 - get the [Odin compiler](https://github.com/odin-lang/Odin) (builds are usually tested on the last official release)

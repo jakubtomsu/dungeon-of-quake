@@ -23,6 +23,10 @@ ACTIVE_VAL_COLOR	:: rl.Color{200,70,50,255}
 INACTIVE_VAL_COLOR	:: rl.Color{200,200,200,160}
 TITLE_COLOR		:: rl.Color{200,200,200,100}
 
+BACKGROUND :: rl.Vector4{0.08,0.08,0.1,1.0}
+
+
+
 menuContext : struct {
 	selected	: i32, // this can be shared, since we always have only one menu on screen
 	startOffs	: f32,
@@ -49,10 +53,15 @@ menuBool_t :: struct {
 	val	: ^bool,
 }
 
-menuFloat_t :: struct {
+menuF32_t :: struct {
 	name	: string,
 	val	: ^f32,
 	step	: f32,
+}
+
+menuI32_t :: struct {
+	name	: string,
+	val	: ^i32,
 }
 
 menuTitle_t :: struct {
@@ -68,7 +77,8 @@ menuFileButton_t :: struct {
 menuElem_t :: union {
 	menuButton_t,
 	menuBool_t,
-	menuFloat_t,
+	menuF32_t,
+	menuI32_t,
 	menuTitle_t,
 	menuFileButton_t,
 }
@@ -133,7 +143,10 @@ updateAndDrawElemBuf :: proc(elems : []menuElem_t) -> bool {
 			case menuBool_t:
 				drawText({nameoffs, offs}, SIZE, col, elem.name)
 				drawText({valoffs, offs}, SIZE, vcol, elem.val^ ? "yes" : "no")
-			case menuFloat_t:
+			case menuF32_t:
+				drawText({nameoffs, offs}, SIZE, col, elem.name)
+				drawText({valoffs, offs}, SIZE, vcol, fmt.tprint(elem.val^))
+			case menuI32_t:
 				drawText({nameoffs, offs}, SIZE, col, elem.name)
 				drawText({valoffs, offs}, SIZE, vcol, fmt.tprint(elem.val^))
 			case menuTitle_t:
@@ -172,6 +185,7 @@ updateAndDrawElemBuf :: proc(elems : []menuElem_t) -> bool {
 				elem.val^ = !elem.val^
 				isEdited = true
 			}
+
 		case menuBool_t:
 			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) ||
 				rl.IsKeyPressed(rl.KeyboardKey.SPACE) ||
@@ -180,7 +194,8 @@ updateAndDrawElemBuf :: proc(elems : []menuElem_t) -> bool {
 				elem.val^ = !elem.val^
 				isEdited = true
 			}
-		case menuFloat_t:
+
+		case menuF32_t:
 			step := elem.step
 			if rl.IsKeyDown(rl.KeyboardKey.LEFT_CONTROL) do step *= 5.0
 		
@@ -191,7 +206,21 @@ updateAndDrawElemBuf :: proc(elems : []menuElem_t) -> bool {
 				elem.val^ -= step
 				isEdited = true
 			}
+
+		case menuI32_t:
+			step : i32 = 1
+			if rl.IsKeyDown(rl.KeyboardKey.LEFT_CONTROL) do step *= 10
+
+			if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
+				elem.val^ += step
+				isEdited = true
+			} else if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
+				elem.val^ -= step
+				isEdited = true
+			}
+
 		case menuTitle_t:
+	
 		case menuFileButton_t:
 			if rl.IsKeyPressed(rl.KeyboardKey.ENTER) ||
 				rl.IsKeyPressed(rl.KeyboardKey.SPACE) {

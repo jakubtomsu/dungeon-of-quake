@@ -177,15 +177,11 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 			tn := max(max(t1.x, t1.y), t1.z)
 			tf := min(min(t2.x, t2.y), t2.z)
 
-			//println("tn", tn, "tf", tf)
-
 			if tn>tf || tf<PHY_COMPARISON_EPS do continue // no intersection (inside counts as intersection)
 			if tn>ctx.tmin do continue // this hit is worse than the one we already have
-			if tn<-glsl.max(ctx.linelen, 1.0)*5.0-PHY_COMPARISON_EPS do continue // disallow movement too far back
+			if tn<-glsl.max(ctx.linelen, 1.0)*5.0 - PHY_COMPARISON_EPS do continue // disallow movement too far back
 			if math.is_nan(tn) || math.is_nan(tf) || math.is_inf(tn) || math.is_inf(tf) do continue
 
-			//println("ok")
-		
 			ctx.tmin = tn
 			ctx.normal = -ctx.dirsign * cast(vec3)(glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))
 			ctx.hit = true
@@ -354,8 +350,9 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 
 	//contact_point := pos + dir*cast_tn
 
-
 	//slop_tn := phy_rayPlane(pos - (cast_point - cast_norm*PHY_BOXCAST_EPS), dir, cast_norm)
+
+
 
 	// constraint solver attempt.
 	// works, but glitches sometimes :(
@@ -376,11 +373,14 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 	newpos = pos + newvel*deltatime
 	*/
 
-	newpos = pos + dir*cast_tn + cast_norm*PHY_BOXCAST_EPS
-	newvel = dir * glsl.max(0.0, cast_tn) / deltatime
-	//newvel = phy_clipVelocity(vel, cast_norm, 0.5)
 
-	hit = cast_tn>0.0
+
+	EPS :: 0.05
+	newpos = pos + dir*cast_tn + cast_norm*EPS
+	//newvel = dir*(glsl.max(0.0, cast_tn)/deltatime + EPS/deltatime) - cast_norm*0.1*EPS/deltatime
+	newvel = dir*(cast_tn/deltatime + EPS/deltatime) - cast_norm*0.1*EPS/deltatime
+
+	hit = true //cast_tn>0.0
 	normal = cast_norm
 	return newpos, newvel, hit, normal
 }

@@ -14,6 +14,7 @@ import "core:math/linalg"
 import "core:math/rand"
 import "core:fmt"
 import rl "vendor:raylib"
+import "tiles"
 
 
 
@@ -38,40 +39,6 @@ MAP_HEALTH_PICKUP_SIZE :: vec3{2,1.5,2}
 
 MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
 
-// 'translated' tiles are changed into different tiles when a map gets loaded
-map_tileKind_t :: enum u8 {
-	NONE			= '-',
-	EMPTY			= ' ',
-	FULL			= '#',
-	WALL_MID		= 'w',
-	CEILING			= 'c',
-	START_LOWER		= 's', // translated
-	START_UPPER		= 'S', // translated
-	FINISH_LOWER		= 'f', // translated
-	FINISH_UPPER		= 'F', // translated
-	PLATFORM_SMALL		= 'p',
-	PLATFORM_LARGE		= 'P',
-	ELEVATOR		= 'e',
-	OBSTACLE_LOWER		= 'o',
-	OBSTACLE_UPPER		= 'O',
-
-	PICKUP_HEALTH_LOWER	= 'h', // translated
-	PICKUP_HEALTH_UPPER	= 'H', // translated
-
-	THORNS_LOWER		= 't',
-
-	GUN_SHOTGUN_LOWER	= 'd', // translated // as default
-	GUN_SHOTGUN_UPPER	= 'D', // translated
-	GUN_MACHINEGUN_LOWER	= 'm', // translated
-	GUN_MACHINEGUN_UPPER	= 'M', // translated
-	GUN_LASERRIFLE_LOWER	= 'l', // translated
-	GUN_LASERRIFLE_UPPER	= 'L', // translated
-
-	ENEMY_KNIGHT_LOWER	= 'k', // translated
-	ENEMY_KNIGHT_UPPER	= 'K', // translated
-	ENEMY_GRUNT_LOWER	= 'g', // translated
-	ENEMY_GRUNT_UPPER	= 'G', // translated
-}
 
 map_data : struct {
 	nextMapName	: string,
@@ -81,7 +48,7 @@ map_data : struct {
 	skyColor	: vec3, // normalized rgb
 	fogStrength	: f32,
 
-	tiles		: [MAP_SIDE_TILE_COUNT][MAP_SIDE_TILE_COUNT]map_tileKind_t, // TODO: allocate exact-size buffer on loadtime
+	tilemap		: [MAP_SIDE_TILE_COUNT][MAP_SIDE_TILE_COUNT]tiles.kind_t, // TODO: allocate exact-size buffer on loadtime
 	bounds		: ivec2,
 	startPos	: vec3,
 	finishPos	: vec3,
@@ -168,7 +135,7 @@ map_fullTileBox :: proc(posxz : vec2) -> box_t {
 // fills input buffer `boxbuf` with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
 map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
-	tileKind := map_data.tiles[coord[0]][coord[1]]
+	tileKind := map_data.tilemap[coord[0]][coord[1]]
 
 	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> box_t {
 		return box_t{
@@ -238,29 +205,6 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 	return 0
 }
 
-map_translateTile :: proc(srctile : map_tileKind_t) -> map_tileKind_t {
-	#partial switch srctile {
-		case .START_LOWER:		return .EMPTY
-		case .START_UPPER:		return .WALL_MID
-		case .FINISH_LOWER:		return .EMPTY
-		case .FINISH_UPPER:		return .WALL_MID
-		case .ENEMY_GRUNT_LOWER:	return .EMPTY
-		case .ENEMY_GRUNT_UPPER:	return .WALL_MID
-		case .ENEMY_KNIGHT_LOWER:	return .EMPTY
-		case .ENEMY_KNIGHT_UPPER:	return .WALL_MID
-		case .GUN_SHOTGUN_LOWER:	return .EMPTY
-		case .GUN_SHOTGUN_UPPER:	return .WALL_MID
-		case .GUN_MACHINEGUN_LOWER:	return .EMPTY
-		case .GUN_MACHINEGUN_UPPER:	return .WALL_MID
-		case .GUN_LASERRIFLE_LOWER:	return .EMPTY
-		case .GUN_LASERRIFLE_UPPER:	return .WALL_MID
-		case .PICKUP_HEALTH_LOWER:	return .EMPTY
-		case .PICKUP_HEALTH_UPPER:	return .WALL_MID
-	}
-
-	return srctile
-}
-
 
 
 map_clearAll :: proc() {
@@ -281,7 +225,7 @@ map_clearAll :: proc() {
 
 	for x : u32 = 0; x < MAP_SIDE_TILE_COUNT; x += 1 {
 		for y : u32 = 0; y < MAP_SIDE_TILE_COUNT; y += 1 {
-			map_data.tiles[x][y] = map_tileKind_t.NONE
+			map_data.tilemap[x][y] = tiles.kind_t.NONE
 		}
 	}
 }
@@ -352,7 +296,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 				}
 		}
 
-		tile := cast(map_tileKind_t)ch
+		tile := cast(tiles.kind_t)ch
 		
 		if map_isTilePosInBufferBounds({x, y}) {
 			//println("pre ", tile)
@@ -387,10 +331,10 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 						rand.float32_range(-1.0, 1.0, &randData),
 					} * TILE_WIDTH * 0.3
 					map_addHealthPickup(highpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
-					tile = map_tileKind_t.WALL_MID
+					tile = tiles.kind_t.WALL_MID
 			}
 
-			map_data.tiles[x][y] = map_translateTile(tile)
+			map_data.tilemap[x][y] = tiles.translate(tile)
 			//println("post", tile)
 		}
 
@@ -420,7 +364,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 map_debugPrint :: proc() {
 	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
 		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
-			fmt.print(map_data.tiles[x][y] == map_tileKind_t.FULL ? "#" : " ")
+			fmt.print(map_data.tilemap[x][y] == tiles.kind_t.FULL ? "#" : " ")
 		}
 		println("")
 	}
@@ -432,7 +376,7 @@ map_drawTilemap :: proc() {
 	for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
 		for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
 			//rl.DrawCubeWires(vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
-			tilekind := map_data.tiles[x][y]
+			tilekind := map_data.tilemap[x][y]
 
 			boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
 			boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
@@ -494,7 +438,7 @@ map_drawTilemap :: proc() {
 	if settings.debugIsEnabled {
 		for x : i32 = 0; x < map_data.bounds[0]; x += 1 {
 			for y : i32 = 0; y < map_data.bounds[1]; y += 1 {
-				tilekind := map_data.tiles[x][y]
+				tilekind := map_data.tilemap[x][y]
 				boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
 				boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
 				for i : i32 = 0; i < boxcount; i += 1 {
@@ -602,7 +546,7 @@ calcThornsCollision :: proc(pos : vec3, rad : f32) -> (isColliding : bool, pushd
 			p := tilepos + {x, y}
 			
 			if !map_isTilePosValid(p) do continue
-			if map_data.tiles[p.x][p.y] == .THORNS_LOWER {
+			if map_data.tilemap[p.x][p.y] == .THORNS_LOWER {
 				posxz := vec2{f32(p.x)+0.5, f32(p.y)+0.5}*TILE_WIDTH
 				dir := vec2{pos.x - posxz.x, pos.z - posxz.y}
 				length2 := linalg.length2(dir)

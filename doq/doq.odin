@@ -212,7 +212,7 @@ _app_init :: proc() {
 		.WINDOW_RESIZABLE,
 		.FULLSCREEN_MODE,
 		//.WINDOW_HIGHDPI,
-		.VSYNC_HINT,
+		//.VSYNC_HINT,
 	})
 	rl.InitWindow(0, 0, "Dungeon of Quake")
 	rl.ToggleFullscreen()
@@ -220,8 +220,8 @@ _app_init :: proc() {
 	windowSizeY = rl.GetScreenHeight()
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
-	rl.SetTargetFPS(144)
-	//rl.SetTargetFPS(20)
+	rl.SetTargetFPS(60)
+	//rl.SetTargetFPS(10)
 
 	rl.InitAudioDevice()
 
@@ -406,8 +406,8 @@ settings_setDefault :: proc() {
 		crosshairOpacity	= 0.2,
 		mouseSensitivity	= 1.0,
 		FOV			= 100.0,
-		viewmodelFOV		= 100.0,
-		gunXOffset		= 0.1,
+		viewmodelFOV		= 110.0,
+		gunXOffset		= 0.15,
 	}
 }
 
@@ -649,6 +649,8 @@ ENEMY_KNIGHT_ATTACK_TIME	:: 1.0
 ENEMY_KNIGHT_HEALTH		:: 1.0
 ENEMY_KNIGHT_RANGE		:: 4.0
 
+ENEMY_KNIGHT_ANIM_FRAMETIME :: 1.0 / 15.0
+
 enemy_kind_t :: enum u8 {
 	NONE = 0,
 	GRUNT,
@@ -679,6 +681,7 @@ enemy_data : struct {
 		target		: vec3,
 		isMoving	: bool,
 		animFrame	: i32,
+		animFrameTimer	: f32,
 		animState	: enum u8 { // also index to animation
 			RUN = 0,
 			ATTACK = 1,
@@ -757,7 +760,7 @@ _enemy_updateDataAndRender :: proc() {
 			flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1,0,1})
 
 			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x) // * math.sign(flatdir.x)
-			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 2.0/math.PI), clamp(deltatime*1.0, 0.0, 1.0))
+			enemy_data.grunts[i].rot = math.angle_lerp(enemy_data.grunts[i].rot, roundstep(toTargetRot, 4.0/math.PI), clamp(deltatime*1.0, 0.0, 1.0))
 
 			if p_tn < ENEMY_GRUNT_SIZE.y {
 				player_data.vel = flatdir * 50.0
@@ -853,7 +856,7 @@ _enemy_updateDataAndRender :: proc() {
 			flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1,0,1})
 
 			toTargetRot : f32 = math.atan2(-flatdir.z, flatdir.x)
-			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 2.0/math.PI), clamp(deltatime*3, 0.0, 1.0))
+			enemy_data.knights[i].rot = math.angle_lerp(enemy_data.knights[i].rot, roundstep(toTargetRot, 4.0/math.PI), clamp(deltatime*3, 0.0, 1.0))
 			//enemy_data.knights[i].rot += 1.0
 	
 			if seeplayer {
@@ -870,17 +873,21 @@ _enemy_updateDataAndRender :: proc() {
 				enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
 			}
 
+			if enemy_data.knights[i].isMoving {
+				enemy_data.knights[i].vel += flatdir*ENEMY_KNIGHT_ACCELERATION
+			}
+
 			enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
 			speed := linalg.length(enemy_data.knights[i].vel)
 			enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
 			speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
 
-			if speed > 0.01 {
-				forwdepth := phy_raycastDepth(pos + flatdir*ENEMY_KNIGHT_SIZE.x*1.7)
-				if forwdepth > ENEMY_KNIGHT_SIZE.y*2 {
-					enemy_data.knights[i].vel = -enemy_data.knights[i].vel*0.5
-				}
-			}
+			//if speed > 0.01 {
+			//	forwdepth := phy_raycastDepth(pos + flatdir*ENEMY_KNIGHT_SIZE.x*1.7)
+			//	if forwdepth > ENEMY_KNIGHT_SIZE.y*2 {
+			//		enemy_data.knights[i].vel = -enemy_data.knights[i].vel*0.5
+			//	}
+			//}
 			
 
 			phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBody(
@@ -895,6 +902,7 @@ _enemy_updateDataAndRender :: proc() {
 			//if phy_hit do enemy_data.knights[i].vel.y = 0
 		}
 	} // if !gameIsPaused
+
 
 
 	// render grunts
@@ -916,7 +924,7 @@ _enemy_updateDataAndRender :: proc() {
 
 		// anim
 		{
-			// update
+			// update state
 			if !gameIsPaused {
 				prevanim := enemy_data.knights[i].animState
 				if !enemy_data.knights[i].isMoving do enemy_data.knights[i].animState = .IDLE
@@ -924,15 +932,25 @@ _enemy_updateDataAndRender :: proc() {
 					if enemy_data.knights[i].attackTimer < 0.0 do enemy_data.knights[i].animState = .RUN
 				}
 				if enemy_data.knights[i].animState != prevanim do enemy_data.knights[i].animFrame = 0
-				enemy_data.knights[i].animFrame += 1
+			}
+
+			animindex := i32(enemy_data.knights[i].animState)
+
+			if !gameIsPaused {
+				enemy_data.knights[i].animFrameTimer += deltatime
+				if enemy_data.knights[i].animFrameTimer > ENEMY_KNIGHT_ANIM_FRAMETIME {
+					enemy_data.knights[i].animFrameTimer -= ENEMY_KNIGHT_ANIM_FRAMETIME
+					enemy_data.knights[i].animFrame += 1
+				
+					if enemy_data.knights[i].animFrame >= asset_data.enemy.knightAnim[animindex].frameCount {
+						enemy_data.knights[i].animFrame = 0
+						enemy_data.knights[i].animFrameTimer = 0
+						if enemy_data.knights[i].animState == .ATTACK do enemy_data.knights[i].animState = .RUN
+					}
+				}
 			}
 		
-			animindex := i32(enemy_data.knights[i].animState)
 			rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex], enemy_data.knights[i].animFrame)
-			if enemy_data.knights[i].animFrame >= asset_data.enemy.knightAnim[animindex].frameCount {
-				enemy_data.knights[i].animFrame = 0
-				if enemy_data.knights[i].animState == .ATTACK do enemy_data.knights[i].animState = .RUN
-			}
 		}
 
 		rl.DrawModelEx(
