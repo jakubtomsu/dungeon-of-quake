@@ -27,13 +27,16 @@ Some tiles are translated to different tiles when the map gets loaded into memor
 health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.
 
 # dqmake (WIP)
-`dqmake` is a simple map editor
-#### controls
-- **left mouse** to place selected tile
-- **right mouse** to place `none` tile
-- **middle mouse** to move view
-- hold **B** and drag mouse to use `Box` tool. Fills area of box with selected tile
-- hold **E** and drag mouse to use `Box Edge` tool. Draws rectangle edges using selected tile.
+dqmake is a simple map editor
+- controls
+  - **left mouse** to place selected tile
+  - **right mouse** to place `none` tile
+  - **middle mouse** to move view
+  - hold **B** and drag mouse to use **Box** tool. Fills area of box with selected tile
+  - hold **E** and drag mouse to use **Box Edge** tool. Draws rectangle edges using selected tile.
+
+> you can build dqmake just with `odin build dqmake.odin` command  
+> use `odin build dqmake.odin -out:build/dqmake.exe` for releases  
 
 
 # how to build
