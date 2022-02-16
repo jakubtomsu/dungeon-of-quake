@@ -224,33 +224,21 @@ _player_update :: proc() {
 	}
 
 
+	phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBody(player_data.pos, player_data.vel, 0.0, PLAYER_SIZE)
+	player_data.pos = phy_pos
+	player_data.vel = phy_vel
 
-
-	wishspeed := linalg.length(player_data.vel)
-	wishpos := player_data.pos + player_data.vel * deltatime
-
-	phy_tn, phy_norm, phy_hit := phy_boxcastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
+	//phy_tn, phy_norm, phy_hit := phy_boxcastTilemap(player_data.pos, wishpos, PLAYER_SIZE)
 	prevIsOnGround := player_data.isOnGround
 	player_data.isOnGround = phy_hit && phy_norm.y > PLAYER_MIN_NORMAL_Y
 
 
-	veldir : vec3 = (wishspeed == 0.0 ? {} : player_data.vel/wishspeed)
-	phy_vec := player_data.pos + veldir*phy_tn
-
-	/*
-	player_data.pos = phy_vec
-	//player_data.vel = linalg.lerp(player_data.vel, veldir*(phy_tn + f32(player_data.isOnGround?PHY_BOXCAST_EPS:0.0))/deltatime, 1.0)
-
-	if !prevIsOnGround && player_data.isOnGround && movedir != {} { // just landed
-		//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 0.5)
-		player_data.vel = linalg.lerp(player_data.vel, phy_slideVelocityOnSurf(player_data.vel, phy_norm), 0.8)
-	}
-	*/
 
 	if phy_hit {
-		player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
-		if !player_data.isOnGround && player_data.onGroundTimer > 0.05 {
-			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.1) // bounce off of a wall if player has been in air for some time
+		//player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
+		if !player_data.isOnGround && player_data.onGroundTimer > 0.1 {
+			//player_data.vel += phy_norm*10.0
+			player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.2) // bounce off of a wall if player has been in air for some time
 		} else {
 			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5)*1.5, 0.05, 0.99))
 			//player_data.vel = phy_clipVelocity(
@@ -262,11 +250,8 @@ _player_update :: proc() {
 		//player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
 		//player_data.vel.y -= (phy_norm.y + 0.1)*0.2*(wishspeed/PLAYER_SPEED + 1.0)/2.0
 	}
-
-	player_data.pos, player_data.vel = phy_simulateMovingBody(player_data.pos, player_data.vel, 0.0, PLAYER_SIZE)
 	
 	println("pos", player_data.pos, "vel", player_data.vel, "vellen", linalg.length(player_data.vel))
-	println("phy vec", phy_vec, "tn", phy_tn, "norm", phy_norm, "hit", phy_hit)
 	println("isOnGround", player_data.isOnGround)
 
 	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0

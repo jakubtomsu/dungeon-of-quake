@@ -22,8 +22,8 @@ vec3 tonemapACES(const in vec3 x) {
 	return(clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0));
 }
 
-
-#define TRY_FIT_COLOR(new) old = mix (new, old, step (length (old-ref), length (new-ref)));
+/*
+#define TRY_FIT_COLOR(new) old = mix(new, old, step(length(old-ref), length(new-ref)))
 vec3 gameboyColor(vec3 ref) {
 	ref *= 255.0;
 	vec3 old = vec3(100.0*255.0);
@@ -34,7 +34,7 @@ vec3 gameboyColor(vec3 ref) {
 	return old / 255.0;
 }
 
-/*
+
 vec3 NESColor(vec3 ref) {
 	ref *= 255.0;
 	vec3 old = vec3(100.0*255.0);

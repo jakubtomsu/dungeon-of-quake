@@ -341,6 +341,8 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 		rl.PlaySound(gui.menuContext.setValSound)
 	}
 
+	if !rl.IsWindowReady() do menu_data.loadScreenTimer = 0.0
+
 	unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, menu_data.loadScreenTimer * 0.5))
 
 	rl.SetMusicVolume(asset_data.loadScreenMusic, unfade*unfade*unfade)

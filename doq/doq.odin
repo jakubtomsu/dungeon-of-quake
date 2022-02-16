@@ -640,27 +640,19 @@ ENEMY_GRUNT_SPEED_RAND		:: 0.008 // NOTE: multiplier for length(player velocity)
 ENEMY_GRUNT_DIST_RAND		:: 0.7
 ENEMY_GRUNT_MAX_DIST		:: 250.0
 
-ENEMY_KNIGHT_SIZE		:: vec3{2.0, 3.5, 2.0}
-ENEMY_KNIGHT_ACCELERATION	:: 120
-ENEMY_KNIGHT_MAX_SPEED		:: 12
-ENEMY_KNIGHT_FRICTION		:: 4
-ENEMY_KNIGHT_DAMAGE		:: 0.8
+ENEMY_KNIGHT_SIZE		:: vec3{1.5, 2.5, 1.5}
+ENEMY_KNIGHT_ACCELERATION	:: 160
+ENEMY_KNIGHT_MAX_SPEED		:: 17
+ENEMY_KNIGHT_FRICTION		:: 5
+ENEMY_KNIGHT_DAMAGE		:: 1.0
 ENEMY_KNIGHT_ATTACK_TIME	:: 1.0
 ENEMY_KNIGHT_HEALTH		:: 1.0
-ENEMY_KNIGHT_RANGE		:: 5.0
+ENEMY_KNIGHT_RANGE		:: 4.0
 
 enemy_kind_t :: enum u8 {
 	NONE = 0,
 	GRUNT,
 	KNIGHT,
-}
-
-enemy_animState_t :: enum u8 {
-	BASE = 0, // idle
-	STEP_RIGHT,
-	STEP_MID,
-	STEP_LEFT,
-	HIT,
 }
 
 enemy_data : struct {
@@ -883,29 +875,24 @@ _enemy_updateDataAndRender :: proc() {
 			enemy_data.knights[i].vel = speed < ENEMY_KNIGHT_MAX_SPEED ? enemy_data.knights[i].vel : (enemy_data.knights[i].vel/speed)*ENEMY_KNIGHT_MAX_SPEED
 			speed = max(speed, ENEMY_KNIGHT_MAX_SPEED)
 
-			mov_tn, mov_norm, mov_hit := phy_boxcastTilemap(pos, pos + enemy_data.knights[i].vel*deltatime, ENEMY_KNIGHT_SIZE)
-			if mov_hit && mov_norm.y > 0.2 { // if on ground
-				enemy_data.knights[i].vel = phy_applyFrictionToVelocity(enemy_data.knights[i].vel, ENEMY_KNIGHT_FRICTION, true)
-				if enemy_data.knights[i].isMoving {
-					enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION * deltatime
-				}
-
-				if speed > 0.01 {
-					forwdepth := phy_raycastDepth(pos + flatdir*ENEMY_KNIGHT_SIZE.x*1.7)
-					if forwdepth > ENEMY_KNIGHT_SIZE.y*2 {
-						enemy_data.knights[i].vel = -enemy_data.knights[i].vel*0.5
-					}
+			if speed > 0.01 {
+				forwdepth := phy_raycastDepth(pos + flatdir*ENEMY_KNIGHT_SIZE.x*1.7)
+				if forwdepth > ENEMY_KNIGHT_SIZE.y*2 {
+					enemy_data.knights[i].vel = -enemy_data.knights[i].vel*0.5
 				}
 			}
-	
-			if mov_hit {
-				enemy_data.knights[i].vel = phy_clipVelocity(enemy_data.knights[i].vel, mov_norm, 0.99)
-			}
+			
 
-	
-			if speed > 1e-6 {
-				enemy_data.knights[i].pos += enemy_data.knights[i].vel * deltatime
-			}
+			phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBody(
+				enemy_data.knights[i].pos,
+				enemy_data.knights[i].vel,
+				0.0,
+				ENEMY_KNIGHT_SIZE,
+			)
+			enemy_data.knights[i].pos = phy_pos
+			enemy_data.knights[i].vel = phy_vel
+			
+			//if phy_hit do enemy_data.knights[i].vel.y = 0
 		}
 	} // if !gameIsPaused
 
@@ -970,7 +957,7 @@ _enemy_updateDataAndRender :: proc() {
 		// render knight physics AABBS
 		for i : i32 = 0; i < enemy_data.knightCount; i += 1 {
 			if enemy_data.knights[i].health <= 0.0 do continue
-			rl.DrawCubeWires(enemy_data.knights[i].pos, ENEMY_KNIGHT_SIZE.x*2, ENEMY_KNIGHT_SIZE.y*2, ENEMY_KNIGHT_SIZE.z*2, rl.GREEN)
+			rl.DrawCubeWires(enemy_data.knights[i].pos, ENEMY_KNIGHT_SIZE.x, ENEMY_KNIGHT_SIZE.y, ENEMY_KNIGHT_SIZE.z, rl.GREEN)
 		}
 	}
 }

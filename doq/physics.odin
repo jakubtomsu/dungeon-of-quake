@@ -338,7 +338,7 @@ phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32, disallowNegative
 
 
 // collides only with static geo!
-phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize : vec3) -> (newpos : vec3, newvel : vec3) {
+phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize : vec3) -> (newpos : vec3, newvel : vec3, hit : bool, normal : vec3) {
 	using linalg
 	dir := normalize(vel)
 	wishpos := pos + vel*deltatime
@@ -347,7 +347,9 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 	if !cast_hit {
 		newpos = wishpos
 		newvel = vel
-		return newpos, newvel
+		hit = false
+		normal = cast_norm
+		return newpos, newvel, hit, normal
 	}
 
 	//contact_point := pos + dir*cast_tn
@@ -378,5 +380,7 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 	newvel = dir * glsl.max(0.0, cast_tn) / deltatime
 	//newvel = phy_clipVelocity(vel, cast_norm, 0.5)
 
-	return newpos, newvel
+	hit = cast_tn>0.0
+	normal = cast_norm
+	return newpos, newvel, hit, normal
 }
