@@ -15,6 +15,7 @@ import "core:math/rand"
 import "core:fmt"
 import rl "vendor:raylib"
 import "tiles"
+import "attrib"
 
 
 
@@ -42,8 +43,6 @@ MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
 
 map_data : struct {
 	nextMapName	: string,
-	authorName	: string, // TODO
-	startMessage	: string, // TODO
 	startPlayerDir	: vec2,
 	skyColor	: vec3, // normalized rgb
 	fogStrength	: f32,
@@ -252,6 +251,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 	map_data.elevatorHeights = make(type_of(map_data.elevatorHeights))
 
 
+	/*
 	index : i32 = 0
 	x : i32 = 0
 	y : i32 = 0
@@ -276,23 +276,23 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 			case '{':
 				println("attributes")
 				for data[index] != '}' {
-					if !seri_skipWhitespace(data, &index) do index += 1
+					if !attrib.skipWhitespace(data, &index) do index += 1
 					println("index", index, "ch", cast(rune)data[index])
-					if seri_attribMatch(data, &index, "nextMapName")	do map_data.nextMapName = seri_readString(data, &index)
+					if attrib.match(data, &index, "nextMapName")	do map_data.nextMapName = attrib.readString(data, &index)
 					
-					if seri_attribMatch(data, &index, "startPlayerDir") {
-						map_data.startPlayerDir.x = seri_readF32(data, &index)
-						map_data.startPlayerDir.y = seri_readF32(data, &index)
+					if attrib.match(data, &index, "startPlayerDir") {
+						map_data.startPlayerDir.x = attrib.readF32(data, &index)
+						map_data.startPlayerDir.y = attrib.readF32(data, &index)
 						map_data.startPlayerDir = linalg.normalize(map_data.startPlayerDir)
 					}
 					
-					if seri_attribMatch(data, &index, "skyColor") {
-						map_data.skyColor.r = seri_readF32(data, &index)
-						map_data.skyColor.g = seri_readF32(data, &index)
-						map_data.skyColor.b = seri_readF32(data, &index)
+					if attrib.match(data, &index, "skyColor") {
+						map_data.skyColor.r = attrib.readF32(data, &index)
+						map_data.skyColor.g = attrib.readF32(data, &index)
+						map_data.skyColor.b = attrib.readF32(data, &index)
 					}
 					
-					if seri_attribMatch(data, &index, "fogStrength")	do map_data.fogStrength = seri_readF32(data, &index)
+					if attrib.match(data, &index, "fogStrength")	do map_data.fogStrength = attrib.readF32(data, &index)
 				}
 		}
 
@@ -340,8 +340,10 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 
 		x += 1
 	}
+	*/
 
-	map_data.bounds[1] += 1
+	map_data.bounds.y += 1
+
 	println("end")
 
 	println("bounds[0]", map_data.bounds[0], "bounds[1]", map_data.bounds[1])

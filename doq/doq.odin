@@ -15,9 +15,9 @@ import "core:time"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
-import "core:strconv"
 import rl "vendor:raylib"
 import "gui"
+import "attrib"
 
 
 
@@ -418,15 +418,15 @@ settings_getFilePath :: proc() -> string {
 settings_saveToFile :: proc() {
 	text := fmt.tprint(
 		args={
-			"drawFPS",		SERI_ATTRIB_SEPARATOR, " ", settings.drawFPS,		"\n",
-			"debugIsEnabled",	SERI_ATTRIB_SEPARATOR, " ", settings.debugIsEnabled,	"\n",
-			"audioMasterVolume",	SERI_ATTRIB_SEPARATOR, " ", settings.audioMasterVolume,	"\n",
-			"audioMusicVolume",	SERI_ATTRIB_SEPARATOR, " ", settings.audioMusicVolume,	"\n",
-			"crosshairOpacity",	SERI_ATTRIB_SEPARATOR, " ", settings.crosshairOpacity,	"\n",
-			"mouseSensitivity",	SERI_ATTRIB_SEPARATOR, " ", settings.mouseSensitivity,	"\n",
-			"FOV",			SERI_ATTRIB_SEPARATOR, " ", settings.FOV,		"\n",
-			"viewmodelFOV",		SERI_ATTRIB_SEPARATOR, " ", settings.viewmodelFOV,	"\n",
-			"gunXOffset",		SERI_ATTRIB_SEPARATOR, " ", settings.gunXOffset,	"\n",
+			"drawFPS",		attrib.SEPARATOR, " ", settings.drawFPS,		"\n",
+			"debugIsEnabled",	attrib.SEPARATOR, " ", settings.debugIsEnabled,	"\n",
+			"audioMasterVolume",	attrib.SEPARATOR, " ", settings.audioMasterVolume,	"\n",
+			"audioMusicVolume",	attrib.SEPARATOR, " ", settings.audioMusicVolume,	"\n",
+			"crosshairOpacity",	attrib.SEPARATOR, " ", settings.crosshairOpacity,	"\n",
+			"mouseSensitivity",	attrib.SEPARATOR, " ", settings.mouseSensitivity,	"\n",
+			"FOV",			attrib.SEPARATOR, " ", settings.FOV,		"\n",
+			"viewmodelFOV",		attrib.SEPARATOR, " ", settings.viewmodelFOV,	"\n",
+			"gunXOffset",		attrib.SEPARATOR, " ", settings.gunXOffset,	"\n",
 		},
 		sep="",
 	)
@@ -445,16 +445,16 @@ settings_loadFromFile :: proc() {
 	text := transmute(string)buf
 	index : i32 = 0
 	for index < i32(len(text)) {
-		seri_skipWhitespace(buf, &index)
-		if seri_attribMatch(buf, &index, "drawFPS")		do settings.drawFPS		= seri_readBool(buf, &index)
-		if seri_attribMatch(buf, &index, "debugIsEnabled")	do settings.debugIsEnabled	= seri_readBool(buf, &index)
-		if seri_attribMatch(buf, &index, "audioMasterVolume")	do settings.audioMasterVolume	= seri_readF32 (buf, &index)
-		if seri_attribMatch(buf, &index, "audioMusicVolume")	do settings.audioMusicVolume	= seri_readF32 (buf, &index)
-		if seri_attribMatch(buf, &index, "crosshairOpacity")	do settings.crosshairOpacity	= seri_readF32 (buf, &index)
-		if seri_attribMatch(buf, &index, "mouseSensitivity")	do settings.mouseSensitivity	= seri_readF32 (buf, &index)
-		if seri_attribMatch(buf, &index, "FOV")			do settings.FOV			= seri_readF32 (buf, &index)
-		if seri_attribMatch(buf, &index, "viewmodelFOV")	do settings.viewmodelFOV	= seri_readF32 (buf, &index)
-		if seri_attribMatch(buf, &index, "gunXOffset")		do settings.gunXOffset		= seri_readF32 (buf, &index)
+		attrib.skipWhitespace(buf, &index)
+		if attrib.match(buf, &index, "drawFPS")		do settings.drawFPS		= attrib.readBool(buf, &index)
+		if attrib.match(buf, &index, "debugIsEnabled")	do settings.debugIsEnabled	= attrib.readBool(buf, &index)
+		if attrib.match(buf, &index, "audioMasterVolume")	do settings.audioMasterVolume	= attrib.readF32 (buf, &index)
+		if attrib.match(buf, &index, "audioMusicVolume")	do settings.audioMusicVolume	= attrib.readF32 (buf, &index)
+		if attrib.match(buf, &index, "crosshairOpacity")	do settings.crosshairOpacity	= attrib.readF32 (buf, &index)
+		if attrib.match(buf, &index, "mouseSensitivity")	do settings.mouseSensitivity	= attrib.readF32 (buf, &index)
+		if attrib.match(buf, &index, "FOV")			do settings.FOV			= attrib.readF32 (buf, &index)
+		if attrib.match(buf, &index, "viewmodelFOV")	do settings.viewmodelFOV	= attrib.readF32 (buf, &index)
+		if attrib.match(buf, &index, "gunXOffset")		do settings.gunXOffset		= attrib.readF32 (buf, &index)
 	}
 }
 
@@ -1077,84 +1077,4 @@ randVec3 :: proc() -> vec3 {
 
 roundstep :: proc(a : f32, step : f32) -> f32 {
 	return math.round(a * step) / step
-}
-
-
-
-
-
-//
-// SERIALIZATION/DESERIALIZATION
-//
-
-SERI_ATTRIB_SEPARATOR :: ":"
-
-seri_attribMatch :: proc(buf : []u8, index : ^i32, name : string) -> bool {
-	//println("buf", buf, "index", index^, "name", name)
-	endindex : i32 = cast(i32)strings.index_byte(string(buf[index^:]), ':') + 1
-	if endindex <= 0 do return false
-	src : string = string(buf[index^:index^ + endindex])
-	checkstr := fmt.tprint(args={name, SERI_ATTRIB_SEPARATOR}, sep="")
-	val := strings.compare(src, checkstr)
-	res := val == 0
-	if res {
-		index^ += cast(i32)len(name) + 1
-		seri_skipWhitespace(buf, index)
-	}
-	return res
-}
-
-seri_skipWhitespace :: proc(buf : []u8, index : ^i32) -> bool {
-	skipped := false
-	for strings.is_space(cast(rune)buf[index^]) || buf[index^]=='\n' || buf[index^]=='\r' {
-		index^ += 1
-		skipped = true
-	}
-	return skipped
-}
-
-seri_readF32 :: proc(buf : []u8, index : ^i32) -> f32 {
-	seri_skipWhitespace(buf, index)
-	str := string(buf[index^:])
-	val, ok := strconv.parse_f32(str)
-	_ = ok
-	seri_skipToNextWhitespace(buf, index)
-	return val
-}
-
-seri_readI32 :: proc(buf : []u8, index : ^i32) -> i32 {
-	seri_skipWhitespace(buf, index)
-	str := string(buf[index^:])
-	val, ok := strconv.parse_int(str)
-	_ = ok
-	seri_skipToNextWhitespace(buf, index)
-	return cast(i32)val
-}
-
-seri_readBool :: proc(buf : []u8, index : ^i32) -> bool {
-	seri_skipWhitespace(buf, index)
-	str := string(buf[index^:])
-	res := strings.has_prefix(str, "true")
-	seri_skipToNextWhitespace(buf, index)
-	return res
-}
-
-// reads string in between "
-seri_readString :: proc(buf : []u8, index : ^i32) -> string {
-	seri_skipWhitespace(buf, index)
-	if buf[index^] != '\"' do return ""
-	startindex := index^ + 1
-	endindex := startindex + cast(i32)strings.index_byte(string(buf[startindex:]), '\"')
-	index^ = endindex + 1
-	res := string(buf[startindex:endindex])
-	println("startindex", startindex, "endindex", endindex, "res", res)
-	return res
-}
-
-seri_skipToNextWhitespace :: proc(buf : []u8, index : ^i32) {
-	for !strings.is_space(cast(rune)buf[index^]) && buf[index^]!='\n' && buf[index^]!='\r' {
-		index^ += 1
-		println("skip to next line")
-	}
-	index^ += 1
 }
