@@ -83,7 +83,7 @@ _doq_main :: proc() {
 	_app_init()
 
 	for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
-		println("### frame =", framespassed, "deltatime =", deltatime)
+		//println("### frame =", framespassed, "deltatime =", deltatime)
 		framespassed += 1
 		
 		// fixup

@@ -1,20 +1,13 @@
-{
-	nextMapName: ""
-	startPlayerDir: +NaN +NaN
-	skyColor: 0.000 0.000 0.000
-	fogStrength: 0.000
-}
-
 #####www#####
 #-----------#
-#-SM-t----t-#
-#-Lw--------#
+#-SL-t---t--#
+#-Mw--------#
 #---h k h---#
 w-t-  k  ---w
 w---kkgkk---w
 w---  k  ---w
-#---h k h-- #
-#-t------ww-#
-#--------wF-#
-#---------e #
+#---h k h---#
+#--------ww-#
+#-t------wFe#
+#------- -- #
 #####www#####

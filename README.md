@@ -66,3 +66,6 @@ dqmake is a simple DQM map editor
 <img src="/misc/screenshot4.png">  
 <img src="/misc/screenshot5.png">  
 <img src="/misc/screenshot6.png">  
+### dqmake
+<img src="/misc/dqmake_screenshot0.png" width=600>  
+<img src="/misc/dqmake_screenshot1.png" width=600>  

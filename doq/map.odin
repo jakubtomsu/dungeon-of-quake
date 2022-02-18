@@ -1,21 +1,17 @@
 package doq
 
-
-
 //
 // MAP
 //
 
 
 
-import "core:os"
 import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
 import "core:fmt"
 import rl "vendor:raylib"
 import "tiles"
-import "attrib"
 
 
 
@@ -25,7 +21,7 @@ TILE_MIN_HEIGHT	:: TILE_WIDTH
 TILEMAP_Y_TILES	:: 7
 TILE_HEIGHT	:: TILE_WIDTH * TILEMAP_Y_TILES
 TILEMAP_MID	:: 4
-TILE_OUT_OF_BOUNDS_SIZE :: 2000.0
+TILE_OUT_OF_BOUNDS_SIZE :: 4000.0
 
 TILE_ELEVATOR_MOVE_FACTOR	:: 0.55
 TILE_ELEVATOR_Y0		:: cast(f32)-4.5*TILE_WIDTH + 2.0
@@ -42,13 +38,7 @@ MAP_TILE_FINISH_SIZE :: vec3{8, 16, 8}
 
 
 map_data : struct {
-	nextMapName	: string,
-	startPlayerDir	: vec2,
-	skyColor	: vec3, // normalized rgb
-	fogStrength	: f32,
-
-	tilemap		: [MAP_SIDE_TILE_COUNT][MAP_SIDE_TILE_COUNT]tiles.kind_t, // TODO: allocate exact-size buffer on loadtime
-	bounds		: ivec2,
+	using mapdata : tiles.mapData_t,
 	startPos	: vec3,
 	finishPos	: vec3,
 	isMapFinished	: bool,
@@ -207,26 +197,23 @@ map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
 
 
 map_clearAll :: proc() {
-	map_data.bounds[0] = 0
-	map_data.bounds[1] = 0
-	map_data.nextMapName = ""
-	map_data.skyColor = {0.6, 0.5, 0.8} * 0.6
-	map_data.fogStrength = 2.0
+	tiles.resetMap(&map_data)
+
 	map_data.gunPickupSpawnCount = 0
 	map_data.gunPickupCount = 0
 	map_data.healthPickupSpawnCount = 0
 	map_data.healthPickupCount = 0
-
 	enemy_data.gruntCount = 0
 	enemy_data.knightCount = 0
 
 	delete(map_data.elevatorHeights)
 
-	for x : u32 = 0; x < MAP_SIDE_TILE_COUNT; x += 1 {
-		for y : u32 = 0; y < MAP_SIDE_TILE_COUNT; y += 1 {
-			map_data.tilemap[x][y] = tiles.kind_t.NONE
-		}
-	}
+	map_setDefaultValues()
+}
+
+map_setDefaultValues :: proc() {
+	map_data.skyColor = {0.6, 0.5, 0.8} * 0.6
+	map_data.fogStrength = 1.0
 }
 
 map_loadFromFile :: proc(name: string) -> bool {
@@ -236,17 +223,15 @@ map_loadFromFile :: proc(name: string) -> bool {
 
 map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 	println("! loading map: ", fullpath)
-	data, success := os.read_entire_file_from_filename(fullpath)
 
-	if !success {
-		//app_shouldExitNextFrame = true
-		println("! error: map file not found!")
+	map_clearAll()
+
+	if !tiles.loadFromFile(fullpath, &map_data) {
+		println("! error: map couldn't be loaded")
 		return false
 	}
 
-	defer free(&data[0])
-
-	map_clearAll()
+	map_setDefaultValues()
 
 	map_data.elevatorHeights = make(type_of(map_data.elevatorHeights))
 
@@ -342,7 +327,48 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 	}
 	*/
 
-	map_data.bounds.y += 1
+	for x : i32 = 0; x < map_data.bounds.x; x += 1 {
+		for y : i32 = 0; y < map_data.bounds.y; y += 1 {
+			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/2 - TILE_WIDTH, 0}
+			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH*0.5, 0}
+			tile := map_data.tilemap[x][y]
+
+			#partial switch tile {
+				case .START_LOWER:		map_data.startPos = lowpos + vec3{0, PLAYER_SIZE.y*2, 0}
+				case .START_UPPER:		map_data.startPos = highpos + vec3{0, PLAYER_SIZE.y*2, 0}
+				case .FINISH_LOWER:		map_data.finishPos = lowpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
+				case .FINISH_UPPER:		map_data.finishPos = highpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
+				case .ELEVATOR:			map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
+				case .ENEMY_GRUNT_LOWER:	enemy_spawnGrunt (lowpos  + vec3{0,ENEMY_GRUNT_SIZE.y*1.2 , 0})
+				case .ENEMY_GRUNT_UPPER:	enemy_spawnGrunt (highpos + vec3{0,ENEMY_GRUNT_SIZE.y*1.2 , 0})
+				case .ENEMY_KNIGHT_LOWER:	enemy_spawnKnight(lowpos  + vec3{0,ENEMY_KNIGHT_SIZE.y*2.0, 0})
+				case .ENEMY_KNIGHT_UPPER:	enemy_spawnKnight(highpos + vec3{0,ENEMY_KNIGHT_SIZE.y*2.0, 0})
+				case .GUN_SHOTGUN_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .SHOTGUN)
+				case .GUN_SHOTGUN_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .SHOTGUN)
+				case .GUN_MACHINEGUN_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .MACHINEGUN)
+				case .GUN_MACHINEGUN_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .MACHINEGUN)
+				case .GUN_LASERRIFLE_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .LASERRIFLE)
+				case .GUN_LASERRIFLE_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .LASERRIFLE)
+				case .PICKUP_HEALTH_LOWER:
+					rnd := vec2{
+						rand.float32_range(-1.0, 1.0, &randData),
+						rand.float32_range(-1.0, 1.0, &randData),
+					} * TILE_WIDTH * 0.3
+					map_addHealthPickup(lowpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
+				case .PICKUP_HEALTH_UPPER:
+					rnd := vec2{
+						rand.float32_range(-1.0, 1.0, &randData),
+						rand.float32_range(-1.0, 1.0, &randData),
+					} * TILE_WIDTH * 0.3
+					map_addHealthPickup(highpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
+					tile = tiles.kind_t.WALL_MID
+			}
+
+			map_data.tilemap[x][y] = tiles.translate(tile)
+		}
+	}
+
+
 
 	println("end")
 

@@ -283,6 +283,7 @@ main :: proc() {
 					1.0, //mapData.fogStrength,
 				}),
 			)
+
 			gui.drawText({10, f32(windowSizeY)-50}, 25, gui.INACTIVE_VAL_COLOR, mapData.fullpath)
 
 			if menuKind != .NONE do rl.DrawRectangle(0, 0, windowSizeX, windowSizeY, {10,10,10,200})

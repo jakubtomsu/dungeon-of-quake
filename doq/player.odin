@@ -220,7 +220,7 @@ _player_update :: proc() {
 
 	if hitthorns, dir := calcThornsCollision(player_data.pos, PLAYER_SIZE.x); hitthorns {
 		player_data.vel = dir * 100.0
-		player_damage(0.5)
+		player_damage(5.0)
 	}
 
 

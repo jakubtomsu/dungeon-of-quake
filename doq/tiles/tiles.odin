@@ -99,14 +99,14 @@ resetMap :: proc(mapdata : ^mapData_t) {
 }
 
 loadFromFile :: proc(fullpath : string, mapdata : ^mapData_t) -> bool {
-	data, success := os.read_entire_file_from_filename(fullpath)
-	mapdata.fullpath = fullpath
+	data, ok := os.read_entire_file_from_filename(fullpath)
 
-	if !success do return false
+	if !ok do return false
 
 	defer free(&data[0])
 
 	resetMap(mapdata)
+	mapdata.fullpath = fullpath
 
 	index : i32 = 0
 	x : i32 = 0
@@ -186,14 +186,14 @@ saveToFile :: proc(mapdata : ^mapData_t) {
 
 
 	// all these fprint calls don't look good...
-	for x : i32 = 0; x < bounds.x; x += 1 {
 		for y : i32 = 0; y < bounds.y; y += 1 {
+	for x : i32 = 0; x < bounds.x; x += 1 {
 			buf[offs] = u8(rune(tilemap[x][y]))
 			offs += 1
-		}
 		buf[offs] = '\n'
 		offs += 1
 	}
+		}
 
 	os.write_entire_file(fullpath, buf[:offs])
 }
