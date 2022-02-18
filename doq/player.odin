@@ -142,7 +142,7 @@ _player_update :: proc() {
 		player_data.pos.y += PHY_BOXCAST_EPS*1.1
 		if isInElevatorTile do player_data.pos.y += 0.05 * PLAYER_SIZE.y
 		//player_data.isOnGround = false
-		playSoundMulti(asset_data.player.jumpSound)
+		if player_data.onGroundTimer > 0.05 do playSound(asset_data.player.jumpSound)
 		player_data.rotImpulse.x -= 0.05
 	}
 
@@ -284,8 +284,8 @@ _player_update :: proc() {
 	}
 
 
+
 	// apply main friction
-	/*
 	{
 		START_FRICT_ADD :: 0.01
 		frictadd : f32 = START_FRICT_ADD
@@ -302,11 +302,10 @@ _player_update :: proc() {
 
 		// this should fixe some weird jittering when friction is increased
 		// (just a garbage formula)
-		player_data.vel -= phy_norm*frictadd*0.1
+		//player_data.vel -= phy_norm*frictadd*0.1
 	
 		//if player_data.isOnGround do player_data.vel.y = -PLAYER_GRAVITY * deltatime
 	}
-	*/
 
 
 	cam_forw := linalg.matrix_mul_vector(player_data.lookRotMat3, vec3{0, 0, 1})

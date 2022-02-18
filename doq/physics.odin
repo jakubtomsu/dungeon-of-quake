@@ -4,8 +4,6 @@ package doq
 
 //
 // PHYSICS
-// really simple, but fairly stable collision detection (also continuous)
-// also utils for collision resolution
 //
 // ray intersectors by Inigo Quilez:
 // https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
@@ -49,6 +47,25 @@ phy_rayBoxNearFar :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, size : ve
 	tn := max(max(t1.x, t1.y), t1.z)
 	tf := min(min(t2.x, t2.y), t2.z)
 	return tn, tf
+}
+
+// raycast box with precomputed ray paramterers
+// @param pos: relative to box center
+// @returns: time near, time far, normal
+phy_raycastBox :: proc(pos : vec3, dirinv : vec3, dirinvabs : vec3, dirsign : vec3, boxsize : vec3) -> (tn : f32, tf : f32, normal : vec3) {
+	//using glsl
+	n := dirinv * pos
+	k := dirinvabs * boxsize
+	t1 := -n - k
+	t2 := -n + k
+	tn = max(max(t1.x, t1.y), t1.z)
+	tf = min(min(t2.x, t2.y), t2.z)
+
+	if tn>tf || tf<0.0 do return 1e6, -1e6, {} // no intersection (nside counts as intersection)
+
+	normal = vec3((glsl.step(glsl.vec3{t1.y,t1.z,t1.x}, glsl.vec3{t1.x,t1.y,t1.z}) * glsl.step(glsl.vec3{t1.z,t1.x,t1.y}, glsl.vec3{t1.x,t1.y,t1.z}))) * -dirsign
+
+	return tn, tf, normal
 }
 
 // @param rpos: relative to a point on the plane
@@ -163,7 +180,7 @@ phy_boxcastTilemap :: proc(pos : vec3, wishpos : vec3, boxsize : vec3) -> (f32, 
 	// @returns : clipped pos
 	phy_boxcastTilemapTile :: proc(coord : ivec2, ctx : ^phy_boxcastContext_t) {
 		boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
-		boxcount := map_getTileBoxes(coord, boxbuf[0:])
+		boxcount := map_getTileBoxes(coord, boxbuf[:])
 
 		for i : i32 = 0; i < boxcount; i += 1 {
 			box := boxbuf[i]
@@ -336,8 +353,71 @@ phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32, disallowNegative
 // collides only with static geo!
 phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize : vec3) -> (newpos : vec3, newvel : vec3, hit : bool, normal : vec3) {
 	using linalg
-	dir := normalize(vel)
 	wishpos := pos + vel*deltatime
+	vellen := length(vel)
+	if vellen == 0.0 do return wishpos, vel, false, {}
+	//dir := vel / vellen
+
+	RESTITUTUION_BIAS :: 0.0
+	SOLVER_BETA :: 0.2
+	SOLVER_SLOP :: 0.01
+
+	// discrete collision detection
+	{
+		tilepos := map_worldToTile(pos)
+		box := box_t{pos, boxsize}
+
+		impulse := vec3{}
+		penetration_accumulated_impulse : f32 = 0.0
+
+		for x : i32 = 0; x <= 1; x += 1 {
+			for y : i32 = 0; y <= 1; y += 1 {
+				coord := tilepos + {x, y}
+				boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
+				boxcount := map_getTileBoxes(coord, boxbuf[:])
+
+				for i : i32 = 0; i < boxcount; i += 1 {
+					penetration_depth, sep_axis := phy_boxPenetrationDepth(box, boxbuf[i])
+					if penetration_depth < 0.0 do continue
+					if penetration_depth > 0.1 { // penetrated too deep, use raycasted normal
+						sep_axis = phy_raycastBox(
+							pos=pos-boxbuf[i].pos,
+							dirinv=dirinv,
+							dirinvabs=dirinvabs,
+							dirsign=dirsign,
+							boxsize=boxbuf[i].size,
+						)
+					}
+	
+					hit = true
+					normal += sep_axis
+
+					// solve constraint
+					delta_v := vel
+					delta_v_dot_n : f32 = dot(delta_v, sep_axis)
+					bias_penetration_depth : f32 = -(SOLVER_BETA / deltatime) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
+					constraint_bias : f32 = bias_penetration_depth + RESTITUTUION_BIAS
+					penetration_delta_lambda_initial : f32 = -(delta_v_dot_n + constraint_bias)
+					penetration_lambda_temp : f32 = penetration_accumulated_impulse
+					// clamp lambda the correct way
+					penetration_accumulated_impulse = glsl.max(0.0, penetration_delta_lambda_initial + penetration_lambda_temp)
+					penetration_delta_lambda_final : f32 = penetration_accumulated_impulse - penetration_lambda_temp
+					linear_impulse := sep_axis * penetration_delta_lambda_final
+					impulse += linear_impulse
+				}
+			}
+		}
+
+		normal = linalg.normalize(normal)
+		newvel = vel + impulse
+		newpos = pos + newvel*deltatime
+
+		return newpos, newvel, hit, normal
+	}
+
+	// continuous collision
+	// can be buggy with small delta
+	/*
 	cast_tn, cast_norm, cast_hit := phy_boxcastTilemap(pos, wishpos, boxsize)
 
 	if !cast_hit {
@@ -360,9 +440,6 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 	delta_v := vel
 	penetration_depth : f32 = dot(pos - contact_point, cast_norm) //!!!
 	delta_v_dot_n : f32 = dot(delta_v, cast_norm)
-	RESTITUTUION_BIAS :: 0.0
-	SOLVER_BETA :: 0.2
-	SOLVER_SLOP :: 0.01
 	bias_penetration_depth : f32 = -(SOLVER_BETA / deltatime) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
 	constraint_bias : f32 = bias_penetration_depth + RESTITUTUION_BIAS
 	speculative_offset := cast_tn
@@ -383,4 +460,44 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 	hit = true //cast_tn>0.0
 	normal = cast_norm
 	return newpos, newvel, hit, normal
+	*/
+}
+
+
+
+phy_boxPenetrationDepth :: proc(b0 : box_t, b1 : box_t) -> (penetration : f32, axis : vec3) {
+	using math
+
+	size := b0.size + b1.size
+
+	dx := abs(b0.pos.x - b1.pos.x)
+	dy := abs(b0.pos.y - b1.pos.y)
+	dz := abs(b0.pos.z - b1.pos.z)
+
+	axis = {}
+
+	cx := dx / size.x
+	cy := dy / size.y
+	cz := dz / size.z
+
+	if cx > cy {
+		if cx > cz {
+			penetration = size.x - dx
+			axis.x = b0.pos.x > b1.pos.x ? 1.0 : -1.0
+		} else {
+			penetration = size.z - dz
+			axis.z = b0.pos.z > b1.pos.z ? 1.0 : -1.0
+		}
+	
+	} else {
+		if cy > cz {
+			penetration = size.y - dy
+			axis.y = b0.pos.y > b1.pos.y ? 1.0 : -1.0
+		} else {
+			penetration = size.z - dz
+			axis.z = b0.pos.z > b1.pos.z ? 1.0 : -1.0
+		}
+	}
+
+	return penetration, axis
 }

@@ -220,6 +220,12 @@ main :: proc() {
 						case .FULL: col = {120,120,120,255}
 						case .START_LOWER, .START_UPPER: col = {100,200,200,200}
 						case .FINISH_LOWER, .FINISH_UPPER: col = {150,100,250,200}
+						case .PICKUP_HEALTH_LOWER, .PICKUP_HEALTH_UPPER: col = {100,200,100,200}
+						case .ENEMY_GRUNT_LOWER, .ENEMY_GRUNT_UPPER,
+							.ENEMY_KNIGHT_LOWER, .ENEMY_KNIGHT_UPPER: col = {200,100,100,200}
+						case .GUN_SHOTGUN_LOWER, .GUN_SHOTGUN_UPPER,
+							.GUN_MACHINEGUN_LOWER, .GUN_MACHINEGUN_UPPER,
+							.GUN_LASERRIFLE_LOWER, .GUN_LASERRIFLE_UPPER: col = {150,150,50,200}
 					}
 
 					drawTile({x,y}, col, fmt.tprint(rune(mapData.tilemap[x][y])))
