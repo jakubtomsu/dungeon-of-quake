@@ -1,19 +1,8 @@
 package doq
 
-
-
 import "core:math"
 import "core:math/linalg"
 import rl "vendor:raylib"
-
-
-
-//
-// PLAYER
-//
-// player movement code
-// also handles elevators, death, etc.
-//
 
 
 
@@ -22,13 +11,15 @@ PLAYER_HEAD_CENTER_OFFSET	:: 0.9
 PLAYER_LOOK_SENSITIVITY		:: 0.001
 PLAYER_FOV			:: 110
 PLAYER_VIEWMODEL_FOV		:: 90
-PLAYER_SIZE			:: vec3{1.2,2.2,1.2}
+PLAYER_BOX_SIZE			:: vec3{1.2,2.2,1.2}
+PLAYER_BOX_RAD			:: 0.05
+PLAYER_SIZE			:: vec3{PLAYER_BOX_SIZE.x+PLAYER_BOX_RAD, PLAYER_BOX_SIZE.y+PLAYER_BOX_RAD, PLAYER_BOX_SIZE.z+PLAYER_BOX_RAD}
 PLAYER_HEAD_SIN_TIME		:: math.PI * 5.0
 
 PLAYER_GRAVITY			:: 220 // 800
 PLAYER_SPEED			:: 100 // 320
 PLAYER_GROUND_ACCELERATION	:: 8 // 10
-PLAYER_GROUND_FRICTION		:: 4 // 6
+PLAYER_GROUND_FRICTION		:: 1 // 6
 PLAYER_AIR_ACCELERATION		:: 0.6 // 0.7
 PLAYER_AIR_FRICTION		:: 0.0 // 0
 PLAYER_JUMP_SPEED		:: 60 // 270
@@ -194,7 +185,7 @@ _player_update :: proc() {
 
 			if player_data.pos.y - 0.005 < y && elevatorIsMoving {
 				player_data.pos.y = y + TILE_ELEVATOR_SPEED*deltatime
-				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 28)
+				player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 12)
 				//player_data.vel.y -= TILE_ELEVATOR_SPEED*deltatime
 				player_data.vel.y = 0.0
 				//player_data.vel.y = PLAYER_GRAVITY*deltatime
@@ -223,8 +214,8 @@ _player_update :: proc() {
 		player_damage(5.0)
 	}
 
-
-	phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBody(player_data.pos, player_data.vel, 0.0, PLAYER_SIZE)
+	prevvel := player_data.vel
+	phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBox(player_data.pos, player_data.vel, 0.0, PLAYER_BOX_SIZE, PLAYER_BOX_RAD)
 	player_data.pos = phy_pos
 	player_data.vel = phy_vel
 
@@ -238,7 +229,7 @@ _player_update :: proc() {
 		//player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
 		if !player_data.isOnGround && player_data.onGroundTimer > deltatime*5.0 {
 			//player_data.vel -= phy_norm * linalg.dot(player_data.vel, phy_norm) // project onto the wall plane
-			//player_data.vel += phy_norm*30.0
+			player_data.vel += phy_norm*25.0
 			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.2) // bounce off of a wall if player has been in air for some time
 		} else {
 			//player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5)*1.5, 0.05, 0.99))
@@ -265,7 +256,9 @@ _player_update :: proc() {
 			player_data.rotImpulse.x += 0.03
 		}
 
-		// if player_data.onGroundTimer < 0.1 do player_data.vel.y = 20.0 // this is just to prevent a weird physics bug
+		if player_data.onGroundTimer < 0.1 do player_data.vel.y = 15.0 // this is just to prevent a weird physics bug
+
+		player_data.vel += phy_slideVelocityOnSurf(prevvel, phy_norm)*0.35
 	}
 
 	if prevIsOnGround != player_data.isOnGround do player_data.onGroundTimer = 0.0
@@ -404,9 +397,9 @@ gun_kind_t :: enum {
 	LASERRIFLE	= 2,
 }
 
-GUN_SHOTGUN_SPREAD		:: 0.1
-GUN_SHOTGUN_DAMAGE		:: 0.1
-GUN_MACHINEGUN_SPREAD		:: 0.02
+GUN_SHOTGUN_SPREAD		:: 0.14
+GUN_SHOTGUN_DAMAGE		:: 0.05
+GUN_MACHINEGUN_SPREAD		:: 0.03
 GUN_MACHINEGUN_DAMAGE		:: 0.2
 GUN_LASERRIFLE_DAMAGE		:: 1.0
 
@@ -482,7 +475,7 @@ _gun_update :: proc() {
 
 
 	if gun_data.equipped != prevgun {
-		gun_data.timer = 0.1
+		gun_data.timer = 0.12
 		playSound(asset_data.gun.gunSwitchSound)
 		if gun_data.ammoCounts[gunindex] <= 0 {
 			playSoundMulti(asset_data.gun.emptyMagSound)
@@ -503,19 +496,33 @@ _gun_update :: proc() {
 					RAD :: 0.5
 					COL :: vec4{1,0.7,0.2,0.9}
 					DUR :: 0.7
-					cl, _ := bullet_shootRaycast(muzzlepos, player_data.lookDir,							GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*right),		GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
-					bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					SHOT_COUNT :: 9
+					tn		: [SHOT_COUNT]f32
+					enemykind	: [SHOT_COUNT]enemy_kind_t
+					enemyindex	: [SHOT_COUNT]i32
+					tn[0], enemykind[0], enemyindex[0] = bullet_shootRaycast(muzzlepos, player_data.lookDir,								GUN_SHOTGUN_DAMAGE, DUR, COL, DUR)
+					tn[1], enemykind[1], enemyindex[1] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*right),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[2], enemykind[2], enemyindex[2] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[3], enemykind[3], enemyindex[3] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*right),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[4], enemykind[4], enemyindex[4] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir - GUN_SHOTGUN_SPREAD*up),			GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[5], enemykind[5], enemyindex[5] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[6], enemykind[6], enemyindex[6] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(+up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[7], enemykind[7], enemyindex[7] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up + right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
+					tn[8], enemykind[8], enemyindex[8] = bullet_shootRaycast(muzzlepos, linalg.normalize(player_data.lookDir + GUN_SHOTGUN_SPREAD*0.7*(-up - right)),	GUN_SHOTGUN_DAMAGE, RAD, COL, DUR)
 
-					player_data.vel -= player_data.lookDir*60.0
+					player_data.vel -= player_data.lookDir*77.0
 					player_data.rotImpulse.x -= 0.15
 					playSound(asset_data.gun.shotgunSound)
+					pushdir := linalg.normalize(player_data.lookDir+vec3{0,0.5,0}) * 5.0
+					for kind, i in enemykind {
+						switch kind {
+							case .NONE:
+							case .GRUNT:  enemy_data.grunts [enemyindex[i]].vel += pushdir
+							case .KNIGHT:
+								enemy_data.knights[enemyindex[i]].pos.y += 0.2
+								enemy_data.knights[enemyindex[i]].vel += pushdir
+						}
+					}
 
 				case gun_kind_t.MACHINEGUN:
 					rnd := randVec3()
@@ -526,11 +533,11 @@ _gun_update :: proc() {
 					playSoundMulti(asset_data.gun.machinegunSound)
 
 				case gun_kind_t.LASERRIFLE:
-					_, hitenemy := bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
+					_, enemykind, _ := bullet_shootRaycast(muzzlepos, player_data.lookDir, GUN_LASERRIFLE_DAMAGE, 2.5, {1,0.3,0.2, 1.0}, 1.6)
 					player_data.vel /= 1.25
 					player_data.vel -= player_data.lookDir * 40
-					if hitenemy && !player_data.isOnGround {
-						player_data.vel -= player_data.lookDir * 50
+					if enemykind != .NONE && !player_data.isOnGround {
+						player_data.vel -= player_data.lookDir * 90
 						player_data.vel.y += 50
 					}
 					player_data.rotImpulse.x -= 0.2

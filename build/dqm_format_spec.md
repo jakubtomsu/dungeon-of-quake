@@ -8,6 +8,8 @@ tiles - this means anyone can edit maps with just a simple text editor.
 `.dqm` file extension is used for the map files, even though the underlying data in that file is just plain text.
 Maps can also be split into two floors, using specific tiles.  
 
+Maps are stored inside the `maps/` directory of the build folder.
+
 > **NOTE:** Text editors don't really use fonts with sqare aspect ratio characters,
 so the resulting level might end up looking a little stretched in-game. In some text
 editors, you can change text spacing to circumvent the issue.
@@ -50,6 +52,7 @@ tile character | tile name | uppercase | note |
 `o`|obstacle           |✕| like `empty`, but floor is 1 tile taller
 `O`|obstacle           |✕| `obstacle`, but 2 blocks tall
 `h`|health pickup      |✓| adds 1/4 of health to player
+`t`|thorns             |✕| pillar with thorns/spikes, that can hurt the player when too close
 `d`|shotgun pickup     |✓| refills **shotgun** ammo. `d` stands for `default`, since it's the default weapon
 `m`|machinegun pickup  |✓| refills **machinegun** ammo
 `l`|laser rifle pickup |✓| refills **laser rifle** ammo
@@ -114,13 +117,3 @@ Maps with underscore `_` as a first character are hidden in the map selection me
 
 You can use `_quickload.dqm` map file to instantly load a level, and bypass all the menu's.  
 Subdirectories are supported in the map selection menu, but their name isn't relative to this folder, it's just the last folder in path.
-
-
-## random gameplay/player/movement information
-- you can use shotgun to jump to the top of `obstacle` (or any other 1-tile-tall block)
-- player can't jump over hole that is wider than 1 tile
-- headshots always do 2x the damage, and make a sort of bell *zing* sound effect
-- enemies can't go over an edge
-- ground friction is increased multiple times when the player get's close to an edge
-- player can hold space to bunny hop and gain speed, but changing direction is difficult
-- player can quick-switch weapons, and the delay between shots is 0.1s

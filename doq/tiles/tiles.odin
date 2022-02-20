@@ -119,20 +119,26 @@ loadFromFile :: proc(fullpath : string, mapdata : ^mapData_t) -> bool {
 			case '\x00': break dataloop
 			case '\r': continue dataloop
 			case '\n':
-				y += 1
-				mapdata.bounds.x = max(mapdata.bounds.x, x)
-				mapdata.bounds.y = max(mapdata.bounds.y, y)
+				if index + 1 < i32(len(data)) {
+					y += 1
+					mapdata.bounds.x = max(mapdata.bounds.x, x)
+					mapdata.bounds.y = max(mapdata.bounds.y, y)
+				}
 				x = 0
 				continue dataloop
 			case '{':
 				for data[index] != '}' {
 					if !attrib.skipWhitespace(data, &index) do index += 1
-					if attrib.match(data, &index, "nextMapName")	do mapdata.nextMapName = attrib.readString(data, &index)
+					if attrib.match(data, &index, "nextMapName") do mapdata.nextMapName = attrib.readString(data, &index)
 					
 					if attrib.match(data, &index, "startPlayerDir") {
 						mapdata.startPlayerDir.x = attrib.readF32(data, &index)
 						mapdata.startPlayerDir.y = attrib.readF32(data, &index)
-						mapdata.startPlayerDir = linalg.normalize(mapdata.startPlayerDir)
+						if mapdata.startPlayerDir.x != 0.0 && mapdata.startPlayerDir.y != 0.0 {
+							mapdata.startPlayerDir = linalg.normalize(mapdata.startPlayerDir)
+						} else {
+							mapdata.startPlayerDir = {0,-1}
+						}
 					}
 					
 					if attrib.match(data, &index, "skyColor") {
@@ -186,14 +192,14 @@ saveToFile :: proc(mapdata : ^mapData_t) {
 
 
 	// all these fprint calls don't look good...
-		for y : i32 = 0; y < bounds.y; y += 1 {
-	for x : i32 = 0; x < bounds.x; x += 1 {
+	for y : i32 = 0; y < bounds.y; y += 1 {
+		for x : i32 = 0; x < bounds.x; x += 1 {
 			buf[offs] = u8(rune(tilemap[x][y]))
 			offs += 1
+		}
 		buf[offs] = '\n'
 		offs += 1
 	}
-		}
 
 	os.write_entire_file(fullpath, buf[:offs])
 }

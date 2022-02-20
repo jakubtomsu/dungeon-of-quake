@@ -1,16 +1,5 @@
 package doq
 
-
-
-//
-// PHYSICS
-//
-// ray intersectors by Inigo Quilez:
-// https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
-//
-
-
-
 import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
@@ -351,24 +340,31 @@ phy_applyFrictionToVelocity :: proc(vel : vec3, friction : f32, disallowNegative
 
 
 // collides only with static geo!
-phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize : vec3) -> (newpos : vec3, newvel : vec3, hit : bool, normal : vec3) {
+// @param rad: this expands the box to rounded box with that radius
+phy_simulateMovingBox :: proc(pos : vec3, vel : vec3, friction : f32, boxsize : vec3, rad : f32) -> (newpos : vec3, newvel : vec3, hit : bool, normal : vec3) {
 	using linalg
 	wishpos := pos + vel*deltatime
 	vellen := length(vel)
 	if vellen == 0.0 do return wishpos, vel, false, {}
-	//dir := vel / vellen
+	dir := vel / vellen
+	_ = dir
 
 	RESTITUTUION_BIAS :: 0.0
-	SOLVER_BETA :: 0.2
-	SOLVER_SLOP :: 0.01
+	SOLVER_BETA :: 0.4
+	SOLVER_SLOP :: 0.1
 
 	// discrete collision detection
+	/*
 	{
 		tilepos := map_worldToTile(pos)
-		box := box_t{pos, boxsize}
+		//box := box_t{pos, boxsize}
 
 		impulse := vec3{}
 		penetration_accumulated_impulse : f32 = 0.0
+
+		//dirinv := vec3InvSafe(dir)
+		//dirinvabs := vec3(glsl.abs(transmute(glsl.vec3)dirinv))
+		//dirsign := vec3(glsl.sign(transmute(glsl.vec3)dir))
 
 		for x : i32 = 0; x <= 1; x += 1 {
 			for y : i32 = 0; y <= 1; y += 1 {
@@ -377,20 +373,18 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 				boxcount := map_getTileBoxes(coord, boxbuf[:])
 
 				for i : i32 = 0; i < boxcount; i += 1 {
-					penetration_depth, sep_axis := phy_boxPenetrationDepth(box, boxbuf[i])
-					if penetration_depth < 0.0 do continue
-					if penetration_depth > 0.1 { // penetrated too deep, use raycasted normal
-						sep_axis = phy_raycastBox(
-							pos=pos-boxbuf[i].pos,
-							dirinv=dirinv,
-							dirinvabs=dirinvabs,
-							dirsign=dirsign,
-							boxsize=boxbuf[i].size,
-						)
-					}
+					penetration_depth, sep_axis := phy_sdgBox(
+						pos-boxbuf[i].pos,
+						boxsize+boxbuf[i].size,
+					)
+					penetration_depth = -penetration_depth - rad
 	
-					hit = true
-					normal += sep_axis
+					if penetration_depth < 0.0 do continue
+
+					if penetration_depth > 0.0 {
+						hit = true
+						normal += sep_axis
+					}
 
 					// solve constraint
 					delta_v := vel
@@ -414,10 +408,10 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 
 		return newpos, newvel, hit, normal
 	}
+	*/
 
 	// continuous collision
 	// can be buggy with small delta
-	/*
 	cast_tn, cast_norm, cast_hit := phy_boxcastTilemap(pos, wishpos, boxsize)
 
 	if !cast_hit {
@@ -460,7 +454,6 @@ phy_simulateMovingBody :: proc(pos : vec3, vel : vec3, friction : f32, boxsize :
 	hit = true //cast_tn>0.0
 	normal = cast_norm
 	return newpos, newvel, hit, normal
-	*/
 }
 
 
@@ -500,4 +493,27 @@ phy_boxPenetrationDepth :: proc(b0 : box_t, b1 : box_t) -> (penetration : f32, a
 	}
 
 	return penetration, axis
+}
+
+// https://iquilezles.org/www/articles/distgradfunctions2d/distgradfunctions2d.htm
+// box signed-distance and gradient, extended to 3d
+phy_sdgBox :: proc(p : vec3, b : vec3) -> (sd : f32, grad : vec3) {
+	w : glsl.vec3 = glsl.abs(glsl.vec3(p)) - glsl.vec3(b)
+	s := glsl.vec3{p.x<0.0?-1:1, p.y<0.0?-1:1, p.z<0.0?-1:1}
+	g := glsl.max(w.x, glsl.max(w.y, w.z))
+	q := glsl.max(w, 0.0)
+	l := glsl.length(q)
+	sd = (g>0.0)?l:g
+	grad = vec3(s * ((g>0.0)? q/l : (w.x>w.y? (w.x>w.z? glsl.vec3{1,0,0}:glsl.vec3{0,0,1}) : (w.y>w.z? glsl.vec3{0,1,0}:glsl.vec3{0,0,1}))))
+	return sd, grad
+}
+
+
+
+vec3InvSafe :: proc(v : vec3) -> vec3 {
+	return {
+		v.x == 0.0 ? 1e6 : 1.0/v.x,
+		v.y == 0.0 ? 1e6 : 1.0/v.y,
+		v.z == 0.0 ? 1e6 : 1.0/v.z,
+	}
 }

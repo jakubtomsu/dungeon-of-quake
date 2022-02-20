@@ -65,7 +65,10 @@ asset_data : struct {
 
 		knightAnim		: [^]rl.ModelAnimation,
 		knightAnimCount		: i32,
+		gruntAnim		: [^]rl.ModelAnimation,
+		gruntAnimCount		: i32,
 	
+		gruntTexture		: rl.Texture2D,
 		knightTexture		: rl.Texture2D,
 	},
 	
@@ -151,10 +154,13 @@ asset_loadPersistent :: proc() {
 	asset_data.enemy.gruntDeathSound	= asset_data.enemy.gruntHitSound
 	asset_data.enemy.knightHitSound		= asset_data.enemy.gruntHitSound
 	asset_data.enemy.knightDeathSound	= asset_data.enemy.gruntHitSound
-	asset_data.enemy.gruntModel		= loadModel("grunt.glb")
+	asset_data.enemy.gruntModel		= loadModel("grunt.iqm")
 	asset_data.enemy.knightModel		= loadModel("knight.iqm")
+	asset_data.enemy.gruntAnim		= loadModelAnim("grunt.iqm",  &asset_data.enemy.gruntAnimCount)
 	asset_data.enemy.knightAnim		= loadModelAnim("knight.iqm", &asset_data.enemy.knightAnimCount)
+	asset_data.enemy.gruntTexture		= loadTexture("grunt.png")
 	asset_data.enemy.knightTexture		= loadTexture("knight.png")
+	rl.SetMaterialTexture(&asset_data.enemy.gruntModel.materials[0],  rl.MaterialMapIndex.DIFFUSE, asset_data.enemy.gruntTexture)
 	rl.SetMaterialTexture(&asset_data.enemy.knightModel.materials[0], rl.MaterialMapIndex.DIFFUSE, asset_data.enemy.knightTexture)
 	rl.SetSoundVolume(asset_data.enemy.gruntHitSound, 0.35)
 	rl.SetSoundPitch(asset_data.enemy.gruntHitSound, 1.3)

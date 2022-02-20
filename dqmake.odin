@@ -79,7 +79,7 @@ main :: proc() {
 		.VSYNC_HINT,
 	})
 	rl.InitWindow(1920/1.5, 1080/1.5, "dqmake")
-	rl.SetTargetFPS(144)
+	rl.SetTargetFPS(60)
 	rl.SetExitKey(rl.KeyboardKey.NULL)
 
 	tiles.resetMap(&mapData)
@@ -280,6 +280,10 @@ main :: proc() {
 			
 			// gui.drawText({10, 70}, 25, gui.ACTIVE_COLOR, fmt.tprint("menuKind", menuKind))
 
+			gui.drawText({10, f32(windowSizeY)-50}, 25, gui.INACTIVE_VAL_COLOR, mapData.fullpath)
+
+			if menuKind != .NONE do rl.DrawRectangle(0, 0, windowSizeX, windowSizeY, {10,10,10,200})
+
 			rl.DrawRectangleV(
 				{0, f32(windowSizeY)-20}, {f32(windowSizeX), 20},
 				rl.ColorFromNormalized({
@@ -289,10 +293,6 @@ main :: proc() {
 					1.0, //mapData.fogStrength,
 				}),
 			)
-
-			gui.drawText({10, f32(windowSizeY)-50}, 25, gui.INACTIVE_VAL_COLOR, mapData.fullpath)
-
-			if menuKind != .NONE do rl.DrawRectangle(0, 0, windowSizeX, windowSizeY, {10,10,10,200})
 
 			switch menuKind {
 				case .NONE:

@@ -4,6 +4,8 @@ build_.bat
 dqmake_build_.bat
 
 *.png~
+*.blend1
+*.kra~
 
 build/*.exp
 build/*.lib

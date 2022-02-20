@@ -1,3 +1,10 @@
+{
+	nextMapName: ""
+	startPlayerDir: 0.000 -1.000
+	skyColor: 0.450 0.550 0.550
+	fogStrength: 3.000
+}
+
 ##w#w#w#w#w#w#w#w#w#w##
 #   mdl wwwwwwwwwwwwww#
 w s mdl www    g k   ew

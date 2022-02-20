@@ -58,9 +58,10 @@ menu_drawPlayerUI :: proc() {
 	gunindex := cast(i32)gun_data.equipped
 
 	// draw ammo
-	gui.drawText({f32(windowSizeX) - 150, f32(windowSizeY) - 50},	30, rl.Color{255,200, 50,255}, fmt.tprint("AMMO: ", gun_data.ammoCounts[gunindex]))
+	gui.drawText({f32(windowSizeX) - 150, f32(windowSizeY) - 50},	30, rl.Color{255,200, 50,220}, fmt.tprint("AMMO: ", gun_data.ammoCounts[gunindex]))
 	// health
-	gui.drawText({30, f32(windowSizeY) - 50},		30, rl.Color{255, 80, 80,255}, fmt.tprint("HEALTH: ", player_data.health))
+	gui.drawText({30, f32(windowSizeY) - 50}, 30, rl.Color{255, 80, 80,220}, fmt.tprint("HEALTH: ", player_data.health))
+	gui.drawText({30, 30}, 30, rl.Color{220,180,50,150}, fmt.tprint("KILL COUNT: ", enemy_data.deadCount))
 
 	// draw gun ui
 	for i : i32 = 0; i < GUN_COUNT; i += 1 {
@@ -123,7 +124,11 @@ menu_drawDebugUI :: proc() {
 		debugtext(" bulletline count", bullet_data.bulletLinesCount)
 		debugtext("enemies")
 		debugtext(" grunt count",		enemy_data.gruntCount)
-		debugtext(" knight count",		enemy_data.knightCount)
+		debugtext(" grunt count",		enemy_data.knightCount)
+		debugtext(" grunt anim count",		asset_data.enemy.gruntAnimCount)
+		debugtext(" grunt anim[0] bone count",	asset_data.enemy.gruntAnim[0].boneCount)
+		debugtext(" grunt anim[0] frame count",	asset_data.enemy.gruntAnim[0].frameCount)
+		debugtext(" grunt model bone count",	asset_data.enemy.gruntModel.boneCount)
 		debugtext(" knight anim count",		asset_data.enemy.knightAnimCount)
 		debugtext(" knight anim[0] bone count",	asset_data.enemy.knightAnim[0].boneCount)
 		debugtext(" knight anim[0] frame count",asset_data.enemy.knightAnim[0].frameCount)
@@ -178,7 +183,7 @@ menu_updateAndDrawPauseMenu :: proc() {
 		shouldExitToMainMenu := false
 		shouldReset := false
 		elems : []gui.menuElem_t = {
-			gui.menuButton_t{"resume",		&gameIsPaused},
+			gui.menuButton_t{"RESUME",		&gameIsPaused},
 			gui.menuButton_t{"reset",		&shouldReset},
 			gui.menuButton_t{"go to main menu",	&shouldExitToMainMenu},
 			gui.menuButton_t{"exit to desktop",	&app_shouldExitNextFrame},
@@ -249,7 +254,7 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 	} else {
 		shouldMapSelect := false
 		elems : []gui.menuElem_t = {
-			gui.menuButton_t{"singleplayer",	&shouldMapSelect},
+			gui.menuButton_t{"SINGLEPLAYER",	&shouldMapSelect},
 			gui.menuButton_t{"exit to desktop",	&app_shouldExitNextFrame},
 
 			gui.menuTitle_t{"settings"},
@@ -376,11 +381,12 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 			"press any key to continue",
 		)
 
+		versionstr := fmt.tprint("version: ", DOQ_VERSION_STRING)
 		gui.drawText(
-			{f32(windowSizeX)-130, f32(windowSizeY)-50},
+			{f32(windowSizeX)-f32(len(versionstr)+3)*10, f32(windowSizeY)-50},
 			25,
 			col,
-			DOQ_VERSION_STRING,
+			versionstr,
 		)
 	rl.EndDrawing()
 

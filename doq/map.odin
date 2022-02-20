@@ -1,11 +1,5 @@
 package doq
 
-//
-// MAP
-//
-
-
-
 import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
@@ -124,6 +118,7 @@ map_fullTileBox :: proc(posxz : vec2) -> box_t {
 // fills input buffer `boxbuf` with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
 map_getTileBoxes :: proc(coord : ivec2, boxbuf : []box_t) -> i32 {
+	if !map_isTilePosValid(coord) do return 0
 	tileKind := map_data.tilemap[coord[0]][coord[1]]
 
 	phy_calcBox :: proc(posxz : vec2, posy : f32, sizey : f32) -> box_t {
@@ -231,101 +226,8 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 		return false
 	}
 
-	map_setDefaultValues()
 
 	map_data.elevatorHeights = make(type_of(map_data.elevatorHeights))
-
-
-	/*
-	index : i32 = 0
-	x : i32 = 0
-	y : i32 = 0
-	dataloop : for index < cast(i32)len(data) {
-		ch : u8 = data[index]
-		index += 1
-
-		switch ch {
-			case '\x00':
-				println("null")
-				return false
-			case '\n':
-				println("\\n")
-				y += 1
-				map_data.bounds[0] = max(map_data.bounds[0], x)
-				map_data.bounds[1] = max(map_data.bounds[1], y)
-				x = 0
-				continue dataloop
-			case '\r':
-				println("\\r")
-				continue dataloop
-			case '{':
-				println("attributes")
-				for data[index] != '}' {
-					if !attrib.skipWhitespace(data, &index) do index += 1
-					println("index", index, "ch", cast(rune)data[index])
-					if attrib.match(data, &index, "nextMapName")	do map_data.nextMapName = attrib.readString(data, &index)
-					
-					if attrib.match(data, &index, "startPlayerDir") {
-						map_data.startPlayerDir.x = attrib.readF32(data, &index)
-						map_data.startPlayerDir.y = attrib.readF32(data, &index)
-						map_data.startPlayerDir = linalg.normalize(map_data.startPlayerDir)
-					}
-					
-					if attrib.match(data, &index, "skyColor") {
-						map_data.skyColor.r = attrib.readF32(data, &index)
-						map_data.skyColor.g = attrib.readF32(data, &index)
-						map_data.skyColor.b = attrib.readF32(data, &index)
-					}
-					
-					if attrib.match(data, &index, "fogStrength")	do map_data.fogStrength = attrib.readF32(data, &index)
-				}
-		}
-
-		tile := cast(tiles.kind_t)ch
-		
-		if map_isTilePosInBufferBounds({x, y}) {
-			//println("pre ", tile)
-			lowpos :=  map_tileToWorld({x, y}) - vec3{0, TILE_WIDTH*TILEMAP_Y_TILES/2 - TILE_WIDTH, 0}
-			highpos := map_tileToWorld({x, y}) + vec3{0, TILE_WIDTH*0.5, 0}
-		
-			#partial switch tile {
-				case .START_LOWER:		map_data.startPos = lowpos + vec3{0, PLAYER_SIZE.y*2, 0}
-				case .START_UPPER:		map_data.startPos = highpos + vec3{0, PLAYER_SIZE.y*2, 0}
-				case .FINISH_LOWER:		map_data.finishPos = lowpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
-				case .FINISH_UPPER:		map_data.finishPos = highpos + vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
-				case .ELEVATOR:			map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
-				case .ENEMY_GRUNT_LOWER:	enemy_spawnGrunt (lowpos  + vec3{0,ENEMY_GRUNT_SIZE.y*1.2 , 0})
-				case .ENEMY_GRUNT_UPPER:	enemy_spawnGrunt (highpos + vec3{0,ENEMY_GRUNT_SIZE.y*1.2 , 0})
-				case .ENEMY_KNIGHT_LOWER:	enemy_spawnKnight(lowpos  + vec3{0,ENEMY_KNIGHT_SIZE.y*2.0, 0})
-				case .ENEMY_KNIGHT_UPPER:	enemy_spawnKnight(highpos + vec3{0,ENEMY_KNIGHT_SIZE.y*2.0, 0})
-				case .GUN_SHOTGUN_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .SHOTGUN)
-				case .GUN_SHOTGUN_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .SHOTGUN)
-				case .GUN_MACHINEGUN_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .MACHINEGUN)
-				case .GUN_MACHINEGUN_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .MACHINEGUN)
-				case .GUN_LASERRIFLE_LOWER:	map_addGunPickup(lowpos  + vec3{0,PLAYER_SIZE.y,0}, .LASERRIFLE)
-				case .GUN_LASERRIFLE_UPPER:	map_addGunPickup(highpos + vec3{0,PLAYER_SIZE.y,0}, .LASERRIFLE)
-				case .PICKUP_HEALTH_LOWER:
-					rnd := vec2{
-						rand.float32_range(-1.0, 1.0, &randData),
-						rand.float32_range(-1.0, 1.0, &randData),
-					} * TILE_WIDTH * 0.3
-					map_addHealthPickup(lowpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
-				case .PICKUP_HEALTH_UPPER:
-					rnd := vec2{
-						rand.float32_range(-1.0, 1.0, &randData),
-						rand.float32_range(-1.0, 1.0, &randData),
-					} * TILE_WIDTH * 0.3
-					map_addHealthPickup(highpos + vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
-					tile = tiles.kind_t.WALL_MID
-			}
-
-			map_data.tilemap[x][y] = tiles.translate(tile)
-			//println("post", tile)
-		}
-
-		x += 1
-	}
-	*/
 
 	for x : i32 = 0; x < map_data.bounds.x; x += 1 {
 		for y : i32 = 0; y < map_data.bounds.y; y += 1 {
@@ -545,6 +447,7 @@ map_drawTilemap :: proc() {
 	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*1,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
 	//rl.DrawCylinderEx(circpos-vec3{0,TILE_WIDTH*0,0}, circpos-vec3{0,2000,0}, 1000, 1000, 32, {200,220,220,40})
 
+	// draw clouds
 	{
 		W :: 2048
 		c : vec3 = player_data.pos
