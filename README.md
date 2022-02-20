@@ -17,7 +17,7 @@ and
 
 
 
-if you just want to play the game, go to [releases](https://github.com/jakubtomsu/dungeon-of-quake/releases)
+if you just want to play the game, take a look at [releases](https://github.com/jakubtomsu/dungeon-of-quake/releases)
 
 
 
