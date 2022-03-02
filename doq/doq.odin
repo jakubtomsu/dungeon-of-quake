@@ -208,7 +208,7 @@ _app_init :: proc() {
 		.WINDOW_RESIZABLE,
 		.FULLSCREEN_MODE,
 		//.WINDOW_HIGHDPI,
-		//.VSYNC_HINT,
+		.VSYNC_HINT,
 	})
 	rl.InitWindow(0, 0, "Dungeon of Quake")
 	rl.ToggleFullscreen()
@@ -216,7 +216,7 @@ _app_init :: proc() {
 	windowSizeY = rl.GetScreenHeight()
 
 	rl.SetExitKey(rl.KeyboardKey.NULL)
-	rl.SetTargetFPS(60)
+	rl.SetTargetFPS(120)
 	//rl.SetTargetFPS(10)
 
 	rl.InitAudioDevice()
