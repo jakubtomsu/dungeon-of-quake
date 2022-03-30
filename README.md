@@ -19,6 +19,7 @@ and
 
 if you just want to play the game, take a look at [releases](https://github.com/jakubtomsu/dungeon-of-quake/releases)
 
+[gameplay video](https://youtu.be/4DKa01rcJPY)
 
 
 # maps
