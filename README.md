@@ -23,6 +23,11 @@ Currently the game is still early in development, keep that in mind.
 ### [gameplay video](https://youtu.be/4DKa01rcJPY)
 
 
+# how to build
+- get the [Odin compiler](https://github.com/odin-lang/Odin) (builds are usually tested on the last official [release](https://github.com/odin-lang/Odin/releases))
+- add Odin to `$PATH` enviroment variable
+- (in cmd) use `build.bat` to build the game, or alternatively `build.bat run` to build and run the game  
+
 # maps
 #### Info for creating maps is in [DQM file spec](build/dqm_format_spec.md)  
 Maps are a top-down, ascii view on the map, and different characters correspond to different
@@ -43,20 +48,13 @@ dqmake is a simple DQM map editor
 > use `odin build dqmake.odin -out:build/dqmake.exe` for releases  
 
 
-# how to build
-- get the [Odin compiler](https://github.com/odin-lang/Odin) (builds are usually tested on the last official [release](https://github.com/odin-lang/Odin/releases))
-- add Odin to `$PATH` enviroment variable
-- (in cmd) use `build.bat` to build the game, or alternatively `build.bat run` to build and run the game  
-
 
 
 # TODO
-- fix: physics is weird on high frame rates
 - better collision resolution!
 - 3D audio
 - simple profiler, maybe with [chrome://tracing](chrome://tracing)
 - particles
-- eventually render to G-buffer, for SSAO and blood rendering
 
 
 
