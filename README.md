@@ -13,12 +13,10 @@ and
 </br>
 </br>
 
-**currently work in progress!**
-
-
+Note: the game is not in development anymore.
 
 If you just want to play the game, take a look at [releases](https://github.com/jakubtomsu/dungeon-of-quake/releases).
-Currently the game is still early in development, keep that in mind.
+
 
 ### [gameplay video](https://youtu.be/4DKa01rcJPY)
 
