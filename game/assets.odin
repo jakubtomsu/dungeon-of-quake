@@ -1,11 +1,7 @@
-package doq
-
-
+package game
 
 import "gui"
 import rl "vendor:raylib"
-
-
 
 asset_data: struct {
     defaultShader:                rl.Shader,
@@ -67,7 +63,7 @@ asset_data: struct {
 
 
 // loads assets we don't need to unload until end of the game
-asset_loadPersistent :: proc() {
+assets_load_persistent :: proc() {
     asset_data.loadScreenLogo = loadTexture("dungeon_of_quake_logo.png")
     asset_data.loadScreenMusic = loadMusic("ambient0.wav")
     rl.SetTextureFilter(asset_data.loadScreenLogo, rl.TextureFilter.TRILINEAR)
@@ -150,24 +146,26 @@ asset_loadPersistent :: proc() {
     asset_data.enemy.gruntDeathSound = asset_data.enemy.gruntHitSound
     asset_data.enemy.knightHitSound = asset_data.enemy.gruntHitSound
     asset_data.enemy.knightDeathSound = asset_data.enemy.gruntHitSound
-    asset_data.enemy.gruntModel = loadModel("grunt.iqm")
-    asset_data.enemy.knightModel = loadModel("knight.iqm")
-    asset_data.enemy.gruntAnim = loadModelAnim("grunt.iqm", &asset_data.enemy.gruntAnimCount)
-    asset_data.enemy.knightAnim = loadModelAnim("knight.iqm", &asset_data.enemy.knightAnimCount)
-    asset_data.enemy.gruntTexture = loadTexture("grunt.png")
-    asset_data.enemy.knightTexture = loadTexture("knight.png")
-    rl.SetMaterialTexture(
-        &asset_data.enemy.gruntModel.materials[0],
-        rl.MaterialMapIndex.ALBEDO,
-        asset_data.enemy.gruntTexture,
-    )
-    rl.SetMaterialTexture(
-        &asset_data.enemy.knightModel.materials[0],
-        rl.MaterialMapIndex.ALBEDO,
-        asset_data.enemy.knightTexture,
-    )
     rl.SetSoundVolume(asset_data.enemy.gruntHitSound, 0.35)
     rl.SetSoundPitch(asset_data.enemy.gruntHitSound, 1.3)
+
+    // // asset_data.enemy.gruntModel = loadModel("grunt.iqm")
+    // // asset_data.enemy.knightModel = loadModel("knight.iqm")
+    // // asset_data.enemy.gruntAnim = loadModelAnim("grunt.iqm", &asset_data.enemy.gruntAnimCount)
+    // // asset_data.enemy.knightAnim = loadModelAnim("knight.iqm", &asset_data.enemy.knightAnimCount)
+    // asset_data.enemy.gruntTexture = loadTexture("grunt.png")
+    // asset_data.enemy.knightTexture = loadTexture("knight.png")
+    // rl.SetMaterialTexture(
+    //     &asset_data.enemy.gruntModel.materials[0],
+    //     rl.MaterialMapIndex.ALBEDO,
+    //     asset_data.enemy.gruntTexture,
+    // )
+    // rl.SetMaterialTexture(
+    //     &asset_data.enemy.knightModel.materials[0],
+    //     rl.MaterialMapIndex.ALBEDO,
+    //     asset_data.enemy.knightTexture,
+    // )
+
 
     gui.menuContext.normalFont = loadFont("germania_one.ttf")
     gui.menuContext.selectSound = loadSound("button4.wav")

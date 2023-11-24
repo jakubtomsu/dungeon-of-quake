@@ -1,4 +1,4 @@
-package doq
+package game
 
 import rl "vendor:raylib"
 

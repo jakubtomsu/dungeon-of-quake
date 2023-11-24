@@ -1,20 +1,20 @@
 #version 330
 
-in vec2 fragTexCoord;
-in vec4 fragColor;
-in vec3 fragPosition;
-in vec3 fragNormal;
+in Vec2 fragTexCoord;
+in Vec4 fragColor;
+in Vec3 fragPosition;
+in Vec3 fragNormal;
 
 uniform sampler2D texture0;
-uniform vec4 colDiffuse;
+uniform Vec4 colDiffuse;
 uniform float timePassed;
 
-out vec4 finalColor;
+out Vec4 finalColor;
 
 void main() {
-	vec2 uv = fragTexCoord + vec2(sin(fragTexCoord.x*14.0 + timePassed*2.0), cos(fragTexCoord.y*14.0 + timePassed*2.0)) * 0.02 + vec2(sin(timePassed), cos(timePassed))*0.4;
-	vec4 texelColor = texture(texture0, uv)*colDiffuse*fragColor;
-	vec3 col = texelColor.rgb;
+	Vec2 uv = fragTexCoord + Vec2(sin(fragTexCoord.x*14.0 + timePassed*2.0), cos(fragTexCoord.y*14.0 + timePassed*2.0)) * 0.02 + Vec2(sin(timePassed), cos(timePassed))*0.4;
+	Vec4 texelColor = texture(texture0, uv)*colDiffuse*fragColor;
+	Vec3 col = texelColor.rgb;
 
-	finalColor = vec4(col, 1.0);
+	finalColor = Vec4(col, 1.0);
 }

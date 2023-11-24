@@ -1,4 +1,4 @@
-package doq
+package game
 
 // 'Dungeon of Quake' is a simple first person shooter, heavily inspired by the Quake franchise
 // using raylib
@@ -15,19 +15,7 @@ import "core:time"
 import "gui"
 import rl "vendor:raylib"
 
-
-
-println :: fmt.println
-vec2 :: rl.Vector2
-vec3 :: rl.Vector3
-vec4 :: rl.Vector4
-ivec2 :: [2]i32
-ivec3 :: [3]i32
-mat3 :: linalg.Matrix3f32
-
 DOQ_VERSION_STRING :: "0.1-alpha"
-
-
 
 windowSizeX: i32 = 0
 windowSizeY: i32 = 0
@@ -35,7 +23,7 @@ windowSizeY: i32 = 0
 camera: rl.Camera = {}
 viewmodelCamera: rl.Camera = {}
 
-framespassed: i64 = 0
+frame_index: i64 = 0
 deltatime: f32 = 0.01
 timepassed: f32 = 0.0
 app_shouldExitNextFrame: bool = false
@@ -60,9 +48,7 @@ settings: struct {
     gunXOffset:        f32,
 }
 
-
-
-screenTint: vec3 = {1, 1, 1}
+screenTint: Vec3 = {1, 1, 1}
 
 app_updatePathKind_t :: enum {
     LOADSCREEN = 0,
@@ -81,8 +67,8 @@ _doq_main :: proc() {
     _app_init()
 
     for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
-        //println("### frame =", framespassed, "deltatime =", deltatime)
-        framespassed += 1
+        //println("### frame =", frame_index, "deltatime =", deltatime)
+        frame_index += 1
 
         // fixup
         settings.audioMasterVolume = clamp(settings.audioMasterVolume, 0.0, 1.0)
@@ -97,7 +83,7 @@ _doq_main :: proc() {
         camera.fovy = settings.FOV
         viewmodelCamera.fovy = settings.viewmodelFOV
 
-        rl.DisableCursor()
+        // rl.DisableCursor()
 
         gui.menuContext.windowSizeX = windowSizeX
         gui.menuContext.windowSizeY = windowSizeY
@@ -127,7 +113,7 @@ _doq_main :: proc() {
                 _app_update()
 
                 rl.BeginTextureMode(renderTextureMain)
-                bckgcol := vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, 1.0}
+                bckgcol := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, 1.0}
                 rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
                 rl.BeginMode3D(camera)
                 _app_render3d()
@@ -135,7 +121,7 @@ _doq_main :: proc() {
                     _gun_update()
                     _player_update()
                 }
-                _enemy_updateDataAndRender()
+                // _enemy_updateDataAndRender()
                 _bullet_updateDataAndRender()
                 rl.EndMode3D()
                 rl.BeginMode3D(viewmodelCamera)
@@ -200,17 +186,15 @@ _app_init :: proc() {
     settings_setDefault()
     settings_loadFromFile()
 
-    rl.SetWindowState(
-        {.WINDOW_TOPMOST, .WINDOW_RESIZABLE, .FULLSCREEN_MODE, .VSYNC_HINT}, //.WINDOW_HIGHDPI,
-    )
-    rl.InitWindow(0, 0, "Dungeon of Quake")
-    rl.ToggleFullscreen()
+    rl.SetWindowState({.WINDOW_RESIZABLE, .VSYNC_HINT})
+    rl.InitWindow(800, 600, "Dungeon of Quake")
+    // rl.ToggleFullscreen()
+
     windowSizeX = rl.GetScreenWidth()
     windowSizeY = rl.GetScreenHeight()
 
     rl.SetExitKey(rl.KeyboardKey.KEY_NULL)
     rl.SetTargetFPS(120)
-    //rl.SetTargetFPS(10)
 
     rl.InitAudioDevice()
 
@@ -221,11 +205,11 @@ _app_init :: proc() {
 
     renderTextureMain = rl.LoadRenderTexture(windowSizeX, windowSizeY)
 
-    asset_loadPersistent()
+    assets_load_persistent()
 
     camera.position = {0, 3, 0}
     camera.target = {}
-    camera.up = vec3{0.0, 1.0, 0.0}
+    camera.up = Vec3{0.0, 1.0, 0.0}
     camera.projection = rl.CameraProjection.PERSPECTIVE
     //rl.SetCameraMode(camera, rl.CameraMode.CUSTOM)
 
@@ -241,7 +225,7 @@ _app_init :: proc() {
 
     map_clearAll()
     map_data.bounds = {MAP_SIDE_TILE_COUNT, MAP_SIDE_TILE_COUNT}
-    if os.is_file(appendToAssetPath("maps", "_quickload.dqm")) {
+    if os.is_file(asset_path("maps", "_quickload.dqm")) {
         map_loadFromFile("_quickload.dqm")
         app_setUpdatePathKind(.GAME)
     }
@@ -269,7 +253,7 @@ _app_update :: proc() {
         }
     }
 
-    screenTint = linalg.lerp(screenTint, vec3{1, 1, 1}, clamp(deltatime * 3.0, 0.0, 1.0))
+    screenTint = linalg.lerp(screenTint, Vec3{1, 1, 1}, clamp(deltatime * 3.0, 0.0, 1.0))
 }
 
 _app_render2d :: proc() {
@@ -282,14 +266,14 @@ _app_render3d :: proc() {
         if settings.debugIsEnabled {
             LEN :: 100
             WID :: 1
-            rl.DrawCube(vec3{LEN, 0, 0}, LEN, WID, WID, rl.RED)
-            rl.DrawCube(vec3{0, LEN, 0}, WID, LEN, WID, rl.GREEN)
-            rl.DrawCube(vec3{0, 0, LEN}, WID, WID, LEN, rl.BLUE)
-            rl.DrawCube(vec3{0, 0, 0}, WID, WID, WID, rl.RAYWHITE)
+            rl.DrawCube(Vec3{LEN, 0, 0}, LEN, WID, WID, rl.RED)
+            rl.DrawCube(Vec3{0, LEN, 0}, WID, LEN, WID, rl.GREEN)
+            rl.DrawCube(Vec3{0, 0, LEN}, WID, WID, LEN, rl.BLUE)
+            rl.DrawCube(Vec3{0, 0, 0}, WID, WID, WID, rl.RAYWHITE)
         }
     }
 
-    //rl.DrawPlane(vec3{0.0, 0.0, 0.0}, vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
+    //rl.DrawPlane(Vec3{0.0, 0.0, 0.0}, Vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
     rl.SetShaderValue(
         asset_data.tileShader,
@@ -297,7 +281,7 @@ _app_render3d :: proc() {
         &camera.position,
         rl.ShaderUniformDataType.VEC3,
     )
-    fogColor := vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, map_data.fogStrength}
+    fogColor := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, map_data.fogStrength}
 
     rl.SetShaderValue(
         asset_data.defaultShader,
@@ -504,17 +488,17 @@ bullet_ammoInfo_t :: struct {
 bullet_data: struct {
     bulletLinesCount: i32,
     bulletLines:      [BULLET_LINEAR_EFFECT_MAX_COUNT]struct {
-        start:      vec3,
+        start:      Vec3,
         timeToLive: f32,
-        end:        vec3,
+        end:        Vec3,
         radius:     f32,
-        color:      vec4,
+        color:      Vec4,
         duration:   f32,
     },
 }
 
 // @param timeToLive: in seconds
-bullet_createBulletLine :: proc(start: vec3, end: vec3, rad: f32, col: vec4, duration: f32) {
+bullet_createBulletLine :: proc(start: Vec3, end: Vec3, rad: f32, col: Vec4, duration: f32) {
     if duration <= BULLET_REMOVE_THRESHOLD do return
     index := bullet_data.bulletLinesCount
     if index + 1 >= BULLET_LINEAR_EFFECT_MAX_COUNT do return
@@ -530,11 +514,11 @@ bullet_createBulletLine :: proc(start: vec3, end: vec3, rad: f32, col: vec4, dur
 
 // @returns: tn, hitenemy
 bullet_shootRaycast :: proc(
-    start: vec3,
-    dir: vec3,
+    start: Vec3,
+    dir: Vec3,
     damage: f32,
     rad: f32,
-    col: vec4,
+    col: Vec4,
     effectDuration: f32,
 ) -> (
     tn: f32,
@@ -542,14 +526,14 @@ bullet_shootRaycast :: proc(
     enemyindex: i32,
 ) {
     hit: bool
-    tn, hit, enemykind, enemyindex = phy_boxcastWorld(start, start + dir * 1e6, {0, 0, 0}) //vec3{rad,rad,rad})
+    tn, hit, enemykind, enemyindex = phy_boxcastWorld(start, start + dir * 1e6, {0, 0, 0}) //Vec3{rad,rad,rad})
     hitpos := start + dir * tn
     hitenemy := enemykind != enemy_kind_t.NONE
     bullet_createBulletLine(
         start + dir * rad * 2.0,
         hitpos,
         hitenemy ? rad : rad * 0.65,
-        hitenemy ? col : col * vec4{0.5, 0.5, 0.5, 1.0},
+        hitenemy ? col : col * Vec4{0.5, 0.5, 0.5, 1.0},
         hitenemy ? effectDuration : effectDuration * 0.7,
     )
     if hit {
@@ -579,7 +563,7 @@ bullet_shootRaycast :: proc(
     return tn, enemykind, enemyindex
 }
 
-bullet_shootProjectile :: proc(start: vec3, dir: vec3, damage: f32, rad: f32, col: vec4) {
+bullet_shootProjectile :: proc(start: Vec3, dir: Vec3, damage: f32, rad: f32, col: Vec4) {
     // TODO
 }
 
@@ -614,13 +598,13 @@ _bullet_updateDataAndRender :: proc() {
         rl.DrawSphere(
             bullet_data.bulletLines[i].end,
             sphfade * bullet_data.bulletLines[i].radius * 2.0,
-            rl.ColorFromNormalized(vec4{1, 1, 1, 0.5 + sphfade * 0.5}),
+            rl.ColorFromNormalized(Vec4{1, 1, 1, 0.5 + sphfade * 0.5}),
         )
 
         rl.DrawSphere(
             bullet_data.bulletLines[i].end,
             (sphfade + 2.0) / 3.0 * bullet_data.bulletLines[i].radius * 4.0,
-            rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * sphfade}),
+            rl.ColorFromNormalized(Vec4{col.r, col.g, col.b, col.a * sphfade}),
         )
 
         // thin white
@@ -630,7 +614,7 @@ _bullet_updateDataAndRender :: proc() {
             fade * bullet_data.bulletLines[i].radius * 0.05,
             fade * bullet_data.bulletLines[i].radius * 0.4,
             3,
-            rl.ColorFromNormalized(vec4{1, 1, 1, 0.5 + fade * 0.5}),
+            rl.ColorFromNormalized(Vec4{1, 1, 1, 0.5 + fade * 0.5}),
         )
 
         rl.DrawCylinderEx(
@@ -639,13 +623,13 @@ _bullet_updateDataAndRender :: proc() {
             fade * bullet_data.bulletLines[i].radius * 0.1,
             fade * bullet_data.bulletLines[i].radius,
             BULLET_LINEAR_EFFECT_MESH_QUALITY,
-            rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
+            rl.ColorFromNormalized(Vec4{col.r, col.g, col.b, col.a * fade}),
         )
 
         //rl.DrawSphere(
         //	bullet_data.bulletLines[i].start,
         //	fade * bullet_data.bulletLines[i].radius,
-        //	rl.ColorFromNormalized(vec4{col.r, col.g, col.b, col.a * fade}),
+        //	rl.ColorFromNormalized(Vec4{col.r, col.g, col.b, col.a * fade}),
         //)
     }
     rl.EndShaderMode()
@@ -664,7 +648,7 @@ ENEMY_HEALTH_MULTIPLIER :: 1.5
 ENEMY_HEADSHOT_HALF_OFFSET :: 0.2
 ENEMY_GRAVITY :: 40
 
-ENEMY_GRUNT_SIZE :: vec3{2.5, 3.7, 2.5}
+ENEMY_GRUNT_SIZE :: Vec3{2.5, 3.7, 2.5}
 ENEMY_GRUNT_ACCELERATION :: 10
 ENEMY_GRUNT_MAX_SPEED :: 20
 ENEMY_GRUNT_FRICTION :: 5
@@ -677,7 +661,7 @@ ENEMY_GRUNT_SPEED_RAND :: 0.012 // NOTE: multiplier for length(player velocity) 
 ENEMY_GRUNT_DIST_RAND :: 1.1
 ENEMY_GRUNT_MAX_DIST :: 250.0
 
-ENEMY_KNIGHT_SIZE :: vec3{1.5, 3.0, 1.5}
+ENEMY_KNIGHT_SIZE :: Vec3{1.5, 3.0, 1.5}
 ENEMY_KNIGHT_ACCELERATION :: 7
 ENEMY_KNIGHT_MAX_SPEED :: 38
 ENEMY_KNIGHT_FRICTION :: 2
@@ -699,13 +683,13 @@ enemy_data: struct {
     deadCount:   i32,
     gruntCount:  i32,
     grunts:      [ENEMY_GRUNT_MAX_COUNT]struct {
-        spawnPos:       vec3,
+        spawnPos:       Vec3,
         attackTimer:    f32,
-        pos:            vec3,
+        pos:            Vec3,
         health:         f32,
-        target:         vec3,
+        target:         Vec3,
         isMoving:       bool,
-        vel:            vec3,
+        vel:            Vec3,
         rot:            f32, // angle in radians around Y axis
         animFrame:      i32,
         animFrameTimer: f32,
@@ -718,13 +702,13 @@ enemy_data: struct {
     },
     knightCount: i32,
     knights:     [ENEMY_KNIGHT_MAX_COUNT]struct {
-        spawnPos:       vec3,
+        spawnPos:       Vec3,
         health:         f32,
-        pos:            vec3,
+        pos:            Vec3,
         attackTimer:    f32,
-        vel:            vec3,
+        vel:            Vec3,
         rot:            f32, // angle in radians around Y axis
-        target:         vec3,
+        target:         Vec3,
         isMoving:       bool,
         animFrame:      i32,
         animFrameTimer: f32,
@@ -740,7 +724,7 @@ enemy_data: struct {
 
 
 // guy with a gun
-enemy_spawnGrunt :: proc(pos: vec3) {
+enemy_spawnGrunt :: proc(pos: Vec3) {
     index := enemy_data.gruntCount
     if index + 1 >= ENEMY_GRUNT_MAX_COUNT do return
     enemy_data.gruntCount += 1
@@ -752,7 +736,7 @@ enemy_spawnGrunt :: proc(pos: vec3) {
 }
 
 // guy with a sword
-enemy_spawnKnight :: proc(pos: vec3) {
+enemy_spawnKnight :: proc(pos: Vec3) {
     index := enemy_data.knightCount
     if index + 1 >= ENEMY_KNIGHT_MAX_COUNT do return
     enemy_data.knightCount += 1
@@ -788,7 +772,7 @@ _enemy_updateDataAndRender :: proc() {
                 continue
             }
 
-            pos := enemy_data.grunts[i].pos + vec3{0, ENEMY_GRUNT_SIZE.y * 0.5, 0}
+            pos := enemy_data.grunts[i].pos + Vec3{0, ENEMY_GRUNT_SIZE.y * 0.5, 0}
             dir := linalg.normalize(player_data.pos - pos)
             // cast player
             p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0, 0, 0})
@@ -809,7 +793,7 @@ _enemy_updateDataAndRender :: proc() {
             }
 
 
-            flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * vec3{1, 0, 1})
+            flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * Vec3{1, 0, 1})
 
             toTargetRot: f32 = math.atan2(-flatdir.z, flatdir.x) // * math.sign(flatdir.x)
             enemy_data.grunts[i].rot = math.angle_lerp(
@@ -847,7 +831,7 @@ _enemy_updateDataAndRender :: proc() {
                         pos,
                         pos + bulletdir * bullet_tn,
                         2.0,
-                        vec4{1.0, 0.0, 0.0, 1.0},
+                        Vec4{1.0, 0.0, 0.0, 1.0},
                         1.0,
                     )
                     bulletplayer_tn, bulletplayer_hit := phy_boxcastPlayer(pos, bulletdir, {0, 0, 0})
@@ -909,7 +893,7 @@ _enemy_updateDataAndRender :: proc() {
                 continue
             }
 
-            pos := enemy_data.knights[i].pos + vec3{0, ENEMY_KNIGHT_SIZE.y * 0.5, 0}
+            pos := enemy_data.knights[i].pos + Vec3{0, ENEMY_KNIGHT_SIZE.y * 0.5, 0}
             dir := linalg.normalize(player_data.pos - pos)
             p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0, 0, 0})
             t_tn, t_norm, t_hit := phy_boxcastTilemap(pos, pos + dir * 1e6, {1, 1, 1})
@@ -928,7 +912,7 @@ _enemy_updateDataAndRender :: proc() {
             }
 
 
-            flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * vec3{1, 0, 1})
+            flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * Vec3{1, 0, 1})
 
             toTargetRot: f32 = math.atan2(-flatdir.z, flatdir.x)
             enemy_data.knights[i].rot = math.angle_lerp(
@@ -990,8 +974,6 @@ _enemy_updateDataAndRender :: proc() {
         }
     } // if !gameIsPaused
 
-
-
     // render grunts
     for i: i32 = 0; i < enemy_data.gruntCount; i += 1 {
         if enemy_data.grunts[i].health <= 0.0 do continue
@@ -1024,11 +1006,11 @@ _enemy_updateDataAndRender :: proc() {
                 }
             }
 
-            rl.UpdateModelAnimation(
-                asset_data.enemy.gruntModel,
-                asset_data.enemy.gruntAnim[animindex],
-                enemy_data.grunts[i].animFrame,
-            )
+            // rl.UpdateModelAnimation(
+            //     asset_data.enemy.gruntModel,
+            //     asset_data.enemy.gruntAnim[animindex],
+            //     enemy_data.grunts[i].animFrame,
+            // )
         }
 
         rl.DrawModelEx(
@@ -1073,11 +1055,11 @@ _enemy_updateDataAndRender :: proc() {
                 }
             }
 
-            rl.UpdateModelAnimation(
-                asset_data.enemy.knightModel,
-                asset_data.enemy.knightAnim[animindex],
-                enemy_data.knights[i].animFrame,
-            )
+            // rl.UpdateModelAnimation(
+            //     asset_data.enemy.knightModel,
+            //     asset_data.enemy.knightAnim[animindex],
+            //     enemy_data.knights[i].animFrame,
+            // )
         }
 
         rl.DrawModelEx(
@@ -1089,8 +1071,6 @@ _enemy_updateDataAndRender :: proc() {
             rl.WHITE,
         )
     }
-
-
 
     if settings.debugIsEnabled {
         // render grunt physics AABBS
@@ -1125,67 +1105,64 @@ _enemy_updateDataAndRender :: proc() {
 // HELPERS PROCEDURES
 //
 
-appendToAssetPath :: proc(subdir: string, path: string) -> string {
-    return fmt.tprint(
-        args = {loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
-        sep = "",
-    )
+asset_path :: proc(subdir: string, path: string, allocator := context.temp_allocator) -> string {
+    return filepath.join({loadpath, subdir, path}, allocator)
 }
 
 // ctx temp alloc
-appendToAssetPathCstr :: proc(subdir: string, path: string) -> cstring {
-    return strings.clone_to_cstring(appendToAssetPath(subdir, path), context.temp_allocator)
+asset_path_cstr :: proc(subdir: string, path: string, allocator := context.temp_allocator) -> cstring {
+    return strings.clone_to_cstring(asset_path(subdir, path), allocator)
 }
 
 loadTexture :: proc(path: string) -> rl.Texture {
-    fullpath := appendToAssetPathCstr("textures", path)
+    fullpath := asset_path_cstr("textures", path)
     println("! loading texture: ", fullpath)
     return rl.LoadTexture(fullpath)
 }
 
 loadSound :: proc(path: string) -> rl.Sound {
     //if !rl.IsAudioDeviceReady() do return {}
-    fullpath := appendToAssetPathCstr("audio", path)
+    fullpath := asset_path_cstr("audio", path)
     println("! loading sound: ", fullpath)
     return rl.LoadSound(fullpath)
 }
 
 loadMusic :: proc(path: string) -> rl.Music {
     //if !rl.IsAudioDeviceReady() do return {}
-    fullpath := appendToAssetPathCstr("audio", path)
+    fullpath := asset_path_cstr("audio", path)
     println("! loading music: ", fullpath)
     return rl.LoadMusicStream(fullpath)
 }
 
 loadFont :: proc(path: string) -> rl.Font {
-    fullpath := appendToAssetPathCstr("fonts", path)
+    fullpath := asset_path_cstr("fonts", path)
     println("! loading font: ", fullpath)
     return rl.LoadFontEx(fullpath, 32, nil, 0)
     //return rl.LoadFont(fullpath)
 }
 
 loadModel :: proc(path: string) -> rl.Model {
-    fullpath := appendToAssetPathCstr("models", path)
+    fullpath := asset_path_cstr("models", path)
     println("! loading model: ", fullpath)
     return rl.LoadModel(fullpath)
 }
 
 loadModelAnim :: proc(path: string, outCount: ^u32) -> [^]rl.ModelAnimation {
-    fullpath := appendToAssetPathCstr("anim", path)
+    fullpath := asset_path_cstr("anim", path)
     println("! loading anim: ", fullpath)
     return rl.LoadModelAnimations(fullpath, outCount)
 }
 
 loadShader :: proc(vertpath: string, fragpath: string) -> rl.Shader {
-    vertfullpath := appendToAssetPathCstr("shaders", vertpath)
-    fragfullpath := appendToAssetPathCstr("shaders", fragpath)
+    vertfullpath := asset_path_cstr("shaders", vertpath)
+    fragfullpath := asset_path_cstr("shaders", fragpath)
     println("! loading shader: vert: ", vertfullpath, "frag:", fragfullpath)
     return rl.LoadShader(vertfullpath, fragfullpath)
 }
 
 // uses default vertex shader
 loadFragShader :: proc(path: string) -> rl.Shader {
-    fullpath := appendToAssetPathCstr("shaders", path)
+    fullpath := asset_path_cstr("shaders", path)
     println("! loading shader: ", fullpath)
     return rl.LoadShader(nil, fullpath)
 }
@@ -1203,9 +1180,9 @@ playSoundMulti :: proc(sound: rl.Sound) {
 }
 
 // rand vector with elements in -1..1
-randVec3 :: proc() -> vec3 {
+randVec3 :: proc() -> Vec3 {
     return(
-        vec3 {
+        Vec3 {
             rand.float32_range(-1.0, 1.0, &randData),
             rand.float32_range(-1.0, 1.0, &randData),
             rand.float32_range(-1.0, 1.0, &randData),

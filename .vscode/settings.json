@@ -1,4 +1,4 @@
 {
-	"editor.tabSize": 8,
-	"editor.insertSpaces": false
+	"editor.tabSize": 4,
+	"editor.insertSpaces": true,
 }
