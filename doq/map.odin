@@ -382,7 +382,7 @@ map_drawTilemap :: proc() {
 
 	rl.BeginShaderMode(asset_data.portalShader)
 	// draw finish
-	rl.DrawCubeTexture(asset_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
+	doqDrawCubeTexture(asset_data.portalTexture, map_data.finishPos, MAP_TILE_FINISH_SIZE.x*2, MAP_TILE_FINISH_SIZE.y*2, MAP_TILE_FINISH_SIZE.z*2, rl.WHITE)
 	rl.EndShaderMode()
 	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-4,-MAP_TILE_FINISH_SIZE.y*2-4,-MAP_TILE_FINISH_SIZE.z*2-4, {0,0,0,40})
 	rl.DrawCube(map_data.finishPos,-MAP_TILE_FINISH_SIZE.x*2-2,-MAP_TILE_FINISH_SIZE.y*2-2,-MAP_TILE_FINISH_SIZE.z*2-2, {0,0,0,60})
@@ -452,12 +452,12 @@ map_drawTilemap :: proc() {
 		W :: 2048
 		c : vec3 = player_data.pos
 		rl.BeginShaderMode(asset_data.cloudShader)
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,50})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,40})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,20})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {200,200,200,60})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,40})
-		rl.DrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,20})
+		doqDrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.6,c.z}, W,1,W, {255,255,255,50})
+		doqDrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*1.0,c.z}, W,1,W, {255,255,255,40})
+		doqDrawCubeTexture(asset_data.cloudTexture, vec3{c.x,+TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,20})
+		doqDrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.6,c.z}, W,1,W, {200,200,200,60})
+		doqDrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*1.0,c.z}, W,1,W, {200,200,200,40})
+		doqDrawCubeTexture(asset_data.cloudTexture, vec3{c.x,-TILE_HEIGHT*0.6,c.z}, W,1,W, {255,255,255,20})
 		rl.EndShaderMode()
 	}
 }
