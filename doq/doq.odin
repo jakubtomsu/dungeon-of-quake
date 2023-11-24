@@ -72,7 +72,9 @@ app_updatePathKind_t :: enum {
 
 app_updatePathKind : app_updatePathKind_t
 
-
+main :: proc() {
+	_doq_main()
+}
 
 // this just gets called from main
 _doq_main :: proc() {
@@ -119,8 +121,8 @@ _doq_main :: proc() {
 			case .GAME:
 			// main game update path
 			{
-				rl.UpdateCamera(&camera)
-				rl.UpdateCamera(&viewmodelCamera)
+				rl.UpdateCamera(&camera, rl.CameraMode.CUSTOM)
+				rl.UpdateCamera(&viewmodelCamera, rl.CameraMode.CUSTOM)
 
 				_app_update()
 
@@ -215,7 +217,7 @@ _app_init :: proc() {
 	windowSizeX = rl.GetScreenWidth()
 	windowSizeY = rl.GetScreenHeight()
 
-	rl.SetExitKey(rl.KeyboardKey.NULL)
+	rl.SetExitKey(rl.KeyboardKey.KEY_NULL)
 	rl.SetTargetFPS(120)
 	//rl.SetTargetFPS(10)
 
@@ -234,13 +236,13 @@ _app_init :: proc() {
 	camera.target = {}
 	camera.up = vec3{0.0, 1.0, 0.0}
 	camera.projection = rl.CameraProjection.PERSPECTIVE
-	rl.SetCameraMode(camera, rl.CameraMode.CUSTOM)
+	//rl.SetCameraMode(camera, rl.CameraMode.CUSTOM)
 
 	viewmodelCamera.position = {0,0,0}
 	viewmodelCamera.target = {0,0,1}
 	viewmodelCamera.up = {0,1,0}
 	viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
-	rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
+	//rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
 
 
@@ -1083,7 +1085,7 @@ loadModel :: proc(path : string) -> rl.Model {
 	return rl.LoadModel(fullpath)
 }
 
-loadModelAnim :: proc(path : string, outCount : ^i32) -> [^]rl.ModelAnimation {
+loadModelAnim :: proc(path : string, outCount : ^u32) -> [^]rl.ModelAnimation {
 	fullpath := appendToAssetPathCstr("anim", path)
 	println("! loading anim: ", fullpath)
 	return rl.LoadModelAnimations(fullpath, outCount)
@@ -1112,7 +1114,7 @@ playSound :: proc(sound : rl.Sound) {
 
 playSoundMulti :: proc(sound : rl.Sound) {
 	if !rl.IsAudioDeviceReady() do return
-	rl.PlaySoundMulti(sound)
+	//rl.PlaySoundMulti(sound)
 }
 
 // rand vector with elements in -1..1

@@ -4,6 +4,3 @@ import "doq"
 
 
 
-main :: proc() {
-	doq._doq_main()
-}

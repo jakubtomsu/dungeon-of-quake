@@ -102,7 +102,7 @@ updateAndDrawElemBuf :: proc(elems : []menuElem_t) -> bool {
 		if !rl.IsKeyDown(rl.KeyboardKey.LEFT_CONTROL) {
 			loopfind: for i := 0; i < len(elems); i += 1 {
 				index := (int(menuContext.selected) + i*selectDir + selectDir) %% len(elems)
-				#partial switch in elems[index] {
+				#partial switch _ in elems[index] {
 					case menuTitle_t: continue loopfind
 				}
 				menuContext.selected = i32(index)
@@ -111,7 +111,7 @@ updateAndDrawElemBuf :: proc(elems : []menuElem_t) -> bool {
 		} else { // jump between titles (also stops at first/last elem)
 			loopfindjump: for i := 0; i < len(elems); i += 1 {
 				index := (int(menuContext.selected) + i*selectDir + selectDir) %% len(elems)
-				#partial switch in elems[index] {
+				#partial switch _ in elems[index] {
 					case menuTitle_t:
 						menuContext.selected = i32(index + selectDir)
 						break loopfindjump

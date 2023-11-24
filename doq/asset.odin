@@ -64,9 +64,9 @@ asset_data : struct {
 		knightModel		: rl.Model,
 
 		knightAnim		: [^]rl.ModelAnimation,
-		knightAnimCount		: i32,
+		knightAnimCount		: u32,
 		gruntAnim		: [^]rl.ModelAnimation,
-		gruntAnimCount		: i32,
+		gruntAnimCount		: u32,
 	
 		gruntTexture		: rl.Texture2D,
 		knightTexture		: rl.Texture2D,
@@ -143,8 +143,8 @@ asset_loadPersistent :: proc() {
 	asset_data.healthPickupModel	= loadModel("healthpickup.glb")
 	asset_data.boxModel		= loadModel("box.glb")
 	asset_data.thornsModel		= loadModel("thorns.glb")
-	rl.SetMaterialTexture(&asset_data.tileModel.materials[0], rl.MaterialMapIndex.DIFFUSE, asset_data.wallTexture)
-	rl.SetMaterialTexture(&asset_data.elevatorModel.materials[0], rl.MaterialMapIndex.DIFFUSE, asset_data.elevatorTexture)
+	rl.SetMaterialTexture(&asset_data.tileModel.materials[0], rl.MaterialMapIndex.ALBEDO, asset_data.wallTexture)
+	rl.SetMaterialTexture(&asset_data.elevatorModel.materials[0], rl.MaterialMapIndex.ALBEDO, asset_data.elevatorTexture)
 	asset_data.tileModel.materials[0].shader	= asset_data.tileShader
 	asset_data.elevatorModel.materials[0].shader	= asset_data.tileShader
 	asset_data.boxModel.materials[1].shader		= asset_data.defaultShader
@@ -160,8 +160,8 @@ asset_loadPersistent :: proc() {
 	asset_data.enemy.knightAnim		= loadModelAnim("knight.iqm", &asset_data.enemy.knightAnimCount)
 	asset_data.enemy.gruntTexture		= loadTexture("grunt.png")
 	asset_data.enemy.knightTexture		= loadTexture("knight.png")
-	rl.SetMaterialTexture(&asset_data.enemy.gruntModel.materials[0],  rl.MaterialMapIndex.DIFFUSE, asset_data.enemy.gruntTexture)
-	rl.SetMaterialTexture(&asset_data.enemy.knightModel.materials[0], rl.MaterialMapIndex.DIFFUSE, asset_data.enemy.knightTexture)
+	rl.SetMaterialTexture(&asset_data.enemy.gruntModel.materials[0],  rl.MaterialMapIndex.ALBEDO, asset_data.enemy.gruntTexture)
+	rl.SetMaterialTexture(&asset_data.enemy.knightModel.materials[0], rl.MaterialMapIndex.ALBEDO, asset_data.enemy.knightTexture)
 	rl.SetSoundVolume(asset_data.enemy.gruntHitSound, 0.35)
 	rl.SetSoundPitch(asset_data.enemy.gruntHitSound, 1.3)
 
