@@ -85,4 +85,6 @@ doqDrawCubeTexture :: proc(
 
 	rl.rlEnd()
 
+	rl.rlSetTexture(0)
+
 }
