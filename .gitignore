@@ -6,6 +6,7 @@ dqmake_build_.bat
 *.png~
 *.blend1
 *.kra~
+*.exe
 
 build/*.exp
 build/*.lib
