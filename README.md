@@ -32,7 +32,7 @@ Maps are a top-down, ascii view on the map, and different characters correspond 
 tiles - this means anyone can edit maps with just a simple text editor.  
 `.dqm` file extension is used, even though the underlying file is just plain text.
 
-> The raw tile table is in [tiles.odin](/doq/tiles/tiles.odin) as `kind_t`
+> The raw tile table is in [tiles.odin](/doq/tiles/tiles.odin) as `Tile`
 
 Some tiles are translated to different tiles when the map gets loaded into memory. For instance, lowercase
 health pickup `h` is translated to `empty` tile, and the pickup itself gets spawned separately.

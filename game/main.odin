@@ -23,20 +23,19 @@ App_State :: enum {
 
 
 Global_State :: struct {
-    window_size:       IVec2,
-    camera:            rl.Camera,
-    time_passed:       f32,
-    frame_index:       i64,
-    exit_next_frame:   bool,
-    load_dir:          string,
-    renderTextureMain: rl.RenderTexture2D,
-    randData:          rand.Rand,
-    playingMusic:      ^rl.Music,
-    gameIsPaused:      bool,
-    screenTint:        Vec3,
-    app_state:         App_State,
-    settings:          Settings,
-    assets:            Assets,
+    window_size:     IVec2,
+    camera:          rl.Camera,
+    time_passed:     f32,
+    frame_index:     i64,
+    exit_next_frame: bool,
+    load_dir:        string,
+    render_texture:  rl.RenderTexture2D,
+    current_music:   ^rl.Music,
+    paused:          bool,
+    screen_tint:     Vec3,
+    app_state:       App_State,
+    settings:        Settings,
+    assets:          Assets,
 }
 
 g_state: Global_State
@@ -50,50 +49,48 @@ main :: proc() {
         g_state.frame_index += 1
 
         // fixup
-        g_state.settings.audioMasterVolume = clamp(g_state.settings.audioMasterVolume, 0.0, 1.0)
-        g_state.settings.audioMusicVolume = clamp(g_state.settings.audioMusicVolume, 0.0, 1.0)
-        g_state.settings.crosshairOpacity = clamp(g_state.settings.crosshairOpacity, 0.0, 1.0)
-        g_state.settings.mouseSensitivity = clamp(g_state.settings.mouseSensitivity, 0.1, 5.0)
-        g_state.settings.FOV = clamp(g_state.settings.FOV, 60.0, 160.0)
-        g_state.settings.viewmodelFOV = clamp(g_state.settings.viewmodelFOV, 80.0, 120.0)
-        g_state.settings.gunXOffset = clamp(g_state.settings.gunXOffset, -0.4, 0.4)
-        rl.SetMasterVolume(g_state.settings.audioMasterVolume)
+        g_state.settings.master_volume = clamp(g_state.settings.master_volume, 0.0, 1.0)
+        g_state.settings.music_volume = clamp(g_state.settings.music_volume, 0.0, 1.0)
+        g_state.settings.crosshair_opacity = clamp(g_state.settings.crosshair_opacity, 0.0, 1.0)
+        g_state.settings.mouse_speed = clamp(g_state.settings.mouse_speed, 0.1, 5.0)
+        g_state.settings.fov = clamp(g_state.settings.fov, 60.0, 160.0)
+        g_state.settings.gun_fov = clamp(g_state.settings.gun_fov, 80.0, 120.0)
+        g_state.settings.gun_offset_x = clamp(g_state.settings.gun_offset_x, -0.4, 0.4)
+        rl.SetMasterVolume(g_state.settings.master_volume)
 
-        g_state.camera.fovy = g_state.settings.FOV
+        g_state.camera.fovy = g_state.settings.fov
 
-        gui.menuContext.windowSizeX = windowSizeX
-        gui.menuContext.windowSizeY = windowSizeY
-        gui.menuContext.deltatime = deltatime
-
-        if playingMusic != nil {
-            rl.UpdateMusicStream(playingMusic^)
+        if g_state.current_music != nil {
+            rl.UpdateMusicStream(g_state.current_music^)
         }
 
-        if settings.debugIsEnabled do rl.SetTraceLogLevel(rl.TraceLogLevel.ALL)
-        else do rl.SetTraceLogLevel(rl.TraceLogLevel.NONE)
+        rl.SetTraceLogLevel(g_state.settings.debug ? .ALL : .NONE)
 
+        if g_state.app_state != .Game {
+            // Stop all sounds
+            rl.StopSound(g_state.assets.elevatorSound)
+            rl.StopSound(g_state.assets.player.swooshSound)
+        }
 
-        if app_updatePathKind != .GAME do gameStopSounds()
-
-        switch app_updatePathKind {
-        case .LOADSCREEN:
+        switch g_state.app_state {
+        case .Loadscreen:
             menu_updateAndDrawLoadScreenUpdatePath()
-        case .MAIN_MENU:
+        case .Main_Menu:
             menu_updateAndDrawMainMenuUpdatePath()
-        case .GAME:
+        case .Game:
             // main game update path
             {
-                rl.UpdateCamera(&camera, .CUSTOM)
+                rl.UpdateCamera(&g_state.camera, .CUSTOM)
 
                 _app_update()
 
-                rl.BeginTextureMode(renderTextureMain)
+                rl.BeginTextureMode(g_state.render_texture)
                 bckgcol := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, 1.0}
                 rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
 
-                rl.BeginMode3D(camera)
+                rl.BeginMode3D(g_state.camera)
                 _app_render3d()
-                if !gameIsPaused {
+                if !g_state.paused {
                     _gun_update()
                     _player_update()
                 }
@@ -101,8 +98,8 @@ main :: proc() {
                 _bullet_updateDataAndRender()
                 rl.EndMode3D()
 
-                viewmodel_cam := camera
-                viewmodel_cam.fovy = settings.viewmodelFOV
+                viewmodel_cam := g_state.camera
+                viewmodel_cam.fovy = g_state.settings.gun_fov
                 rl.UpdateCamera(&viewmodel_cam, .CUSTOM)
                 rl.BeginMode3D(viewmodel_cam)
                 gun_drawModel(gun_calcViewportPos())
@@ -121,12 +118,12 @@ main :: proc() {
 
                 rl.BeginShaderMode(postprocessShader)
                 rl.DrawTextureRec(
-                    renderTextureMain.texture,
+                    render_texture.texture,
                     rl.Rectangle {
                         0,
                         0,
-                        cast(f32)renderTextureMain.texture.width,
-                        -cast(f32)renderTextureMain.texture.height,
+                        cast(f32)render_texture.texture.width,
+                        -cast(f32)render_texture.texture.height,
                     },
                     {0, 0},
                     rl.WHITE,
@@ -142,11 +139,8 @@ main :: proc() {
             }
         }
 
-
-
-        deltatime = rl.GetFrameTime()
-        if !gameIsPaused {
-            g_state.time_passed += deltatime // not really accurate but whatever
+        if !g_state.paused {
+            g_state.time_passed += rl.GetFrameTime()
         }
     }
 
@@ -169,6 +163,7 @@ _app_init :: proc() {
         }
     }
 
+
     rl.SetWindowState({.WINDOW_RESIZABLE, .VSYNC_HINT, .FULLSCREEN_MODE})
     rl.InitWindow(800, 600, "Dungeon of Quake")
     rl.SetWindowMonitor(0)
@@ -187,14 +182,16 @@ _app_init :: proc() {
     rl.SetMasterVolume(g_state.settings.master_volume)
 
 
-    renderTextureMain = rl.LoadRenderTexture(windowSizeX, windowSizeY)
+    g_state.render_texture = rl.LoadRenderTexture(g_state.window_size.x, g_state.window_size.y)
 
     assets_load_persistent()
 
-    camera.position = {0, 3, 0}
-    camera.target = {}
-    camera.up = Vec3{0.0, 1.0, 0.0}
-    camera.projection = rl.CameraProjection.PERSPECTIVE
+    g_state.camera = {
+        position = {0, 3, 0},
+        target = {},
+        up = Vec3{0.0, 1.0, 0.0},
+        projection = rl.CameraProjection.PERSPECTIVE,
+    }
 
     rand.init(&randData, cast(u64)time.now()._nsec)
 
@@ -214,9 +211,13 @@ _app_update :: proc() {
     //rl.UpdateMusicStream(map_data.ambientMusic)
     //rl.SetMusicVolume(player_data.swooshMusic, clamp(linalg.length(player_data.vel * 0.05), 0.0, 1.0))
 
-    if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) do settings.debugIsEnabled = !settings.debugIsEnabled
+    if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) {
+        g_state.settings.debug = !g_state.settings.debug
+    }
 
-    if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) do gameIsPaused = !gameIsPaused
+    if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) {
+        g_state.paused = true
+    }
 
     // pull elevators down
     {
@@ -251,49 +252,49 @@ _app_render3d :: proc() {
     //rl.DrawPlane(Vec3{0.0, 0.0, 0.0}, Vec2{32.0, 32.0}, rl.LIGHTGRAY) // Draw ground
 
     rl.SetShaderValue(
-        asset_data.tileShader,
-        asset_data.tileShaderCamPosUniformIndex,
+        g_state.assets.tileShader,
+        g_state.assets.tileShaderCamPosUniformIndex,
         &camera.position,
         rl.ShaderUniformDataType.VEC3,
     )
     fogColor := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, map_data.fogStrength}
 
     rl.SetShaderValue(
-        asset_data.defaultShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.defaultShader, "camPos"),
+        g_state.assets.defaultShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.defaultShader, "camPos"),
         &camera.position,
         rl.ShaderUniformDataType.VEC3,
     )
     rl.SetShaderValue(
-        asset_data.defaultShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.defaultShader, "fogColor"),
+        g_state.assets.defaultShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.defaultShader, "fogColor"),
         &fogColor,
         rl.ShaderUniformDataType.VEC4,
     )
 
     rl.SetShaderValue(
-        asset_data.tileShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.tileShader, "fogColor"),
+        g_state.assets.tileShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.tileShader, "fogColor"),
         &fogColor,
         rl.ShaderUniformDataType.VEC4,
     )
 
     rl.SetShaderValue(
-        asset_data.portalShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.portalShader, "g_state.time_passed"),
+        g_state.assets.portalShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.portalShader, "g_state.time_passed"),
         &g_state.time_passed,
         rl.ShaderUniformDataType.FLOAT,
     )
 
     rl.SetShaderValue(
-        asset_data.cloudShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.cloudShader, "g_state.time_passed"),
+        g_state.assets.cloudShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.cloudShader, "g_state.time_passed"),
         &g_state.time_passed,
         rl.ShaderUniformDataType.FLOAT,
     )
     rl.SetShaderValue(
-        asset_data.cloudShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.cloudShader, "camPos"),
+        g_state.assets.cloudShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.cloudShader, "camPos"),
         &camera.position,
         rl.ShaderUniformDataType.VEC3,
     )
@@ -336,27 +337,6 @@ world_reset :: proc() {
 
     map_data.gunPickupCount = map_data.gunPickupSpawnCount
     map_data.healthPickupCount = map_data.healthPickupSpawnCount
-}
-
-
-
-settings_setDefault :: proc() {
-    settings = {
-        drawFPS           = false,
-        debugIsEnabled    = false,
-        audioMasterVolume = 0.5,
-        audioMusicVolume  = 0.4,
-        crosshairOpacity  = 0.2,
-        mouseSensitivity  = 1.0,
-        FOV               = 100.0,
-        viewmodelFOV      = 110.0,
-        gunXOffset        = 0.15,
-    }
-}
-
-gameStopSounds :: proc() {
-    rl.StopSound(asset_data.elevatorSound)
-    rl.StopSound(asset_data.player.swooshSound)
 }
 
 
@@ -434,18 +414,18 @@ bullet_shootRaycast :: proc(
                 hitpos.y >
                 enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y * ENEMY_HEADSHOT_HALF_OFFSET
             enemy_data.grunts[enemyindex].health -= headshot ? damage * 2 : damage
-            if headshot do playSound(asset_data.gun.headshotSound)
-            playSound(asset_data.enemy.gruntHitSound)
-            if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(asset_data.enemy.gruntDeathSound)
+            if headshot do playSound(g_state.assets.gun.headshotSound)
+            playSound(g_state.assets.enemy.gruntHitSound)
+            if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(g_state.assets.enemy.gruntDeathSound)
             enemy_data.grunts[enemyindex].vel += dir * 10.0 * damage
         case Enemy_Kind.KNIGHT:
             headshot :=
                 hitpos.y >
                 enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y * ENEMY_HEADSHOT_HALF_OFFSET
             enemy_data.knights[enemyindex].health -= headshot ? damage * 2 : damage
-            if headshot do playSound(asset_data.gun.headshotSound)
-            playSound(asset_data.enemy.knightHitSound)
-            if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(asset_data.enemy.knightDeathSound)
+            if headshot do playSound(g_state.assets.gun.headshotSound)
+            playSound(g_state.assets.enemy.knightHitSound)
+            if enemy_data.knights[enemyindex].health <= 0.0 do playSoundMulti(g_state.assets.enemy.knightDeathSound)
             enemy_data.knights[enemyindex].vel += dir * 10.0 * damage
         }
     }
@@ -478,7 +458,7 @@ _bullet_updateDataAndRender :: proc() {
     }
 
     // draw
-    rl.BeginShaderMode(asset_data.bulletLineShader)
+    rl.BeginShaderMode(g_state.assets.bulletLineShader)
     for i: i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
         fade := (bullet_data.bulletLines[i].timeToLive / bullet_data.bulletLines[i].duration)
         col := bullet_data.bulletLines[i].color

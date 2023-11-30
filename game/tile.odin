@@ -1,17 +1,12 @@
-package tiles
+package game
 
-
-
-import "../attrib"
 import "core:fmt"
 import "core:math/linalg"
 import "core:os"
 import rl "vendor:raylib"
 
-
-
 // `translated` tiles are changed into different tiles when a map gets loaded
-kind_t :: enum u8 {
+Tile :: enum u8 {
     NONE                 = '-',
     EMPTY                = ' ',
     FULL                 = '#',
@@ -41,21 +36,19 @@ kind_t :: enum u8 {
     ENEMY_GRUNT_UPPER    = 'G', // translated
 }
 
-MAP_MAX_SIZE :: 256 // u8 max
+MAP_MAX_SIZE :: max(u8)
 
-mapData_t :: struct {
+Tile_Map :: struct {
     fullpath:       string,
     nextMapName:    string,
     startPlayerDir: rl.Vector2,
     skyColor:       rl.Vector3, // normalized rgb
     fogStrength:    f32,
     bounds:         [2]i32,
-    tilemap:        [MAP_MAX_SIZE][MAP_MAX_SIZE]kind_t, // TODO: allocate exact-size buffer on loadtime
+    tilemap:        [MAP_MAX_SIZE][MAP_MAX_SIZE]Tile, // TODO: allocate exact-size buffer on loadtime
 }
 
-
-
-translate :: proc(srctile: kind_t) -> kind_t {
+tile_translate :: proc(srctile: Tile) -> Tile {
     #partial switch srctile {
     case .START_LOWER:
         return .EMPTY
@@ -169,7 +162,7 @@ loadFromFile :: proc(fullpath: string, mapdata: ^mapData_t) -> bool {
         }
 
 
-        mapdata.tilemap[x][y] = kind_t(ch)
+        mapdata.tilemap[x][y] = Tile(ch)
         fmt.println("mapdata.tilemap[x][y]", x, y, mapdata.tilemap[x][y])
 
         x += 1

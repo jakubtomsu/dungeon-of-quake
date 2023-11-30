@@ -118,10 +118,10 @@ _enemy_updateDataAndRender :: proc() {
     if !gameIsPaused {
         //enemy_data.knightAnimFrame += 1
         //animindex := 1
-        //rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex], enemy_data.knightAnimFrame)
-        //if enemy_data.knightAnimFrame >= asset_data.enemy.knightAnim[animindex].frameCount do enemy_data.knightAnimFrame = 0
+        //rl.UpdateModelAnimation(g_state.assets.enemy.knightModel, g_state.assets.enemy.knightAnim[animindex], enemy_data.knightAnimFrame)
+        //if enemy_data.knightAnimFrame >= g_state.assets.enemy.knightAnim[animindex].frameCount do enemy_data.knightAnimFrame = 0
 
-        //if !rl.IsModelAnimationValid(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex]) do println("! error: KNIGHT ANIM INVALID")
+        //if !rl.IsModelAnimationValid(g_state.assets.enemy.knightModel, g_state.assets.enemy.knightAnim[animindex]) do println("! error: KNIGHT ANIM INVALID")
 
         enemy_data.deadCount = 0
 
@@ -358,7 +358,8 @@ _enemy_updateDataAndRender :: proc() {
                     enemy_data.grunts[i].animFrameTimer -= ENEMY_GRUNT_ANIM_FRAMETIME
                     enemy_data.grunts[i].animFrame += 1
 
-                    if enemy_data.grunts[i].animFrame >= asset_data.enemy.gruntAnim[animindex].frameCount {
+                    if enemy_data.grunts[i].animFrame >=
+                       g_state.assets.enemy.gruntAnim[animindex].frameCount {
                         enemy_data.grunts[i].animFrame = 0
                         enemy_data.grunts[i].animFrameTimer = 0
                         if enemy_data.grunts[i].animState == .ATTACK do enemy_data.grunts[i].animState = .IDLE
@@ -367,14 +368,14 @@ _enemy_updateDataAndRender :: proc() {
             }
 
             // rl.UpdateModelAnimation(
-            //     asset_data.enemy.gruntModel,
-            //     asset_data.enemy.gruntAnim[animindex],
+            //     g_state.assets.enemy.gruntModel,
+            //     g_state.assets.enemy.gruntAnim[animindex],
             //     enemy_data.grunts[i].animFrame,
             // )
         }
 
         rl.DrawModelEx(
-            asset_data.enemy.gruntModel,
+            g_state.assets.enemy.gruntModel,
             enemy_data.grunts[i].pos,
             {0, 1, 0},
             enemy_data.grunts[i].rot * 180.0 / math.PI,
@@ -407,7 +408,8 @@ _enemy_updateDataAndRender :: proc() {
                     enemy_data.knights[i].animFrameTimer -= ENEMY_KNIGHT_ANIM_FRAMETIME
                     enemy_data.knights[i].animFrame += 1
 
-                    if enemy_data.knights[i].animFrame >= asset_data.enemy.knightAnim[animindex].frameCount {
+                    if enemy_data.knights[i].animFrame >=
+                       g_state.assets.enemy.knightAnim[animindex].frameCount {
                         enemy_data.knights[i].animFrame = 0
                         enemy_data.knights[i].animFrameTimer = 0
                         if enemy_data.knights[i].animState == .ATTACK do enemy_data.knights[i].animState = .RUN
@@ -416,14 +418,14 @@ _enemy_updateDataAndRender :: proc() {
             }
 
             // rl.UpdateModelAnimation(
-            //     asset_data.enemy.knightModel,
-            //     asset_data.enemy.knightAnim[animindex],
+            //     g_state.assets.enemy.knightModel,
+            //     g_state.assets.enemy.knightAnim[animindex],
             //     enemy_data.knights[i].animFrame,
             // )
         }
 
         rl.DrawModelEx(
-            asset_data.enemy.knightModel,
+            g_state.assets.enemy.knightModel,
             enemy_data.knights[i].pos,
             {0, 1, 0},
             enemy_data.knights[i].rot * 180.0 / math.PI, // rot

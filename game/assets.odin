@@ -59,17 +59,26 @@ Assets :: struct {
         knightTexture:    rl.Texture2D,
     },
     loadScreenLogo:               rl.Texture,
-    loadScreenMusic:              rl.Music,
+    music:                        [Music_Id]rl.Music,
 }
 
+Music_Id :: enum u8 {
+    Load_Screen,
+    Background,
+    Ambient,
+}
 
 
 // loads assets we don't need to unload until end of the game
 assets_load_persistent :: proc() -> (result: Assets) {
     result.loadScreenLogo = loadTexture("dungeon_of_quake_logo.png")
-    result.loadScreenMusic = loadMusic("ambient0.wav")
+    result.music = {
+        .Load_Screen = loadMusic("ambient0.wav"),
+        .Background = {},
+        .Ambient = {},
+    }
     rl.SetTextureFilter(result.loadScreenLogo, rl.TextureFilter.TRILINEAR)
-    rl.PlayMusicStream(result.loadScreenMusic)
+    rl.PlayMusicStream(result.music[.Load_Screen])
 
     result.defaultShader = loadShader("default.vert", "default.frag")
     result.postprocessShader = loadFragShader("postprocess.frag")

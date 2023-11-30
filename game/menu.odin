@@ -18,7 +18,7 @@ menu_data: struct {
     loadScreenTimer:         f32,
     pauseMenuIsOpen:         bool,
     mapSelectFileElemsCount: i32,
-    mapSelectFileElems:      [MENU_MAX_MAP_SELECT_FILES]gui.Ui_Elem,
+    mapSelectFileElems:      [MENU_MAX_MAP_SELECT_FILES]Ui_Elem,
     mapSelectButtonBool:     bool, // shared
     mapSelectIsOpen:         bool,
 }
@@ -167,14 +167,14 @@ menu_drawDebugUI :: proc() {
         debugtext("enemies")
         debugtext(" grunt count", enemy_data.gruntCount)
         debugtext(" grunt count", enemy_data.knightCount)
-        // debugtext(" grunt anim count", asset_data.enemy.gruntAnimCount)
-        // debugtext(" grunt anim[0] bone count", asset_data.enemy.gruntAnim[0].boneCount)
-        // debugtext(" grunt anim[0] frame count", asset_data.enemy.gruntAnim[0].frameCount)
-        // debugtext(" grunt model bone count", asset_data.enemy.gruntModel.boneCount)
-        // debugtext(" knight anim count", asset_data.enemy.knightAnimCount)
-        // debugtext(" knight anim[0] bone count", asset_data.enemy.knightAnim[0].boneCount)
-        // debugtext(" knight anim[0] frame count", asset_data.enemy.knightAnim[0].frameCount)
-        // debugtext(" knight model bone count", asset_data.enemy.knightModel.boneCount)
+        // debugtext(" grunt anim count", g_state.assets.enemy.gruntAnimCount)
+        // debugtext(" grunt anim[0] bone count", g_state.assets.enemy.gruntAnim[0].boneCount)
+        // debugtext(" grunt anim[0] frame count", g_state.assets.enemy.gruntAnim[0].frameCount)
+        // debugtext(" grunt model bone count", g_state.assets.enemy.gruntModel.boneCount)
+        // debugtext(" knight anim count", g_state.assets.enemy.knightAnimCount)
+        // debugtext(" knight anim[0] bone count", g_state.assets.enemy.knightAnim[0].boneCount)
+        // debugtext(" knight anim[0] frame count", g_state.assets.enemy.knightAnim[0].frameCount)
+        // debugtext(" knight model bone count", g_state.assets.enemy.knightModel.boneCount)
         debugtext("menus")
         debugtext(" pauseMenuIsOpen", menu_data.pauseMenuIsOpen)
         debugtext(" mapSelectFileElemsCount", menu_data.mapSelectFileElemsCount)
@@ -246,7 +246,7 @@ menu_updateAndDrawPauseMenu :: proc() {
             settings_saveToFile()
         }
 
-        rl.SetSoundVolume(asset_data.player.swooshSound, 0.0)
+        rl.SetSoundVolume(g_state.assets.player.swooshSound, 0.0)
 
         screenTint = linalg.lerp(screenTint, Vec3{0.1, 0.1, 0.1}, clamp(deltatime * 5.0, 0.0, 1.0))
 
@@ -264,8 +264,8 @@ menu_updateAndDrawPauseMenu :: proc() {
 
 
 menu_updateAndDrawMainMenuUpdatePath :: proc() {
-    rl.SetMusicVolume(asset_data.loadScreenMusic, 1.0)
-    playingMusic = &asset_data.loadScreenMusic
+    rl.SetMusicVolume(g_state.assets.loadScreenMusic, 1.0)
+    playingMusic = &g_state.assets.loadScreenMusic
 
     rl.BeginDrawing()
     rl.ClearBackground(rl.ColorFromNormalized(gui.BACKGROUND))
@@ -390,8 +390,8 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 
     unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, menu_data.loadScreenTimer * 0.5))
 
-    rl.SetMusicVolume(asset_data.loadScreenMusic, unfade * unfade * unfade)
-    playingMusic = &asset_data.loadScreenMusic
+    rl.SetMusicVolume(g_state.assets.loadScreenMusic, unfade * unfade * unfade)
+    playingMusic = &g_state.assets.loadScreenMusic
 
     rl.BeginDrawing()
     rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(Vec4{0, 0, 0, 0}, gui.BACKGROUND, unfade)))
@@ -400,17 +400,17 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
     STARTSCALE :: 4.0
     scale :=
         glsl.min(
-            f32(windowSizeX) / f32(asset_data.loadScreenLogo.width),
-            f32(windowSizeY) / f32(asset_data.loadScreenLogo.height),
+            f32(windowSizeX) / f32(g_state.assets.loadScreenLogo.width),
+            f32(windowSizeY) / f32(g_state.assets.loadScreenLogo.height),
         ) *
         (STARTSCALE + math.sqrt(unfade)) /
         (1.0 + STARTSCALE)
     col := rl.ColorFromNormalized(linalg.lerp(Vec4{0, 0, 0, 0}, Vec4{1, 1, 1, 1}, unfade))
     rl.DrawTextureEx(
-        asset_data.loadScreenLogo,
+        g_state.assets.loadScreenLogo,
          {
-            f32(windowSizeX) / 2 - f32(asset_data.loadScreenLogo.width) * scale / 4,
-            f32(windowSizeY) / 2 - f32(asset_data.loadScreenLogo.height) * scale / 4,
+            f32(windowSizeX) / 2 - f32(g_state.assets.loadScreenLogo.width) * scale / 4,
+            f32(windowSizeY) / 2 - f32(g_state.assets.loadScreenLogo.height) * scale / 4,
         },
         0.0, // rot
         scale * 0.5, // scale

@@ -49,10 +49,10 @@ menuKind: enum {
     TILE,
 }
 
-tileMenuElems: [len(tiles.kind_t)]gui.Ui_Elem
+tileMenuElems: [len(tiles.Tile)]gui.Ui_Elem
 tileMenuButtonBool: bool
 
-tileSelected: tiles.kind_t = .FULL
+tileSelected: tiles.Tile = .FULL
 
 
 
@@ -90,7 +90,7 @@ main :: proc() {
     gui.menuContext.normalFont = loadFont("germania_one.ttf")
 
     // init tile menu
-    for kind, i in tiles.kind_t {
+    for kind, i in tiles.Tile {
         tileMenuElems[i] = gui.Ui_Button{fmt.aprint(rune(kind), "        ", kind), &tileMenuButtonBool}
     }
 
@@ -151,7 +151,7 @@ main :: proc() {
 
 
                 if (isEditing || finishedEditing) {
-                    tile := isErasing ? tiles.kind_t.NONE : tileSelected
+                    tile := isErasing ? tiles.Tile.NONE : tileSelected
                     switch brushKind {
                     case .DRAW:
                         if isTilePosValid(mousetile) do mapData.tilemap[mousetile.x][mousetile.y] = tile
@@ -371,7 +371,7 @@ main :: proc() {
                 gui.updateAndDrawElemBuf(tileMenuElems[:])
                 if tileMenuButtonBool {
                     tileMenuButtonBool = false
-                    tileSelected = tiles.kind_t(
+                    tileSelected = tiles.Tile(
                         tileMenuElems[gui.menuContext.selected].(gui.Ui_Button).name[0],
                     ) // ughh
                     menuKind = .NONE

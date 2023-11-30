@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
-import "tiles"
 import rl "vendor:raylib"
 
 
@@ -292,7 +291,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
                     TILE_WIDTH *
                     0.3
                 map_addHealthPickup(highpos + Vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
-                tile = tiles.kind_t.WALL_MID
+                tile = tiles.Tile.WALL_MID
             }
 
             map_data.tilemap[x][y] = tiles.translate(tile)
@@ -309,8 +308,8 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
     player_startMap()
 
     rl.SetShaderValue(
-        asset_data.portalShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.portalShader, "portalPos"),
+        g_state.assets.portalShader,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.portalShader, "portalPos"),
         &map_data.finishPos,
         rl.ShaderUniformDataType.VEC3,
     )
@@ -323,7 +322,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 map_debugPrint :: proc() {
     for x: i32 = 0; x < map_data.bounds[0]; x += 1 {
         for y: i32 = 0; y < map_data.bounds[1]; y += 1 {
-            fmt.print(map_data.tilemap[x][y] == tiles.kind_t.FULL ? "#" : " ")
+            fmt.print(map_data.tilemap[x][y] == tiles.Tile.FULL ? "#" : " ")
         }
         println("")
     }
@@ -331,7 +330,7 @@ map_debugPrint :: proc() {
 
 // draw tilemap, pickups, etc.
 map_drawTilemap :: proc() {
-    rl.BeginShaderMode(asset_data.tileShader)
+    rl.BeginShaderMode(g_state.assets.tileShader)
     for x: i32 = 0; x < map_data.bounds[0]; x += 1 {
         for y: i32 = 0; y < map_data.bounds[1]; y += 1 {
             //rl.DrawCubeWires(Vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
@@ -344,7 +343,7 @@ map_drawTilemap :: proc() {
             case:
                 for i: i32 = 0; i < boxcount; i += 1 {
                     rl.DrawModelEx(
-                        asset_data.tileModel,
+                        g_state.assets.tileModel,
                         boxbuf[i].pos,
                         {0, 1, 0},
                         0.0,
@@ -354,7 +353,7 @@ map_drawTilemap :: proc() {
                 }
             case .ELEVATOR:
                 rl.DrawModelEx(
-                    asset_data.elevatorModel,
+                    g_state.assets.elevatorModel,
                     boxbuf[0].pos,
                     {0, 1, 0},
                     0.0,
@@ -363,7 +362,7 @@ map_drawTilemap :: proc() {
                 )
                 for i: i32 = 1; i < boxcount; i += 1 {
                     rl.DrawModelEx(
-                        asset_data.tileModel,
+                        g_state.assets.tileModel,
                         boxbuf[i].pos,
                         {0, 1, 0},
                         0.0,
@@ -373,7 +372,7 @@ map_drawTilemap :: proc() {
                 }
             case .OBSTACLE_LOWER:
                 rl.DrawModelEx(
-                    asset_data.boxModel,
+                    g_state.assets.boxModel,
                     boxbuf[0].pos + {0, TILE_WIDTH, 0},
                     {0, 1, 0},
                     0.0,
@@ -381,7 +380,7 @@ map_drawTilemap :: proc() {
                     rl.WHITE,
                 )
                 rl.DrawModelEx(
-                    asset_data.tileModel,
+                    g_state.assets.tileModel,
                     boxbuf[0].pos - {0, TILE_WIDTH, 0},
                     {0, 1, 0},
                     0.0,
@@ -390,7 +389,7 @@ map_drawTilemap :: proc() {
                 )
                 for i: i32 = 1; i < boxcount; i += 1 {
                     rl.DrawModelEx(
-                        asset_data.tileModel,
+                        g_state.assets.tileModel,
                         boxbuf[i].pos,
                         {0, 1, 0},
                         0.0,
@@ -400,7 +399,7 @@ map_drawTilemap :: proc() {
                 }
             case .OBSTACLE_UPPER:
                 rl.DrawModelEx(
-                    asset_data.boxModel,
+                    g_state.assets.boxModel,
                     boxbuf[0].pos + {0, TILE_WIDTH, 0},
                     {0, 1, 0},
                     0.0,
@@ -408,7 +407,7 @@ map_drawTilemap :: proc() {
                     rl.WHITE,
                 )
                 rl.DrawModelEx(
-                    asset_data.boxModel,
+                    g_state.assets.boxModel,
                     boxbuf[0].pos,
                     {0, 1, 0},
                     0.0,
@@ -416,7 +415,7 @@ map_drawTilemap :: proc() {
                     rl.WHITE,
                 )
                 rl.DrawModelEx(
-                    asset_data.tileModel,
+                    g_state.assets.tileModel,
                     boxbuf[0].pos - {0, TILE_WIDTH, 0},
                     {0, 1, 0},
                     0.0,
@@ -425,7 +424,7 @@ map_drawTilemap :: proc() {
                 )
                 for i: i32 = 1; i < boxcount; i += 1 {
                     rl.DrawModelEx(
-                        asset_data.tileModel,
+                        g_state.assets.tileModel,
                         boxbuf[i].pos,
                         {0, 1, 0},
                         0.0,
@@ -442,7 +441,7 @@ map_drawTilemap :: proc() {
                 THORN_DRAW_COUNT :: 32
 
                 rl.DrawModelEx(
-                    asset_data.tileModel,
+                    g_state.assets.tileModel,
                     floorbox.pos,
                     {0, 1, 0},
                     0.0,
@@ -450,7 +449,7 @@ map_drawTilemap :: proc() {
                     rl.WHITE,
                 )
                 rl.DrawModelEx(
-                    asset_data.tileModel,
+                    g_state.assets.tileModel,
                     ceilbox.pos,
                     {0, 1, 0},
                     0.0,
@@ -460,7 +459,7 @@ map_drawTilemap :: proc() {
 
                 for i: i32 = 0; i < TILEMAP_Y_TILES - 2; i += 1 {
                     rl.DrawModelEx(
-                        asset_data.thornsModel,
+                        g_state.assets.thornsModel,
                         p + Vec3{0, (f32(i) - f32(TILEMAP_Y_TILES - 2) * 0.5 + 0.5) * TILE_WIDTH, 0},
                         {0, 1, 0},
                         0,
@@ -494,10 +493,10 @@ map_drawTilemap :: proc() {
         rl.DrawGrid(MAP_SIDE_TILE_COUNT, TILE_WIDTH)
     }
 
-    rl.BeginShaderMode(asset_data.portalShader)
+    rl.BeginShaderMode(g_state.assets.portalShader)
     // draw finish
     doqDrawCubeTexture(
-        asset_data.portalTexture,
+        g_state.assets.portalTexture,
         map_data.finishPos,
         MAP_TILE_FINISH_SIZE.x * 2,
         MAP_TILE_FINISH_SIZE.y * 2,
@@ -538,7 +537,7 @@ map_drawTilemap :: proc() {
             pos := map_data.gunPickups[i].pos + Vec3{0, math.sin(g_state.time_passed * 8.0) * 0.2, 0}
             gunindex := cast(i32)map_data.gunPickups[i].kind
             rl.DrawModelEx(
-                asset_data.gun.gunModels[gunindex],
+                g_state.assets.gun.gunModels[gunindex],
                 pos,
                 {0, 1, 0},
                 g_state.time_passed * ROTSPEED,
@@ -552,7 +551,7 @@ map_drawTilemap :: proc() {
                gun_data.ammoCounts[gunindex] < gun_maxAmmoCounts[gunindex] {
                 gun_data.equipped = map_data.gunPickups[i].kind
                 gun_data.ammoCounts[gunindex] = gun_maxAmmoCounts[gunindex]
-                playSoundMulti(asset_data.gun.ammoPickupSound)
+                playSoundMulti(g_state.assets.gun.ammoPickupSound)
 
                 temp := map_data.gunPickups[i]
                 map_data.gunPickupCount -= 1
@@ -574,7 +573,7 @@ map_drawTilemap :: proc() {
             //)
 
             rl.DrawModel(
-                asset_data.healthPickupModel,
+                g_state.assets.healthPickupModel,
                 map_data.healthPickups[i],
                 MAP_HEALTH_PICKUP_SIZE.x,
                 rl.WHITE,
@@ -586,7 +585,7 @@ map_drawTilemap :: proc() {
                 player_data.health += PLAYER_MAX_HEALTH * 0.25
                 player_data.health = clamp(player_data.health, 0.0, PLAYER_MAX_HEALTH)
                 screenTint = {1.0, 0.8, 0.0}
-                playSound(asset_data.player.healthPickupSound)
+                playSound(g_state.assets.player.healthPickupSound)
                 temp := map_data.healthPickups[i]
                 map_data.healthPickupCount -= 1
                 map_data.healthPickups[i] = map_data.healthPickups[map_data.healthPickupCount]
@@ -603,9 +602,9 @@ map_drawTilemap :: proc() {
     {
         W :: 2048
         c: Vec3 = player_data.pos
-        rl.BeginShaderMode(asset_data.cloudShader)
+        rl.BeginShaderMode(g_state.assets.cloudShader)
         doqDrawCubeTexture(
-            asset_data.cloudTexture,
+            g_state.assets.cloudTexture,
             Vec3{c.x, +TILE_HEIGHT * 1.6, c.z},
             W,
             1,
@@ -613,7 +612,7 @@ map_drawTilemap :: proc() {
             {255, 255, 255, 50},
         )
         doqDrawCubeTexture(
-            asset_data.cloudTexture,
+            g_state.assets.cloudTexture,
             Vec3{c.x, +TILE_HEIGHT * 1.0, c.z},
             W,
             1,
@@ -621,7 +620,7 @@ map_drawTilemap :: proc() {
             {255, 255, 255, 40},
         )
         doqDrawCubeTexture(
-            asset_data.cloudTexture,
+            g_state.assets.cloudTexture,
             Vec3{c.x, +TILE_HEIGHT * 0.6, c.z},
             W,
             1,
@@ -629,7 +628,7 @@ map_drawTilemap :: proc() {
             {255, 255, 255, 20},
         )
         doqDrawCubeTexture(
-            asset_data.cloudTexture,
+            g_state.assets.cloudTexture,
             Vec3{c.x, -TILE_HEIGHT * 1.6, c.z},
             W,
             1,
@@ -637,7 +636,7 @@ map_drawTilemap :: proc() {
             {200, 200, 200, 60},
         )
         doqDrawCubeTexture(
-            asset_data.cloudTexture,
+            g_state.assets.cloudTexture,
             Vec3{c.x, -TILE_HEIGHT * 1.0, c.z},
             W,
             1,
@@ -645,7 +644,7 @@ map_drawTilemap :: proc() {
             {200, 200, 200, 40},
         )
         doqDrawCubeTexture(
-            asset_data.cloudTexture,
+            g_state.assets.cloudTexture,
             Vec3{c.x, -TILE_HEIGHT * 0.6, c.z},
             W,
             1,
