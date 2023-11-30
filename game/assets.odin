@@ -168,8 +168,8 @@ assets_load_persistent :: proc() {
 
 
     gui.menuContext.normalFont = loadFont("germania_one.ttf")
-    gui.menuContext.selectSound = loadSound("button4.wav")
-    gui.menuContext.setValSound = loadSound("button3.wav")
-    rl.SetSoundVolume(gui.menuContext.selectSound, 0.6)
-    rl.SetSoundVolume(gui.menuContext.setValSound, 0.8)
+    // gui.menuContext.selectSound = loadSound("button4.wav")
+    // gui.menuContext.setValSound = loadSound("button3.wav")
+    // rl.SetSoundVolume(gui.menuContext.selectSound, 0.6)
+    // rl.SetSoundVolume(gui.menuContext.setValSound, 0.8)
 }

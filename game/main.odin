@@ -65,6 +65,7 @@ main :: proc() {
 // this just gets called from main
 _doq_main :: proc() {
     _app_init()
+    rl.DisableCursor()
 
     for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
         //println("### frame =", frame_index, "deltatime =", deltatime)
@@ -82,8 +83,6 @@ _doq_main :: proc() {
 
         camera.fovy = settings.FOV
         viewmodelCamera.fovy = settings.viewmodelFOV
-
-        // rl.DisableCursor()
 
         gui.menuContext.windowSizeX = windowSizeX
         gui.menuContext.windowSizeY = windowSizeY
@@ -180,15 +179,22 @@ _doq_main :: proc() {
 //
 
 _app_init :: proc() {
-    loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
-    println("loadpath", loadpath)
+    {
+        context.allocator = context.temp_allocator
+        if path, ok := filepath.abs(os.args[0]); ok {
+            loadpath = filepath.dir(filepath.clean(path))
+            println("loadpath", loadpath)
+        }
+    }
 
     settings_setDefault()
     settings_loadFromFile()
 
     rl.SetWindowState({.WINDOW_RESIZABLE, .VSYNC_HINT})
     rl.InitWindow(800, 600, "Dungeon of Quake")
-    // rl.ToggleFullscreen()
+    rl.SetWindowMonitor(0)
+    rl.SetWindowSize(rl.GetMonitorWidth(0), rl.GetMonitorHeight(0))
+    rl.ToggleFullscreen()
 
     windowSizeX = rl.GetScreenWidth()
     windowSizeY = rl.GetScreenHeight()
@@ -218,8 +224,6 @@ _app_init :: proc() {
     viewmodelCamera.up = {0, 1, 0}
     viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
     //rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
-
-
 
     rand.init(&randData, cast(u64)time.now()._nsec)
 
