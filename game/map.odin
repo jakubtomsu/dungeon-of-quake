@@ -535,13 +535,13 @@ map_drawTilemap :: proc() {
         // update gun pickups
         // draw gun pickups
         for i: i32 = 0; i < map_data.gunPickupCount; i += 1 {
-            pos := map_data.gunPickups[i].pos + Vec3{0, math.sin(timepassed * 8.0) * 0.2, 0}
+            pos := map_data.gunPickups[i].pos + Vec3{0, math.sin(g_state.time_passed * 8.0) * 0.2, 0}
             gunindex := cast(i32)map_data.gunPickups[i].kind
             rl.DrawModelEx(
                 asset_data.gun.gunModels[gunindex],
                 pos,
                 {0, 1, 0},
-                timepassed * ROTSPEED,
+                g_state.time_passed * ROTSPEED,
                 SCALE,
                 rl.WHITE,
             )

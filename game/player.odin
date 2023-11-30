@@ -495,7 +495,7 @@ gun_calcViewportPos :: proc() -> Vec3 {
     s :=
         math.sin(
             player_data.stepTimer < 0.0 \
-            ? timepassed * PLAYER_HEAD_SIN_TIME * 0.5 \
+            ? g_state.time_passed * PLAYER_HEAD_SIN_TIME * 0.5 \
             : player_data.stepTimer * 0.5,
         ) *
         clamp(linalg.length(player_data.vel) * 0.01, 0.1, 1.0) *
@@ -588,7 +588,7 @@ _gun_update :: proc() {
                 DUR :: 0.7
                 SHOT_COUNT :: 9
                 tn: [SHOT_COUNT]f32
-                enemykind: [SHOT_COUNT]enemy_kind_t
+                enemykind: [SHOT_COUNT]Enemy_Kind
                 enemyindex: [SHOT_COUNT]i32
                 tn[0], enemykind[0], enemyindex[0] = bullet_shootRaycast(
                     muzzlepos,

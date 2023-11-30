@@ -9,9 +9,7 @@ import "core:math/linalg/glsl"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
-import "gui"
 import rl "vendor:raylib"
-
 
 
 MENU_MAX_MAP_SELECT_FILES :: 256
@@ -20,7 +18,7 @@ menu_data: struct {
     loadScreenTimer:         f32,
     pauseMenuIsOpen:         bool,
     mapSelectFileElemsCount: i32,
-    mapSelectFileElems:      [MENU_MAX_MAP_SELECT_FILES]gui.menuElem_t,
+    mapSelectFileElems:      [MENU_MAX_MAP_SELECT_FILES]gui.Ui_Elem,
     mapSelectButtonBool:     bool, // shared
     mapSelectIsOpen:         bool,
 }
@@ -144,7 +142,7 @@ menu_drawDebugUI :: proc() {
         debugtext(" windowSize", []i32{windowSizeX, windowSizeY})
         debugtext(" app_updatePathKind", app_updatePathKind)
         debugtext(" IsAudioDeviceReady", rl.IsAudioDeviceReady())
-        debugtext(" loadpath", loadpath)
+        debugtext(" g_state.load_dir", g_state.load_dir)
         debugtext(" gameIsPaused", gameIsPaused)
         debugtext("map")
         debugtext(" bounds", map_data.bounds)
@@ -194,10 +192,10 @@ menu_updateAndDrawPauseMenu :: proc() {
         shouldContinue := false
         shouldExitToMainMenu := false
         shouldReset := false
-        elems: []gui.menuElem_t =  {
-            gui.menuButton_t{"continue", &shouldContinue},
-            gui.menuButton_t{"play again", &shouldReset},
-            gui.menuButton_t{"exit to main menu", &shouldExitToMainMenu},
+        elems: []gui.Ui_Elem =  {
+            gui.Ui_Button{"continue", &shouldContinue},
+            gui.Ui_Button{"play again", &shouldReset},
+            gui.Ui_Button{"exit to main menu", &shouldExitToMainMenu},
         }
 
         gui.updateAndDrawElemBuf(elems[:])
@@ -226,21 +224,21 @@ menu_updateAndDrawPauseMenu :: proc() {
     } else {
         shouldExitToMainMenu := false
         shouldReset := false
-        elems: []gui.menuElem_t =  {
-            gui.menuButton_t{"RESUME", &gameIsPaused},
-            gui.menuButton_t{"reset", &shouldReset},
-            gui.menuButton_t{"go to main menu", &shouldExitToMainMenu},
-            gui.menuButton_t{"exit to desktop", &app_shouldExitNextFrame},
-            gui.menuTitle_t{"settings"},
-            gui.menuF32_t{"audio volume", &settings.audioMasterVolume, 0.05},
-            gui.menuF32_t{"music volume", &settings.audioMusicVolume, 0.05},
-            gui.menuF32_t{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
-            gui.menuF32_t{"crosshair visibility", &settings.crosshairOpacity, 0.1},
-            gui.menuF32_t{"gun X offset", &settings.gunXOffset, 0.025},
-            gui.menuF32_t{"fild of view", &settings.FOV, 10.0},
-            gui.menuF32_t{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
-            gui.menuBool_t{"show FPS", &settings.drawFPS},
-            gui.menuBool_t{"enable debug mode", &settings.debugIsEnabled},
+        elems: []gui.Ui_Elem =  {
+            gui.Ui_Button{"RESUME", &gameIsPaused},
+            gui.Ui_Button{"reset", &shouldReset},
+            gui.Ui_Button{"go to main menu", &shouldExitToMainMenu},
+            gui.Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
+            gui.Ui_Menu_Title{"settings"},
+            gui.Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
+            gui.Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
+            gui.Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
+            gui.Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
+            gui.Ui_F32{"gun X offset", &settings.gunXOffset, 0.025},
+            gui.Ui_F32{"fild of view", &settings.FOV, 10.0},
+            gui.Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
+            gui.Ui_Bool{"show FPS", &settings.drawFPS},
+            gui.Ui_Bool{"enable debug mode", &settings.debugIsEnabled},
         }
 
         menu_drawNavTips()
@@ -283,7 +281,7 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 
         if menu_data.mapSelectButtonBool {
             menu_data.mapSelectButtonBool = false
-            elem, ok := menu_data.mapSelectFileElems[gui.menuContext.selected].(gui.menuFileButton_t)
+            elem, ok := menu_data.mapSelectFileElems[gui.menuContext.selected].(gui.Ui_File_Button)
             if ok {
                 if map_loadFromFileAbs(elem.fullpath) {
                     app_setUpdatePathKind(.GAME)
@@ -296,19 +294,19 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 
     } else {
         shouldMapSelect := false
-        elems: []gui.menuElem_t =  {
-            gui.menuButton_t{"SINGLEPLAYER", &shouldMapSelect},
-            gui.menuButton_t{"exit to desktop", &app_shouldExitNextFrame},
-            gui.menuTitle_t{"settings"},
-            gui.menuF32_t{"audio volume", &settings.audioMasterVolume, 0.05},
-            gui.menuF32_t{"music volume", &settings.audioMusicVolume, 0.05},
-            gui.menuF32_t{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
-            gui.menuF32_t{"crosshair visibility", &settings.crosshairOpacity, 0.1},
-            gui.menuF32_t{"gun size offset", &settings.gunXOffset, 0.025},
-            gui.menuF32_t{"fild of view", &settings.FOV, 10.0},
-            gui.menuF32_t{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
-            gui.menuBool_t{"show FPS", &settings.drawFPS},
-            gui.menuBool_t{"enable debug mode", &settings.debugIsEnabled},
+        elems: []gui.Ui_Elem =  {
+            gui.Ui_Button{"SINGLEPLAYER", &shouldMapSelect},
+            gui.Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
+            gui.Ui_Menu_Title{"settings"},
+            gui.Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
+            gui.Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
+            gui.Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
+            gui.Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
+            gui.Ui_F32{"gun size offset", &settings.gunXOffset, 0.025},
+            gui.Ui_F32{"fild of view", &settings.FOV, 10.0},
+            gui.Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
+            gui.Ui_Bool{"show FPS", &settings.drawFPS},
+            gui.Ui_Bool{"enable debug mode", &settings.debugIsEnabled},
         }
 
         if gui.updateAndDrawElemBuf(elems[:]) {
@@ -327,14 +325,12 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 
 menu_mainMenuFetchMapSelectFiles :: proc() {
     println(#procedure)
-    path := fmt.tprint(args = {loadpath, filepath.SEPARATOR_STRING, "maps"}, sep = "")
+    path := fmt.tprint(args = {g_state.load_dir, filepath.SEPARATOR_STRING, "maps"}, sep = "")
     println("path:", path)
 
     menu_data.mapSelectFileElemsCount = 0
 
     mapSelectFilesFetchDirAndAppend(path)
-
-
 
     // WARNING: recursive! we also load subfolders!
     mapSelectFilesFetchDirAndAppend :: proc(dir: string) {
@@ -356,8 +352,8 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
             dotindex := strings.index_byte(fileinfo.name, '.')
             if dotindex == 0 do continue
             if fileinfo.name[dotindex:] != ".dqm" do continue // check suffix
-            //menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.menuButton_t{fileinfo.name[:dotindex], &menu_data.mapSelectButtonBool}
-            menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.menuFileButton_t {
+            //menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.Ui_Button{fileinfo.name[:dotindex], &menu_data.mapSelectButtonBool}
+            menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.Ui_File_Button {
                 fileinfo.name[:dotindex],
                 fileinfo.fullpath,
                 &menu_data.mapSelectButtonBool,
@@ -370,7 +366,9 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
             fileinfo := filebuf[i]
             if !fileinfo.is_dir do continue
             if fileinfo.name[0] == '_' do continue // hidden
-            menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.menuTitle_t{fileinfo.name}
+            menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.Ui_Menu_Title {
+                fileinfo.name,
+            }
             menu_data.mapSelectFileElemsCount += 1
             mapSelectFilesFetchDirAndAppend(fileinfo.fullpath)
         }
@@ -426,7 +424,7 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
             linalg.lerp(
                 Vec4{0, 0, 0, 0},
                 Vec4{1, 1, 1, 1},
-                clamp(unfade - 0.4 + math.sin(timepassed * 4.0) * 0.1, 0.0, 1.0),
+                clamp(unfade - 0.4 + math.sin(g_state.time_passed * 4.0) * 0.1, 0.0, 1.0),
             ),
         ),
         "press any key to continue",

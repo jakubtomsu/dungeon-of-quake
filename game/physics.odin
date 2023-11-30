@@ -235,7 +235,7 @@ phy_boxcastEnemies :: proc(
 ) -> (
     res_tn: f32,
     res_hit: bool,
-    res_enemykind: enemy_kind_t,
+    res_enemykind: Enemy_Kind,
     res_enemyindex: i32,
 ) {
     using math
@@ -263,7 +263,7 @@ phy_boxcastEnemies :: proc(
         if phy_nearFarHit(tn, tf) && tn < tnear {
             tnear = tn
             res_hit = true
-            res_enemykind = enemy_kind_t.GRUNT
+            res_enemykind = Enemy_Kind.GRUNT
             res_enemyindex = i
         }
     }
@@ -279,7 +279,7 @@ phy_boxcastEnemies :: proc(
         if phy_nearFarHit(tn, tf) && tn < tnear {
             tnear = tn
             res_hit = true
-            res_enemykind = enemy_kind_t.KNIGHT
+            res_enemykind = Enemy_Kind.KNIGHT
             res_enemyindex = i
         }
     }
@@ -341,7 +341,7 @@ phy_boxcastWorld :: proc(
 ) -> (
     res_tn: f32,
     res_hit: bool,
-    res_enemykind: enemy_kind_t,
+    res_enemykind: Enemy_Kind,
     res_enemyindex: i32,
 ) {
     e_tn, e_hit, e_enemykind, e_enemyindex := phy_boxcastEnemies(pos, wishpos, boxsize)
@@ -356,7 +356,7 @@ phy_boxcastWorld :: proc(
     } else {
         res_tn = t_tn
         res_hit = t_hit
-        res_enemykind = enemy_kind_t.NONE
+        res_enemykind = Enemy_Kind.NONE
     }
 
     return

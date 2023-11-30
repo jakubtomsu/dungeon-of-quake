@@ -1,17 +1,8 @@
-package gui
-
-
-//
-// GUI
-// menus and on-screen UI
-//
-
-
+package game
 
 import "core:fmt"
 import "core:strings"
 import rl "vendor:raylib"
-
 
 
 SCROLL_MARGIN :: 200
@@ -24,8 +15,6 @@ INACTIVE_VAL_COLOR :: rl.Color{200, 200, 200, 160}
 TITLE_COLOR :: rl.Color{200, 200, 200, 100}
 
 BACKGROUND :: rl.Vector4{0.08, 0.08, 0.1, 1.0}
-
-
 
 menuContext: struct {
     selected:    i32, // this can be shared, since we always have only one menu on screen
@@ -41,44 +30,44 @@ menuContext: struct {
 }
 
 // val is not rendered
-menuButton_t :: struct {
+Ui_Button :: struct {
     name: string,
     val:  ^bool,
 }
 
-menuBool_t :: struct {
+Ui_Bool :: struct {
     name: string,
     val:  ^bool,
 }
 
-menuF32_t :: struct {
+Ui_F32 :: struct {
     name: string,
     val:  ^f32,
     step: f32,
 }
 
-menuI32_t :: struct {
+Ui_Int :: struct {
     name: string,
     val:  ^i32,
 }
 
-menuTitle_t :: struct {
+Ui_Menu_Title :: struct {
     name: string,
 }
 
-menuFileButton_t :: struct {
+Ui_File_Button :: struct {
     name:     string,
     fullpath: string,
     val:      ^bool,
 }
 
-menuElem_t :: union {
-    menuButton_t,
-    menuBool_t,
-    menuF32_t,
-    menuI32_t,
-    menuTitle_t,
-    menuFileButton_t,
+Ui_Elem :: union {
+    Ui_Button,
+    Ui_Bool,
+    Ui_F32,
+    Ui_Int,
+    Ui_Menu_Title,
+    Ui_File_Button,
 }
 
 
@@ -89,7 +78,7 @@ drawText :: proc(pos: rl.Vector2, size: f32, color: rl.Color, text: string) {
 }
 
 // @retunrs: true if any value changed
-updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
+updateAndDrawElemBuf :: proc(elems: []Ui_Elem) -> bool {
     selectDir := 0
     if rl.IsKeyPressed(rl.KeyboardKey.DOWN) || rl.IsKeyPressed(rl.KeyboardKey.S) do selectDir += 1
     if rl.IsKeyPressed(rl.KeyboardKey.UP) || rl.IsKeyPressed(rl.KeyboardKey.W) do selectDir -= 1
@@ -101,7 +90,7 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
             loopfind: for i := 0; i < len(elems); i += 1 {
                 index := (int(menuContext.selected) + i * selectDir + selectDir) %% len(elems)
                 #partial switch _ in elems[index] {
-                case menuTitle_t:
+                case Ui_Menu_Title:
                     continue loopfind
                 }
                 menuContext.selected = i32(index)
@@ -111,7 +100,7 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
             loopfindjump: for i := 0; i < len(elems); i += 1 {
                 index := (int(menuContext.selected) + i * selectDir + selectDir) %% len(elems)
                 #partial switch _ in elems[index] {
-                case menuTitle_t:
+                case Ui_Menu_Title:
                     menuContext.selected = i32(index + selectDir)
                     break loopfindjump
                 }
@@ -137,21 +126,21 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
         nameoffs := f32(menuContext.windowSizeX) / 2 - W * 1.2
         valoffs := f32(menuContext.windowSizeX) / 2 + W
         switch elem in elems[i] {
-        case menuButton_t:
+        case Ui_Button:
             drawText({nameoffs, offs}, SIZE, vcol, elem.name)
-        case menuBool_t:
+        case Ui_Bool:
             drawText({nameoffs, offs}, SIZE, col, elem.name)
             drawText({valoffs, offs}, SIZE, vcol, elem.val^ ? "yes" : "no")
-        case menuF32_t:
+        case Ui_F32:
             drawText({nameoffs, offs}, SIZE, col, elem.name)
             drawText({valoffs, offs}, SIZE, vcol, fmt.tprint(elem.val^))
-        case menuI32_t:
+        case Ui_Int:
             drawText({nameoffs, offs}, SIZE, col, elem.name)
             drawText({valoffs, offs}, SIZE, vcol, fmt.tprint(elem.val^))
-        case menuTitle_t:
+        case Ui_Menu_Title:
             offs += 0.8 * SIZE
             drawText({nameoffs - SIZE, offs}, SIZE * 0.8, TITLE_COLOR, elem.name)
-        case menuFileButton_t:
+        case Ui_File_Button:
             drawText({nameoffs, offs}, SIZE, vcol, elem.name)
             if isSelected {
                 drawText(
@@ -186,13 +175,13 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
     // edit selected value based on input
     isEdited := false
     switch elem in elems[menuContext.selected] {
-    case menuButton_t:
+    case Ui_Button:
         if rl.IsKeyPressed(rl.KeyboardKey.ENTER) || rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
             elem.val^ = !elem.val^
             isEdited = true
         }
 
-    case menuBool_t:
+    case Ui_Bool:
         if rl.IsKeyPressed(rl.KeyboardKey.ENTER) ||
            rl.IsKeyPressed(rl.KeyboardKey.SPACE) ||
            rl.IsKeyPressed(rl.KeyboardKey.RIGHT) ||
@@ -201,7 +190,7 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
             isEdited = true
         }
 
-    case menuF32_t:
+    case Ui_F32:
         step := elem.step
         if rl.IsKeyDown(rl.KeyboardKey.LEFT_CONTROL) do step *= 5.0
 
@@ -213,7 +202,7 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
             isEdited = true
         }
 
-    case menuI32_t:
+    case Ui_Int:
         step: i32 = 1
         if rl.IsKeyDown(rl.KeyboardKey.LEFT_CONTROL) do step *= 10
 
@@ -225,9 +214,9 @@ updateAndDrawElemBuf :: proc(elems: []menuElem_t) -> bool {
             isEdited = true
         }
 
-    case menuTitle_t:
+    case Ui_Menu_Title:
 
-    case menuFileButton_t:
+    case Ui_File_Button:
         if rl.IsKeyPressed(rl.KeyboardKey.ENTER) || rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
             elem.val^ = !elem.val^
             isEdited = true

@@ -38,7 +38,7 @@ isErasing: bool
 startEditingMousePos: Vec2
 
 FILE_MENU_MAX_ELEMS_COUNT :: 128
-fileMenuElems: [FILE_MENU_MAX_ELEMS_COUNT]gui.menuElem_t
+fileMenuElems: [FILE_MENU_MAX_ELEMS_COUNT]gui.Ui_Elem
 fileMenuElemsCount: i32
 fileMenuButtonBool: bool
 
@@ -49,7 +49,7 @@ menuKind: enum {
     TILE,
 }
 
-tileMenuElems: [len(tiles.kind_t)]gui.menuElem_t
+tileMenuElems: [len(tiles.kind_t)]gui.Ui_Elem
 tileMenuButtonBool: bool
 
 tileSelected: tiles.kind_t = .FULL
@@ -59,12 +59,12 @@ tileSelected: tiles.kind_t = .FULL
 TILE_WIDTH :: 22 // px
 mapData: tiles.mapData_t
 
-loadpath: string
+g_state.load_dir: string
 
 
 
 main :: proc() {
-    loadpath = filepath.clean(string(rl.GetWorkingDirectory()))
+    g_state.load_dir = filepath.clean(string(rl.GetWorkingDirectory()))
 
     rl.SetWindowState(
         {.WINDOW_RESIZABLE, .VSYNC_HINT}, //.WINDOW_TOPMOST,
@@ -78,7 +78,7 @@ main :: proc() {
     mapData.bounds = {24, 24}
     mapData.fullpath = fmt.aprint(
         args =  {
-            loadpath,
+            g_state.load_dir,
             filepath.SEPARATOR_STRING,
             "maps",
             filepath.SEPARATOR_STRING,
@@ -91,7 +91,7 @@ main :: proc() {
 
     // init tile menu
     for kind, i in tiles.kind_t {
-        tileMenuElems[i] = gui.menuButton_t{fmt.aprint(rune(kind), "        ", kind), &tileMenuButtonBool}
+        tileMenuElems[i] = gui.Ui_Button{fmt.aprint(rune(kind), "        ", kind), &tileMenuButtonBool}
     }
 
     for !rl.WindowShouldClose() {
@@ -335,7 +335,7 @@ main :: proc() {
                         fileMenuButtonBool = false
                         ok: bool
                         tiles.loadFromFile(
-                            fileMenuElems[gui.menuContext.selected].(gui.menuFileButton_t).fullpath,
+                            fileMenuElems[gui.menuContext.selected].(gui.Ui_File_Button).fullpath,
                             &mapData,
                         )
                         menuKind = .NONE
@@ -346,16 +346,16 @@ main :: proc() {
                 shouldSave := false
                 shouldOpen := false
 
-                elems := []gui.menuElem_t {
-                    gui.menuButton_t{fmt.tprint(args = {"save map"}, sep = ""), &shouldSave},
-                    gui.menuButton_t{"open file", &shouldOpen},
-                    gui.menuTitle_t{"map attributes"},
-                    gui.menuI32_t{"bounds X", &mapData.bounds.x},
-                    gui.menuI32_t{"bounds Y", &mapData.bounds.y},
-                    gui.menuF32_t{"sky color RED", &mapData.skyColor.r, 0.05},
-                    gui.menuF32_t{"sky color GREEN", &mapData.skyColor.g, 0.05},
-                    gui.menuF32_t{"sky color BLUE", &mapData.skyColor.b, 0.05},
-                    gui.menuF32_t{"fog strength", &mapData.fogStrength, 0.1},
+                elems := []gui.Ui_Elem {
+                    gui.Ui_Button{fmt.tprint(args = {"save map"}, sep = ""), &shouldSave},
+                    gui.Ui_Button{"open file", &shouldOpen},
+                    gui.Ui_Menu_Title{"map attributes"},
+                    gui.Ui_Int{"bounds X", &mapData.bounds.x},
+                    gui.Ui_Int{"bounds Y", &mapData.bounds.y},
+                    gui.Ui_F32{"sky color RED", &mapData.skyColor.r, 0.05},
+                    gui.Ui_F32{"sky color GREEN", &mapData.skyColor.g, 0.05},
+                    gui.Ui_F32{"sky color BLUE", &mapData.skyColor.b, 0.05},
+                    gui.Ui_F32{"fog strength", &mapData.fogStrength, 0.1},
                 }
                 gui.updateAndDrawElemBuf(elems)
 
@@ -372,7 +372,7 @@ main :: proc() {
                 if tileMenuButtonBool {
                     tileMenuButtonBool = false
                     tileSelected = tiles.kind_t(
-                        tileMenuElems[gui.menuContext.selected].(gui.menuButton_t).name[0],
+                        tileMenuElems[gui.menuContext.selected].(gui.Ui_Button).name[0],
                     ) // ughh
                     menuKind = .NONE
                 }
@@ -434,7 +434,7 @@ isTilePosValid :: proc(pos: IVec2) -> bool {
 
 // copied from DoQ
 fileMenuFetchFiles :: proc() {
-    path := fmt.tprint(args = {loadpath, filepath.SEPARATOR_STRING, "maps"}, sep = "")
+    path := fmt.tprint(args = {g_state.load_dir, filepath.SEPARATOR_STRING, "maps"}, sep = "")
     println("path:", path)
 
     fileMenuElemsCount = 0
@@ -459,7 +459,7 @@ fileMenuFetchFiles :: proc() {
             dotindex := strings.index_byte(fileinfo.name, '.')
             if dotindex == 0 do continue
             if fileinfo.name[dotindex:] != ".dqm" do continue // check suffix
-            fileMenuElems[fileMenuElemsCount] = gui.menuFileButton_t {
+            fileMenuElems[fileMenuElemsCount] = gui.Ui_File_Button {
                 fileinfo.name[:dotindex],
                 fileinfo.fullpath,
                 &fileMenuButtonBool,
@@ -472,7 +472,7 @@ fileMenuFetchFiles :: proc() {
             fileinfo := filebuf[i]
             if !fileinfo.is_dir do continue
             if fileinfo.name[0] == '_' do continue // hidden
-            fileMenuElems[fileMenuElemsCount] = gui.menuTitle_t{fileinfo.name}
+            fileMenuElems[fileMenuElemsCount] = gui.Ui_Menu_Title{fileinfo.name}
             fileMenuElemsCount += 1
             mapSelectFilesFetchDirAndAppend(fileinfo.fullpath)
         }
@@ -486,7 +486,7 @@ fileMenuFetchFiles :: proc() {
 
 appendToAssetPath :: proc(subdir: string, path: string) -> string {
     return fmt.tprint(
-        args = {loadpath, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
+        args = {g_state.load_dir, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
         sep = "",
     )
 }

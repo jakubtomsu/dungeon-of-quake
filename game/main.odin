@@ -1,7 +1,6 @@
 package game
 
-// 'Dungeon of Quake' is a simple first person shooter, heavily inspired by the Quake franchise
-// using raylib
+// 'Dungeon of Quake' is a simple first person shooter, heavily inspired by the Quake.
 
 import "attrib"
 import "core:fmt"
@@ -12,77 +11,55 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
-import "gui"
 import rl "vendor:raylib"
 
-DOQ_VERSION_STRING :: "0.1-alpha"
+VERSION_STRING :: "0.1-alpha"
 
-windowSizeX: i32 = 0
-windowSizeY: i32 = 0
-
-camera: rl.Camera = {}
-viewmodelCamera: rl.Camera = {}
-
-frame_index: i64 = 0
-deltatime: f32 = 0.01
-timepassed: f32 = 0.0
-app_shouldExitNextFrame: bool = false
-loadpath: string
-
-renderTextureMain: rl.RenderTexture2D
-postprocessShader: rl.Shader
-randData: rand.Rand
-
-playingMusic: ^rl.Music
-
-gameIsPaused: bool = false
-settings: struct {
-    drawFPS:           bool,
-    debugIsEnabled:    bool,
-    audioMasterVolume: f32,
-    audioMusicVolume:  f32,
-    crosshairOpacity:  f32,
-    mouseSensitivity:  f32,
-    FOV:               f32,
-    viewmodelFOV:      f32,
-    gunXOffset:        f32,
+App_State :: enum {
+    Loadscreen = 0,
+    Main_Menu,
+    Game,
 }
 
-screenTint: Vec3 = {1, 1, 1}
 
-app_updatePathKind_t :: enum {
-    LOADSCREEN = 0,
-    MAIN_MENU,
-    GAME,
+Global_State :: struct {
+    window_size:       IVec2,
+    camera:            rl.Camera,
+    time_passed:       f32,
+    frame_index:       i64,
+    exit_next_frame:   bool,
+    load_dir:          string,
+    renderTextureMain: rl.RenderTexture2D,
+    randData:          rand.Rand,
+    playingMusic:      ^rl.Music,
+    gameIsPaused:      bool,
+    screenTint:        Vec3,
+    app_state:         App_State,
+    settings:          Settings,
+    assets:            Assets,
 }
 
-app_updatePathKind: app_updatePathKind_t
+g_state: Global_State
 
 main :: proc() {
-    _doq_main()
-}
-
-// this just gets called from main
-_doq_main :: proc() {
     _app_init()
     rl.DisableCursor()
 
-    for !rl.WindowShouldClose() && !app_shouldExitNextFrame {
+    for !rl.WindowShouldClose() && !g_state.exit_next_frame {
         //println("### frame =", frame_index, "deltatime =", deltatime)
-        frame_index += 1
+        g_state.frame_index += 1
 
         // fixup
-        settings.audioMasterVolume = clamp(settings.audioMasterVolume, 0.0, 1.0)
-        settings.audioMusicVolume = clamp(settings.audioMusicVolume, 0.0, 1.0)
-        settings.crosshairOpacity = clamp(settings.crosshairOpacity, 0.0, 1.0)
-        settings.mouseSensitivity = clamp(settings.mouseSensitivity, 0.1, 5.0)
-        settings.FOV = clamp(settings.FOV, 60.0, 160.0)
-        settings.viewmodelFOV = clamp(settings.viewmodelFOV, 80.0, 120.0)
-        settings.gunXOffset = clamp(settings.gunXOffset, -0.4, 0.4)
-        rl.SetMasterVolume(settings.audioMasterVolume)
+        g_state.settings.audioMasterVolume = clamp(g_state.settings.audioMasterVolume, 0.0, 1.0)
+        g_state.settings.audioMusicVolume = clamp(g_state.settings.audioMusicVolume, 0.0, 1.0)
+        g_state.settings.crosshairOpacity = clamp(g_state.settings.crosshairOpacity, 0.0, 1.0)
+        g_state.settings.mouseSensitivity = clamp(g_state.settings.mouseSensitivity, 0.1, 5.0)
+        g_state.settings.FOV = clamp(g_state.settings.FOV, 60.0, 160.0)
+        g_state.settings.viewmodelFOV = clamp(g_state.settings.viewmodelFOV, 80.0, 120.0)
+        g_state.settings.gunXOffset = clamp(g_state.settings.gunXOffset, -0.4, 0.4)
+        rl.SetMasterVolume(g_state.settings.audioMasterVolume)
 
-        camera.fovy = settings.FOV
-        viewmodelCamera.fovy = settings.viewmodelFOV
+        g_state.camera.fovy = g_state.settings.FOV
 
         gui.menuContext.windowSizeX = windowSizeX
         gui.menuContext.windowSizeY = windowSizeY
@@ -106,14 +83,14 @@ _doq_main :: proc() {
         case .GAME:
             // main game update path
             {
-                rl.UpdateCamera(&camera, rl.CameraMode.CUSTOM)
-                rl.UpdateCamera(&viewmodelCamera, rl.CameraMode.CUSTOM)
+                rl.UpdateCamera(&camera, .CUSTOM)
 
                 _app_update()
 
                 rl.BeginTextureMode(renderTextureMain)
                 bckgcol := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, 1.0}
                 rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
+
                 rl.BeginMode3D(camera)
                 _app_render3d()
                 if !gameIsPaused {
@@ -123,9 +100,14 @@ _doq_main :: proc() {
                 // _enemy_updateDataAndRender()
                 _bullet_updateDataAndRender()
                 rl.EndMode3D()
-                rl.BeginMode3D(viewmodelCamera)
+
+                viewmodel_cam := camera
+                viewmodel_cam.fovy = settings.viewmodelFOV
+                rl.UpdateCamera(&viewmodel_cam, .CUSTOM)
+                rl.BeginMode3D(viewmodel_cam)
                 gun_drawModel(gun_calcViewportPos())
                 rl.EndMode3D()
+
                 rl.EndTextureMode()
 
                 rl.BeginDrawing()
@@ -164,7 +146,7 @@ _doq_main :: proc() {
 
         deltatime = rl.GetFrameTime()
         if !gameIsPaused {
-            timepassed += deltatime // not really accurate but whatever
+            g_state.time_passed += deltatime // not really accurate but whatever
         }
     }
 
@@ -182,31 +164,27 @@ _app_init :: proc() {
     {
         context.allocator = context.temp_allocator
         if path, ok := filepath.abs(os.args[0]); ok {
-            loadpath = filepath.dir(filepath.clean(path))
-            println("loadpath", loadpath)
+            g_state.load_dir = filepath.dir(filepath.clean(path))
+            println("g_state.load_dir", g_state.load_dir)
         }
     }
 
-    settings_setDefault()
-    settings_loadFromFile()
-
-    rl.SetWindowState({.WINDOW_RESIZABLE, .VSYNC_HINT})
+    rl.SetWindowState({.WINDOW_RESIZABLE, .VSYNC_HINT, .FULLSCREEN_MODE})
     rl.InitWindow(800, 600, "Dungeon of Quake")
     rl.SetWindowMonitor(0)
     rl.SetWindowSize(rl.GetMonitorWidth(0), rl.GetMonitorHeight(0))
     rl.ToggleFullscreen()
 
-    windowSizeX = rl.GetScreenWidth()
-    windowSizeY = rl.GetScreenHeight()
+    g_state.window_size = {rl.GetScreenWidth(), rl.GetScreenHeight()}
 
-    rl.SetExitKey(rl.KeyboardKey.KEY_NULL)
+    rl.SetExitKey(.KEY_NULL)
     rl.SetTargetFPS(120)
 
     rl.InitAudioDevice()
 
     if !rl.IsAudioDeviceReady() || !rl.IsWindowReady() do time.sleep(10)
 
-    rl.SetMasterVolume(settings.audioMasterVolume)
+    rl.SetMasterVolume(g_state.settings.master_volume)
 
 
     renderTextureMain = rl.LoadRenderTexture(windowSizeX, windowSizeY)
@@ -217,13 +195,6 @@ _app_init :: proc() {
     camera.target = {}
     camera.up = Vec3{0.0, 1.0, 0.0}
     camera.projection = rl.CameraProjection.PERSPECTIVE
-    //rl.SetCameraMode(camera, rl.CameraMode.CUSTOM)
-
-    viewmodelCamera.position = {0, 0, 0}
-    viewmodelCamera.target = {0, 0, 1}
-    viewmodelCamera.up = {0, 1, 0}
-    viewmodelCamera.projection = rl.CameraProjection.PERSPECTIVE
-    //rl.SetCameraMode(viewmodelCamera, rl.CameraMode.CUSTOM)
 
     rand.init(&randData, cast(u64)time.now()._nsec)
 
@@ -309,15 +280,15 @@ _app_render3d :: proc() {
 
     rl.SetShaderValue(
         asset_data.portalShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.portalShader, "timePassed"),
-        &timepassed,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.portalShader, "g_state.time_passed"),
+        &g_state.time_passed,
         rl.ShaderUniformDataType.FLOAT,
     )
 
     rl.SetShaderValue(
         asset_data.cloudShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.cloudShader, "timePassed"),
-        &timepassed,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(asset_data.cloudShader, "g_state.time_passed"),
+        &g_state.time_passed,
         rl.ShaderUniformDataType.FLOAT,
     )
     rl.SetShaderValue(
@@ -383,91 +354,6 @@ settings_setDefault :: proc() {
     }
 }
 
-settings_getFilePath :: proc() -> string {
-    return fmt.tprint(args = {loadpath, filepath.SEPARATOR_STRING, ".doq_settings"}, sep = "")
-}
-
-settings_saveToFile :: proc() {
-    text := fmt.tprint(
-        args =  {
-            "drawFPS",
-            attrib.SEPARATOR,
-            " ",
-            settings.drawFPS,
-            "\n",
-            "debugIsEnabled",
-            attrib.SEPARATOR,
-            " ",
-            settings.debugIsEnabled,
-            "\n",
-            "audioMasterVolume",
-            attrib.SEPARATOR,
-            " ",
-            settings.audioMasterVolume,
-            "\n",
-            "audioMusicVolume",
-            attrib.SEPARATOR,
-            " ",
-            settings.audioMusicVolume,
-            "\n",
-            "crosshairOpacity",
-            attrib.SEPARATOR,
-            " ",
-            settings.crosshairOpacity,
-            "\n",
-            "mouseSensitivity",
-            attrib.SEPARATOR,
-            " ",
-            settings.mouseSensitivity,
-            "\n",
-            "FOV",
-            attrib.SEPARATOR,
-            " ",
-            settings.FOV,
-            "\n",
-            "viewmodelFOV",
-            attrib.SEPARATOR,
-            " ",
-            settings.viewmodelFOV,
-            "\n",
-            "gunXOffset",
-            attrib.SEPARATOR,
-            " ",
-            settings.gunXOffset,
-            "\n",
-        },
-        sep = "",
-    )
-
-    os.write_entire_file(settings_getFilePath(), transmute([]u8)text)
-}
-
-settings_loadFromFile :: proc() {
-    buf, ok := os.read_entire_file_from_filename(settings_getFilePath())
-    if !ok {
-        println("! error: unable to read settings file")
-        return
-    }
-    defer delete(buf)
-
-    text := transmute(string)buf
-    index: i32 = 0
-    for index < i32(len(text)) {
-        attrib.skipWhitespace(buf, &index)
-        if attrib.match(buf, &index, "drawFPS") do settings.drawFPS = attrib.readBool(buf, &index)
-        if attrib.match(buf, &index, "debugIsEnabled") do settings.debugIsEnabled = attrib.readBool(buf, &index)
-        if attrib.match(buf, &index, "audioMasterVolume") do settings.audioMasterVolume = attrib.readF32(buf, &index)
-        if attrib.match(buf, &index, "audioMusicVolume") do settings.audioMusicVolume = attrib.readF32(buf, &index)
-        if attrib.match(buf, &index, "crosshairOpacity") do settings.crosshairOpacity = attrib.readF32(buf, &index)
-        if attrib.match(buf, &index, "mouseSensitivity") do settings.mouseSensitivity = attrib.readF32(buf, &index)
-        if attrib.match(buf, &index, "FOV") do settings.FOV = attrib.readF32(buf, &index)
-        if attrib.match(buf, &index, "viewmodelFOV") do settings.viewmodelFOV = attrib.readF32(buf, &index)
-        if attrib.match(buf, &index, "gunXOffset") do settings.gunXOffset = attrib.readF32(buf, &index)
-    }
-}
-
-
-
 gameStopSounds :: proc() {
     rl.StopSound(asset_data.elevatorSound)
     rl.StopSound(asset_data.player.swooshSound)
@@ -526,13 +412,13 @@ bullet_shootRaycast :: proc(
     effectDuration: f32,
 ) -> (
     tn: f32,
-    enemykind: enemy_kind_t,
+    enemykind: Enemy_Kind,
     enemyindex: i32,
 ) {
     hit: bool
     tn, hit, enemykind, enemyindex = phy_boxcastWorld(start, start + dir * 1e6, {0, 0, 0}) //Vec3{rad,rad,rad})
     hitpos := start + dir * tn
-    hitenemy := enemykind != enemy_kind_t.NONE
+    hitenemy := enemykind != Enemy_Kind.NONE
     bullet_createBulletLine(
         start + dir * rad * 2.0,
         hitpos,
@@ -542,8 +428,8 @@ bullet_shootRaycast :: proc(
     )
     if hit {
         switch enemykind {
-        case enemy_kind_t.NONE:
-        case enemy_kind_t.GRUNT:
+        case Enemy_Kind.NONE:
+        case Enemy_Kind.GRUNT:
             headshot :=
                 hitpos.y >
                 enemy_data.grunts[enemyindex].pos.y + ENEMY_GRUNT_SIZE.y * ENEMY_HEADSHOT_HALF_OFFSET
@@ -552,7 +438,7 @@ bullet_shootRaycast :: proc(
             playSound(asset_data.enemy.gruntHitSound)
             if enemy_data.grunts[enemyindex].health <= 0.0 do playSoundMulti(asset_data.enemy.gruntDeathSound)
             enemy_data.grunts[enemyindex].vel += dir * 10.0 * damage
-        case enemy_kind_t.KNIGHT:
+        case Enemy_Kind.KNIGHT:
             headshot :=
                 hitpos.y >
                 enemy_data.knights[enemyindex].pos.y + ENEMY_KNIGHT_SIZE.y * ENEMY_HEADSHOT_HALF_OFFSET
@@ -637,563 +523,4 @@ _bullet_updateDataAndRender :: proc() {
         //)
     }
     rl.EndShaderMode()
-}
-
-
-
-//
-// ENEMIES
-//
-
-ENEMY_GRUNT_MAX_COUNT :: 64
-ENEMY_KNIGHT_MAX_COUNT :: 64
-
-ENEMY_HEALTH_MULTIPLIER :: 1.5
-ENEMY_HEADSHOT_HALF_OFFSET :: 0.2
-ENEMY_GRAVITY :: 40
-
-ENEMY_GRUNT_SIZE :: Vec3{2.5, 3.7, 2.5}
-ENEMY_GRUNT_ACCELERATION :: 10
-ENEMY_GRUNT_MAX_SPEED :: 20
-ENEMY_GRUNT_FRICTION :: 5
-ENEMY_GRUNT_MIN_GOOD_DIST :: 30
-ENEMY_GRUNT_MAX_GOOD_DIST :: 60
-ENEMY_GRUNT_ATTACK_TIME :: 1.7
-ENEMY_GRUNT_DAMAGE :: 1.0
-ENEMY_GRUNT_HEALTH :: 1.0
-ENEMY_GRUNT_SPEED_RAND :: 0.012 // NOTE: multiplier for length(player velocity) ^ 2
-ENEMY_GRUNT_DIST_RAND :: 1.1
-ENEMY_GRUNT_MAX_DIST :: 250.0
-
-ENEMY_KNIGHT_SIZE :: Vec3{1.5, 3.0, 1.5}
-ENEMY_KNIGHT_ACCELERATION :: 7
-ENEMY_KNIGHT_MAX_SPEED :: 38
-ENEMY_KNIGHT_FRICTION :: 2
-ENEMY_KNIGHT_DAMAGE :: 1.0
-ENEMY_KNIGHT_ATTACK_TIME :: 1.0
-ENEMY_KNIGHT_HEALTH :: 1.0
-ENEMY_KNIGHT_RANGE :: 5.0
-
-ENEMY_GRUNT_ANIM_FRAMETIME :: 1.0 / 15.0
-ENEMY_KNIGHT_ANIM_FRAMETIME :: 1.0 / 15.0
-
-enemy_kind_t :: enum u8 {
-    NONE = 0,
-    GRUNT,
-    KNIGHT,
-}
-
-enemy_data: struct {
-    deadCount:   i32,
-    gruntCount:  i32,
-    grunts:      [ENEMY_GRUNT_MAX_COUNT]struct {
-        spawnPos:       Vec3,
-        attackTimer:    f32,
-        pos:            Vec3,
-        health:         f32,
-        target:         Vec3,
-        isMoving:       bool,
-        vel:            Vec3,
-        rot:            f32, // angle in radians around Y axis
-        animFrame:      i32,
-        animFrameTimer: f32,
-        animState:      enum u8 {
-            // also index to animation
-            RUN    = 0,
-            ATTACK = 1,
-            IDLE   = 2,
-        },
-    },
-    knightCount: i32,
-    knights:     [ENEMY_KNIGHT_MAX_COUNT]struct {
-        spawnPos:       Vec3,
-        health:         f32,
-        pos:            Vec3,
-        attackTimer:    f32,
-        vel:            Vec3,
-        rot:            f32, // angle in radians around Y axis
-        target:         Vec3,
-        isMoving:       bool,
-        animFrame:      i32,
-        animFrameTimer: f32,
-        animState:      enum u8 {
-            // also index to animation
-            RUN    = 0,
-            ATTACK = 1,
-            IDLE   = 2,
-        },
-    },
-}
-
-
-
-// guy with a gun
-enemy_spawnGrunt :: proc(pos: Vec3) {
-    index := enemy_data.gruntCount
-    if index + 1 >= ENEMY_GRUNT_MAX_COUNT do return
-    enemy_data.gruntCount += 1
-    enemy_data.grunts[index] = {}
-    enemy_data.grunts[index].spawnPos = pos
-    enemy_data.grunts[index].pos = pos
-    enemy_data.grunts[index].target = {}
-    enemy_data.grunts[index].health = ENEMY_GRUNT_HEALTH * ENEMY_HEALTH_MULTIPLIER
-}
-
-// guy with a sword
-enemy_spawnKnight :: proc(pos: Vec3) {
-    index := enemy_data.knightCount
-    if index + 1 >= ENEMY_KNIGHT_MAX_COUNT do return
-    enemy_data.knightCount += 1
-    enemy_data.knights[index] = {}
-    enemy_data.knights[index].spawnPos = pos
-    enemy_data.knights[index].pos = pos
-    enemy_data.knights[index].target = {}
-    enemy_data.knights[index].health = ENEMY_KNIGHT_HEALTH * ENEMY_HEALTH_MULTIPLIER
-}
-
-
-
-_enemy_updateDataAndRender :: proc() {
-    assert(enemy_data.gruntCount >= 0)
-    assert(enemy_data.knightCount >= 0)
-    assert(enemy_data.gruntCount < ENEMY_GRUNT_MAX_COUNT)
-    assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
-
-    if !gameIsPaused {
-        //enemy_data.knightAnimFrame += 1
-        //animindex := 1
-        //rl.UpdateModelAnimation(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex], enemy_data.knightAnimFrame)
-        //if enemy_data.knightAnimFrame >= asset_data.enemy.knightAnim[animindex].frameCount do enemy_data.knightAnimFrame = 0
-
-        //if !rl.IsModelAnimationValid(asset_data.enemy.knightModel, asset_data.enemy.knightAnim[animindex]) do println("! error: KNIGHT ANIM INVALID")
-
-        enemy_data.deadCount = 0
-
-        // update grunts
-        for i: i32 = 0; i < enemy_data.gruntCount; i += 1 {
-            if enemy_data.grunts[i].health <= 0.0 {
-                enemy_data.deadCount += 1
-                continue
-            }
-
-            pos := enemy_data.grunts[i].pos + Vec3{0, ENEMY_GRUNT_SIZE.y * 0.5, 0}
-            dir := linalg.normalize(player_data.pos - pos)
-            // cast player
-            p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0, 0, 0})
-            EPS :: 0.0
-            t_tn, t_norm, t_hit := phy_boxcastTilemap(pos, pos + dir * 1e6, {EPS, EPS, EPS})
-            seeplayer := p_tn < t_tn && p_hit
-
-            if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
-
-            // println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
-
-            enemy_data.grunts[i].attackTimer -= deltatime
-
-
-            if seeplayer {
-                enemy_data.grunts[i].target = player_data.pos
-                enemy_data.grunts[i].isMoving = true
-            }
-
-
-            flatdir := linalg.normalize((enemy_data.grunts[i].target - pos) * Vec3{1, 0, 1})
-
-            toTargetRot: f32 = math.atan2(-flatdir.z, flatdir.x) // * math.sign(flatdir.x)
-            enemy_data.grunts[i].rot = math.angle_lerp(
-                enemy_data.grunts[i].rot,
-                roundstep(toTargetRot, 4.0 / math.PI),
-                clamp(deltatime * 1.0, 0.0, 1.0),
-            )
-
-            if p_tn < ENEMY_GRUNT_SIZE.y {
-                player_data.vel = flatdir * 50.0
-                player_data.slowness = 0.1
-            }
-
-            if seeplayer && p_tn < ENEMY_GRUNT_MAX_DIST {
-                if enemy_data.grunts[i].attackTimer < 0.0 {     // attack
-                    enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME
-                    rndstrength := clamp(
-                        (linalg.length2(player_data.vel) * ENEMY_GRUNT_SPEED_RAND +
-                            p_tn * ENEMY_GRUNT_DIST_RAND) *
-                        1e-3 *
-                        0.5,
-                        0.0005,
-                        0.04,
-                    )
-                    // cast bullet
-                    bulletdir := linalg.normalize(
-                        dir + randVec3() * rndstrength + player_data.vel * deltatime / PLAYER_SPEED,
-                    )
-                    bullet_tn, bullet_norm, bullet_hit := phy_boxcastTilemap(
-                        pos,
-                        pos + bulletdir * 1e6,
-                        {EPS, EPS, EPS},
-                    )
-                    bullet_createBulletLine(
-                        pos,
-                        pos + bulletdir * bullet_tn,
-                        2.0,
-                        Vec4{1.0, 0.0, 0.0, 1.0},
-                        1.0,
-                    )
-                    bulletplayer_tn, bulletplayer_hit := phy_boxcastPlayer(pos, bulletdir, {0, 0, 0})
-                    if bulletplayer_hit && bulletplayer_tn < bullet_tn {     // if the ray actually hit player first
-                        player_damage(ENEMY_GRUNT_DAMAGE)
-                        player_data.vel += bulletdir * 40.0
-                        player_data.rotImpulse += {0.1, 0.0, 0.0}
-                    }
-
-                    enemy_data.grunts[i].animState = .ATTACK
-                    enemy_data.grunts[i].animFrame = 0
-                }
-            } else {
-                enemy_data.grunts[i].attackTimer = ENEMY_GRUNT_ATTACK_TIME * 0.5
-            }
-
-
-
-            speed := linalg.length(enemy_data.grunts[i].vel)
-            enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
-
-            phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBox(
-                enemy_data.grunts[i].pos,
-                enemy_data.grunts[i].vel,
-                0.0,
-                ENEMY_GRUNT_SIZE,
-                0.1,
-            )
-            enemy_data.grunts[i].pos = phy_pos
-            enemy_data.grunts[i].vel = phy_vel
-            isOnGround := phy_hit && phy_norm.y > 0.3
-
-            if speed > 0.1 && enemy_data.grunts[i].isMoving && isOnGround {
-                forwdepth := phy_raycastDepth(pos + flatdir * ENEMY_GRUNT_SIZE.x * 1.7)
-                if forwdepth > ENEMY_GRUNT_SIZE.y * 4 {
-                    enemy_data.grunts[i].vel = -flatdir * ENEMY_GRUNT_MAX_SPEED * 0.5
-                    enemy_data.grunts[i].animState = .IDLE
-                    enemy_data.grunts[i].isMoving = false
-                }
-            }
-
-            if enemy_data.grunts[i].isMoving && speed < ENEMY_GRUNT_MAX_SPEED && isOnGround {
-                if !seeplayer {
-                    enemy_data.grunts[i].vel += flatdir * ENEMY_GRUNT_ACCELERATION
-                    enemy_data.grunts[i].animState = .RUN
-                } else if p_tn < ENEMY_GRUNT_MIN_GOOD_DIST {
-                    enemy_data.grunts[i].vel -= flatdir * ENEMY_GRUNT_ACCELERATION
-                    enemy_data.grunts[i].animState = .RUN
-                }
-            }
-        }
-
-
-
-        // update knights
-        for i: i32 = 0; i < enemy_data.knightCount; i += 1 {
-            if enemy_data.knights[i].health <= 0.0 {
-                enemy_data.deadCount += 1
-                continue
-            }
-
-            pos := enemy_data.knights[i].pos + Vec3{0, ENEMY_KNIGHT_SIZE.y * 0.5, 0}
-            dir := linalg.normalize(player_data.pos - pos)
-            p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0, 0, 0})
-            t_tn, t_norm, t_hit := phy_boxcastTilemap(pos, pos + dir * 1e6, {1, 1, 1})
-            seeplayer := p_tn < t_tn && p_hit
-
-            if pos.y < -TILE_HEIGHT do enemy_data.knights[i].health = -1.0
-
-            // println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
-
-            enemy_data.knights[i].attackTimer -= deltatime
-
-
-            if seeplayer {
-                enemy_data.knights[i].target = player_data.pos
-                enemy_data.knights[i].isMoving = true
-            }
-
-
-            flatdir := linalg.normalize((enemy_data.knights[i].target - pos) * Vec3{1, 0, 1})
-
-            toTargetRot: f32 = math.atan2(-flatdir.z, flatdir.x)
-            enemy_data.knights[i].rot = math.angle_lerp(
-                enemy_data.knights[i].rot,
-                roundstep(toTargetRot, 4.0 / math.PI),
-                clamp(deltatime * 3, 0.0, 1.0),
-            )
-
-            if seeplayer {
-                if p_tn < ENEMY_KNIGHT_RANGE {
-                    enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED * 2.0
-                    player_data.vel = flatdir * 100.0
-                    player_data.vel.y = 10.0
-                    if enemy_data.knights[i].attackTimer < 0.0 {     // attack
-                        enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME
-                        player_damage(ENEMY_KNIGHT_DAMAGE)
-                        player_data.vel = flatdir * 100.0
-                        player_data.vel.y = 20.0
-                        enemy_data.knights[i].vel = -flatdir * ENEMY_KNIGHT_MAX_SPEED * 2.0
-                        enemy_data.knights[i].animState = .ATTACK
-                        enemy_data.knights[i].animFrame = 0
-                    }
-                }
-            } else {
-                enemy_data.knights[i].attackTimer = ENEMY_KNIGHT_ATTACK_TIME * 0.5
-            }
-
-
-
-            speed := linalg.length(enemy_data.knights[i].vel)
-            enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
-
-            phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBox(
-                enemy_data.knights[i].pos,
-                enemy_data.knights[i].vel,
-                0.0,
-                ENEMY_KNIGHT_SIZE,
-                0.1,
-            )
-            enemy_data.knights[i].pos = phy_pos
-            enemy_data.knights[i].vel = phy_vel
-            isOnGround := phy_hit && phy_norm.y > 0.3
-
-            if speed > 0.1 && enemy_data.knights[i].isMoving && isOnGround {
-                forwdepth := phy_raycastDepth(pos + flatdir * ENEMY_KNIGHT_SIZE.x * 1.7)
-                if forwdepth > ENEMY_KNIGHT_SIZE.y * 4 {
-                    enemy_data.knights[i].vel = -enemy_data.knights[i].vel * 0.5
-                    enemy_data.knights[i].animState = .IDLE
-                    enemy_data.knights[i].isMoving = false
-                }
-            }
-
-            if enemy_data.knights[i].isMoving &&
-               speed < ENEMY_KNIGHT_MAX_SPEED &&
-               isOnGround &&
-               enemy_data.grunts[i].animState != .ATTACK {
-                enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION
-            }
-        }
-    } // if !gameIsPaused
-
-    // render grunts
-    for i: i32 = 0; i < enemy_data.gruntCount; i += 1 {
-        if enemy_data.grunts[i].health <= 0.0 do continue
-
-        // anim
-        {
-            // update state
-            if !gameIsPaused {
-                prevanim := enemy_data.grunts[i].animState
-                if !enemy_data.grunts[i].isMoving do enemy_data.grunts[i].animState = .IDLE
-                else {
-                    if enemy_data.grunts[i].attackTimer < 0.0 do enemy_data.grunts[i].animState = .RUN
-                }
-                if enemy_data.grunts[i].animState != prevanim do enemy_data.grunts[i].animFrame = 0
-            }
-
-            animindex := i32(enemy_data.grunts[i].animState)
-
-            if !gameIsPaused {
-                enemy_data.grunts[i].animFrameTimer += deltatime
-                if enemy_data.grunts[i].animFrameTimer > ENEMY_GRUNT_ANIM_FRAMETIME {
-                    enemy_data.grunts[i].animFrameTimer -= ENEMY_GRUNT_ANIM_FRAMETIME
-                    enemy_data.grunts[i].animFrame += 1
-
-                    if enemy_data.grunts[i].animFrame >= asset_data.enemy.gruntAnim[animindex].frameCount {
-                        enemy_data.grunts[i].animFrame = 0
-                        enemy_data.grunts[i].animFrameTimer = 0
-                        if enemy_data.grunts[i].animState == .ATTACK do enemy_data.grunts[i].animState = .IDLE
-                    }
-                }
-            }
-
-            // rl.UpdateModelAnimation(
-            //     asset_data.enemy.gruntModel,
-            //     asset_data.enemy.gruntAnim[animindex],
-            //     enemy_data.grunts[i].animFrame,
-            // )
-        }
-
-        rl.DrawModelEx(
-            asset_data.enemy.gruntModel,
-            enemy_data.grunts[i].pos,
-            {0, 1, 0},
-            enemy_data.grunts[i].rot * 180.0 / math.PI,
-            1.4,
-            rl.WHITE,
-        )
-    }
-
-    // render knights
-    for i: i32 = 0; i < enemy_data.knightCount; i += 1 {
-        if enemy_data.knights[i].health <= 0.0 do continue
-
-        // anim
-        {
-            // update state
-            if !gameIsPaused {
-                prevanim := enemy_data.knights[i].animState
-                if !enemy_data.knights[i].isMoving do enemy_data.knights[i].animState = .IDLE
-                else {
-                    if enemy_data.knights[i].attackTimer < 0.0 do enemy_data.knights[i].animState = .RUN
-                }
-                if enemy_data.knights[i].animState != prevanim do enemy_data.knights[i].animFrame = 0
-            }
-
-            animindex := i32(enemy_data.knights[i].animState)
-
-            if !gameIsPaused {
-                enemy_data.knights[i].animFrameTimer += deltatime
-                if enemy_data.knights[i].animFrameTimer > ENEMY_KNIGHT_ANIM_FRAMETIME {
-                    enemy_data.knights[i].animFrameTimer -= ENEMY_KNIGHT_ANIM_FRAMETIME
-                    enemy_data.knights[i].animFrame += 1
-
-                    if enemy_data.knights[i].animFrame >= asset_data.enemy.knightAnim[animindex].frameCount {
-                        enemy_data.knights[i].animFrame = 0
-                        enemy_data.knights[i].animFrameTimer = 0
-                        if enemy_data.knights[i].animState == .ATTACK do enemy_data.knights[i].animState = .RUN
-                    }
-                }
-            }
-
-            // rl.UpdateModelAnimation(
-            //     asset_data.enemy.knightModel,
-            //     asset_data.enemy.knightAnim[animindex],
-            //     enemy_data.knights[i].animFrame,
-            // )
-        }
-
-        rl.DrawModelEx(
-            asset_data.enemy.knightModel,
-            enemy_data.knights[i].pos,
-            {0, 1, 0},
-            enemy_data.knights[i].rot * 180.0 / math.PI, // rot
-            1.0,
-            rl.WHITE,
-        )
-    }
-
-    if settings.debugIsEnabled {
-        // render grunt physics AABBS
-        for i: i32 = 0; i < enemy_data.gruntCount; i += 1 {
-            if enemy_data.grunts[i].health <= 0.0 do continue
-            rl.DrawCubeWires(
-                enemy_data.grunts[i].pos,
-                ENEMY_GRUNT_SIZE.x * 2,
-                ENEMY_GRUNT_SIZE.y * 2,
-                ENEMY_GRUNT_SIZE.z * 2,
-                rl.GREEN,
-            )
-        }
-
-        // render knight physics AABBS
-        for i: i32 = 0; i < enemy_data.knightCount; i += 1 {
-            if enemy_data.knights[i].health <= 0.0 do continue
-            rl.DrawCubeWires(
-                enemy_data.knights[i].pos,
-                ENEMY_KNIGHT_SIZE.x * 2,
-                ENEMY_KNIGHT_SIZE.y * 2,
-                ENEMY_KNIGHT_SIZE.z * 2,
-                rl.GREEN,
-            )
-        }
-    }
-}
-
-
-
-//
-// HELPERS PROCEDURES
-//
-
-asset_path :: proc(subdir: string, path: string, allocator := context.temp_allocator) -> string {
-    return filepath.join({loadpath, subdir, path}, allocator)
-}
-
-// ctx temp alloc
-asset_path_cstr :: proc(subdir: string, path: string, allocator := context.temp_allocator) -> cstring {
-    return strings.clone_to_cstring(asset_path(subdir, path), allocator)
-}
-
-loadTexture :: proc(path: string) -> rl.Texture {
-    fullpath := asset_path_cstr("textures", path)
-    println("! loading texture: ", fullpath)
-    return rl.LoadTexture(fullpath)
-}
-
-loadSound :: proc(path: string) -> rl.Sound {
-    //if !rl.IsAudioDeviceReady() do return {}
-    fullpath := asset_path_cstr("audio", path)
-    println("! loading sound: ", fullpath)
-    return rl.LoadSound(fullpath)
-}
-
-loadMusic :: proc(path: string) -> rl.Music {
-    //if !rl.IsAudioDeviceReady() do return {}
-    fullpath := asset_path_cstr("audio", path)
-    println("! loading music: ", fullpath)
-    return rl.LoadMusicStream(fullpath)
-}
-
-loadFont :: proc(path: string) -> rl.Font {
-    fullpath := asset_path_cstr("fonts", path)
-    println("! loading font: ", fullpath)
-    return rl.LoadFontEx(fullpath, 32, nil, 0)
-    //return rl.LoadFont(fullpath)
-}
-
-loadModel :: proc(path: string) -> rl.Model {
-    fullpath := asset_path_cstr("models", path)
-    println("! loading model: ", fullpath)
-    return rl.LoadModel(fullpath)
-}
-
-loadModelAnim :: proc(path: string, outCount: ^u32) -> [^]rl.ModelAnimation {
-    fullpath := asset_path_cstr("anim", path)
-    println("! loading anim: ", fullpath)
-    return rl.LoadModelAnimations(fullpath, outCount)
-}
-
-loadShader :: proc(vertpath: string, fragpath: string) -> rl.Shader {
-    vertfullpath := asset_path_cstr("shaders", vertpath)
-    fragfullpath := asset_path_cstr("shaders", fragpath)
-    println("! loading shader: vert: ", vertfullpath, "frag:", fragfullpath)
-    return rl.LoadShader(vertfullpath, fragfullpath)
-}
-
-// uses default vertex shader
-loadFragShader :: proc(path: string) -> rl.Shader {
-    fullpath := asset_path_cstr("shaders", path)
-    println("! loading shader: ", fullpath)
-    return rl.LoadShader(nil, fullpath)
-}
-
-
-
-playSound :: proc(sound: rl.Sound) {
-    if !rl.IsAudioDeviceReady() do return
-    rl.PlaySound(sound)
-}
-
-playSoundMulti :: proc(sound: rl.Sound) {
-    if !rl.IsAudioDeviceReady() do return
-    //rl.PlaySoundMulti(sound)
-}
-
-// rand vector with elements in -1..1
-randVec3 :: proc() -> Vec3 {
-    return(
-        Vec3 {
-            rand.float32_range(-1.0, 1.0, &randData),
-            rand.float32_range(-1.0, 1.0, &randData),
-            rand.float32_range(-1.0, 1.0, &randData),
-        } \
-    )
-}
-
-roundstep :: proc(a: f32, step: f32) -> f32 {
-    return math.round(a * step) / step
 }

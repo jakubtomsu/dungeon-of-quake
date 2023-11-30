@@ -9,7 +9,7 @@ uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
 uniform Vec3 portalPos;
-uniform float timePassed;
+uniform float g_state.time_passed;
 
 out Vec3 fragPosition;
 out Vec2 fragTexCoord;
