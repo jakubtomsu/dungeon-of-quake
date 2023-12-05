@@ -115,7 +115,7 @@ _enemy_updateDataAndRender :: proc() {
     assert(enemy_data.gruntCount < ENEMY_GRUNT_MAX_COUNT)
     assert(enemy_data.knightCount < ENEMY_KNIGHT_MAX_COUNT)
 
-    if !gameIsPaused {
+    if !g_state.paused {
         //enemy_data.knightAnimFrame += 1
         //animindex := 1
         //rl.UpdateModelAnimation(g_state.assets.enemy.knightModel, g_state.assets.enemy.knightAnim[animindex], enemy_data.knightAnimFrame)
@@ -332,7 +332,7 @@ _enemy_updateDataAndRender :: proc() {
                 enemy_data.knights[i].vel += flatdir * ENEMY_KNIGHT_ACCELERATION
             }
         }
-    } // if !gameIsPaused
+    } // if !g_state.paused
 
     // render grunts
     for i: i32 = 0; i < enemy_data.gruntCount; i += 1 {
@@ -341,7 +341,7 @@ _enemy_updateDataAndRender :: proc() {
         // anim
         {
             // update state
-            if !gameIsPaused {
+            if !g_state.paused {
                 prevanim := enemy_data.grunts[i].animState
                 if !enemy_data.grunts[i].isMoving do enemy_data.grunts[i].animState = .IDLE
                 else {
@@ -352,7 +352,7 @@ _enemy_updateDataAndRender :: proc() {
 
             animindex := i32(enemy_data.grunts[i].animState)
 
-            if !gameIsPaused {
+            if !g_state.paused {
                 enemy_data.grunts[i].animFrameTimer += deltatime
                 if enemy_data.grunts[i].animFrameTimer > ENEMY_GRUNT_ANIM_FRAMETIME {
                     enemy_data.grunts[i].animFrameTimer -= ENEMY_GRUNT_ANIM_FRAMETIME
@@ -391,7 +391,7 @@ _enemy_updateDataAndRender :: proc() {
         // anim
         {
             // update state
-            if !gameIsPaused {
+            if !g_state.paused {
                 prevanim := enemy_data.knights[i].animState
                 if !enemy_data.knights[i].isMoving do enemy_data.knights[i].animState = .IDLE
                 else {
@@ -402,7 +402,7 @@ _enemy_updateDataAndRender :: proc() {
 
             animindex := i32(enemy_data.knights[i].animState)
 
-            if !gameIsPaused {
+            if !g_state.paused {
                 enemy_data.knights[i].animFrameTimer += deltatime
                 if enemy_data.knights[i].animFrameTimer > ENEMY_KNIGHT_ANIM_FRAMETIME {
                     enemy_data.knights[i].animFrameTimer -= ENEMY_KNIGHT_ANIM_FRAMETIME
@@ -434,7 +434,7 @@ _enemy_updateDataAndRender :: proc() {
         )
     }
 
-    if settings.debugIsEnabled {
+    if settings.debug {
         // render grunt physics AABBS
         for i: i32 = 0; i < enemy_data.gruntCount; i += 1 {
             if enemy_data.grunts[i].health <= 0.0 do continue

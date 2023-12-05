@@ -56,7 +56,7 @@ player_data: struct {
 player_damage :: proc(damage: f32) {
     player_data.health -= damage
     playSoundMulti(g_state.assets.player.damageSound)
-    screenTint = {1, 0.3, 0.2}
+    screen_tint = {1, 0.3, 0.2}
     player_data.slowness += damage * 0.25
 }
 
@@ -72,13 +72,13 @@ _player_update :: proc() {
         return
     } else if player_data.pos.y < PLAYER_FALL_DEATH_START_DARKEN {
         LEN :: abs(PLAYER_FALL_DEATH_Y - PLAYER_FALL_DEATH_START_DARKEN)
-        screenTint =
+        screen_tint =
             {1, 1, 1} *
             (1.0 - clamp(abs(PLAYER_FALL_DEATH_START_DARKEN - player_data.pos.y) / LEN, 0.0, 0.99))
     }
 
     // portal finish
-    if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, map_data.finishPos, MAP_TILE_FINISH_SIZE) {
+    if phy_boxVsBox(player_data.pos, PLAYER_SIZE * 0.5, level.finishPos, MAP_TILE_FINISH_SIZE) {
         player_finishMap()
         return
     }
@@ -146,9 +146,9 @@ _player_update :: proc() {
     if rl.IsKeyDown(rl.KeyboardKey.D) do movedir.x -= 1.0
     //if rl.IsKeyPressed(rl.KeyboardKey.C)do player_data.pos.y -= 2.0
 
-    tilepos := map_worldToTile(player_data.pos)
+    tilepos := level_worldToTile(player_data.pos)
     c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
-    isInElevatorTile := c in map_data.elevatorHeights
+    isInElevatorTile := c in level.elevatorHeights
 
     player_data.vel.y -= (player_data.isOnGround ? PLAYER_GRAVITY * 0.001 : PLAYER_GRAVITY * deltatime)
 
@@ -198,12 +198,12 @@ _player_update :: proc() {
     // elevator update
     elevatorIsMoving := false
     {
-        tilepos = map_worldToTile(player_data.pos)
+        tilepos = level_worldToTile(player_data.pos)
         c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
-        isInElevatorTile = c in map_data.elevatorHeights
+        isInElevatorTile = c in level.elevatorHeights
 
         if isInElevatorTile {
-            height := map_data.elevatorHeights[c]
+            height := level.elevatorHeights[c]
             elevatorIsMoving = false
 
             y :=
@@ -241,10 +241,10 @@ _player_update :: proc() {
                 player_data.isOnGround = false
             }
 
-            map_data.elevatorHeights[c] = height
+            level.elevatorHeights[c] = height
         }
 
-        if elevatorIsMoving && !gameIsPaused {
+        if elevatorIsMoving && !g_state.paused {
             if !rl.IsSoundPlaying(g_state.assets.elevatorSound) do playSound(g_state.assets.elevatorSound)
         } else {
             rl.StopSound(g_state.assets.elevatorSound)
@@ -392,7 +392,7 @@ _player_update :: proc() {
         )
     }
 
-    if settings.debugIsEnabled {
+    if settings.debug {
         size := Vec3{1, 1, 1}
         tn, normal, hit := phy_boxcastTilemap(
             camera.position,
@@ -404,7 +404,7 @@ _player_update :: proc() {
         rl.DrawLine3D(hitpos, hitpos + normal * 4, rl.ORANGE)
     }
 
-    if settings.debugIsEnabled {
+    if settings.debug {
         depth := phy_raycastDepth(player_data.pos)
         rl.DrawCube(player_data.pos + Vec3{0, -depth, 0}, 1, 1, 1, rl.GREEN)
         println("depth", depth)
@@ -419,16 +419,16 @@ _player_update :: proc() {
 
 player_startMap :: proc() {
     println("player started game")
-    player_data.pos = map_data.startPos
+    player_data.pos = level.startPos
     player_data.lookRotEuler.x = 0.0
     player_data.lookRotEuler.z = 0.0
     player_data.lookRotEuler.y =
         math.PI * 2 -
-        (math.atan2(-map_data.startPlayerDir.x, -map_data.startPlayerDir.y) *
-                math.sign(-map_data.startPlayerDir.x))
+        (math.atan2(-level.startPlayerDir.x, -level.startPlayerDir.y) *
+                math.sign(-level.startPlayerDir.x))
     player_initData()
-    screenTint = {}
-    map_data.isMapFinished = false
+    screen_tint = {}
+    level.isMapFinished = false
 }
 
 player_initData :: proc() {
@@ -450,8 +450,8 @@ player_die :: proc() {
 
 player_finishMap :: proc() {
     println("player finished game")
-    map_data.isMapFinished = true
-    gameIsPaused = true
+    level.isMapFinished = true
+    g_state.paused = true
 }
 
 
@@ -465,11 +465,10 @@ player_finishMap :: proc() {
 GUN_SCALE :: 1.1
 GUN_POS_X :: 0.1
 
-GUN_COUNT :: 3
-gun_kind_t :: enum {
-    SHOTGUN    = 0,
-    MACHINEGUN = 1,
-    LASERRIFLE = 2,
+Gun_Kind :: enum {
+    Shotgun    = 0,
+    Machine_Gun = 1,
+    Laser_Rifle = 2,
 }
 
 GUN_SHOTGUN_SPREAD :: 0.14
@@ -478,15 +477,21 @@ GUN_MACHINEGUN_SPREAD :: 0.03
 GUN_MACHINEGUN_DAMAGE :: 0.2
 GUN_LASERRIFLE_DAMAGE :: 1.0
 
-gun_startAmmoCounts: [GUN_COUNT]i32 = {32, 0, 0}
-gun_maxAmmoCounts: [GUN_COUNT]i32 = {64, 128, 18}
-gun_shootTimes: [GUN_COUNT]f32 = {0.5, 0.15, 1.0}
+gun_startAmmoCounts: [Gun_Kind]i32 = {
+    32, 0, 0
+}
+gun_maxAmmoCounts: [Gun_Kind]i32 = {
+    64, 128, 18
+}
+gun_shootTimes: [Gun_Kind]f32 = {
+    0.5, 0.15, 1.0
+}
 
 gun_data: struct {
-    equipped:     gun_kind_t,
-    lastEquipped: gun_kind_t,
+    equipped:     Gun_Kind,
+    lastEquipped: Gun_Kind,
     timer:        f32,
-    ammoCounts:   [GUN_COUNT]i32,
+    ammoCounts:   [Gun_Kind]i32,
 }
 
 
@@ -508,11 +513,11 @@ gun_calcViewportPos :: proc() -> Vec3 {
 gun_getMuzzleOffset :: proc() -> Vec3 {
     offs := Vec3{}
     switch gun_data.equipped {
-    case gun_kind_t.SHOTGUN:
+    case Gun_Kind.SHOTGUN:
         offs = {0, 0, 0.7}
-    case gun_kind_t.MACHINEGUN:
+    case Gun_Kind.MACHINEGUN:
         offs = {0, 0, 0.9}
-    case gun_kind_t.LASERRIFLE:
+    case Gun_Kind.LASERRIFLE:
         offs = {0, 0, 0.7}
     }
     return offs
@@ -533,7 +538,7 @@ gun_drawModel :: proc(pos: Vec3) {
     FADETIME :: 0.07
     fade := math.pow((gun_data.timer - gun_shootTimes[gunindex] + FADETIME) / FADETIME, 1.0)
     if fade > 0.0 {
-        rnd := randVec3() * f32(gameIsPaused ? 0.0 : 1.0)
+        rnd := randVec3() * f32(g_state.paused ? 0.0 : 1.0)
         muzzleoffs := gun_getMuzzleOffset() + rnd * 0.02
         rl.DrawModel(
             g_state.assets.gun.flareModel,
@@ -555,7 +560,7 @@ _gun_update :: proc() {
     else if rl.IsKeyPressed(rl.KeyboardKey.TWO) do gunindex = 1
     else if rl.IsKeyPressed(rl.KeyboardKey.THREE) do gunindex = 2
     gunindex %%= GUN_COUNT
-    gun_data.equipped = cast(gun_kind_t)gunindex
+    gun_data.equipped = cast(Gun_Kind)gunindex
     gunindex = cast(i32)gun_data.equipped
 
     if rl.IsKeyPressed(rl.KeyboardKey.Q) {
@@ -580,7 +585,7 @@ _gun_update :: proc() {
         if gun_data.ammoCounts[gunindex] > 0 {
             muzzlepos := gun_calcMuzzlePos()
             switch gun_data.equipped {
-            case gun_kind_t.SHOTGUN:
+            case Gun_Kind.SHOTGUN:
                 right := linalg.cross(player_data.lookDir, camera.up)
                 up := camera.up
                 RAD :: 0.5
@@ -678,7 +683,7 @@ _gun_update :: proc() {
                     }
                 }
 
-            case gun_kind_t.MACHINEGUN:
+            case Gun_Kind.MACHINEGUN:
                 rnd := randVec3()
                 bullet_shootRaycast(
                     muzzlepos,
@@ -693,7 +698,7 @@ _gun_update :: proc() {
                 player_data.rotImpulse -= rnd * 0.01
                 playSoundMulti(g_state.assets.gun.machinegunSound)
 
-            case gun_kind_t.LASERRIFLE:
+            case Gun_Kind.LASERRIFLE:
                 _, enemykind, _ := bullet_shootRaycast(
                     muzzlepos,
                     player_data.lookDir,
@@ -717,11 +722,11 @@ _gun_update :: proc() {
             gun_data.ammoCounts[gunindex] -= 1
 
             switch gun_data.equipped {
-            case gun_kind_t.SHOTGUN:
+            case Gun_Kind.SHOTGUN:
                 gun_data.timer = gun_shootTimes[gunindex]
-            case gun_kind_t.MACHINEGUN:
+            case Gun_Kind.MACHINEGUN:
                 gun_data.timer = gun_shootTimes[gunindex]
-            case gun_kind_t.LASERRIFLE:
+            case Gun_Kind.LASERRIFLE:
                 gun_data.timer = gun_shootTimes[gunindex]
             }
         } else if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {

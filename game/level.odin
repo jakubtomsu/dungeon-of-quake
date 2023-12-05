@@ -6,8 +6,6 @@ import "core:math/linalg"
 import "core:math/rand"
 import rl "vendor:raylib"
 
-
-
 MAP_SIDE_TILE_COUNT :: 128
 TILE_WIDTH :: 30.0
 TILE_MIN_HEIGHT :: TILE_WIDTH
@@ -29,9 +27,8 @@ MAP_HEALTH_PICKUP_SIZE :: Vec3{2, 1.5, 2}
 
 MAP_TILE_FINISH_SIZE :: Vec3{8, 16, 8}
 
-
-map_data: struct {
-    using mapdata:          tiles.mapData_t,
+Level :: struct {
+    using tile_map:         Tile_Map,
     startPos:               Vec3,
     finishPos:              Vec3,
     isMapFinished:          bool,
@@ -40,7 +37,7 @@ map_data: struct {
     gunPickupSpawnCount:    i32,
     gunPickups:             [MAP_GUN_PICKUP_MAX_COUNT]struct {
         pos:  Vec3,
-        kind: gun_kind_t,
+        kind: Gun_Kind,
     },
     healthPickupCount:      i32,
     healthPickupSpawnCount: i32,
@@ -50,47 +47,47 @@ map_data: struct {
 
 
 // @returns: 2d tile position from 3d worldspace 'p'
-map_worldToTile :: proc(p: Vec3) -> IVec2 {
+level_worldToTile :: proc(p: Vec3) -> IVec2 {
     return IVec2{cast(i32)((p.x / TILE_WIDTH)), cast(i32)((p.z / TILE_WIDTH))}
 }
 
 // @returns: tile center position in worldspace
-map_tileToWorld :: proc(p: IVec2) -> Vec3 {
+level_tileToWorld :: proc(p: IVec2) -> Vec3 {
     return Vec3{((cast(f32)p.x) + 0.5) * TILE_WIDTH, 0.0, ((cast(f32)p.y) + 0.5) * TILE_WIDTH}
 }
 
-map_isTilePosInBufferBounds :: proc(coord: IVec2) -> bool {
+level_isTilePosInBufferBounds :: proc(coord: IVec2) -> bool {
     return coord.x >= 0 && coord.y >= 0 && coord.x < MAP_SIDE_TILE_COUNT && coord.y < MAP_SIDE_TILE_COUNT
 }
 
-map_isTilePosValid :: proc(coord: IVec2) -> bool {
-    return map_isTilePosInBufferBounds(coord) && coord.x <= map_data.bounds.x && coord.y <= map_data.bounds.y
+level_isTilePosValid :: proc(coord: IVec2) -> bool {
+    return level_isTilePosInBufferBounds(coord) && coord.x <= level.bounds.x && coord.y <= level.bounds.y
 }
 
-map_tilePosClamp :: proc(coord: IVec2) -> IVec2 {
-    return IVec2{clamp(coord.x, 0, map_data.bounds.x), clamp(coord.y, 0, map_data.bounds.y)}
-}
-
-
-
-map_addGunPickup :: proc(pos: Vec3, kind: gun_kind_t) {
-    if map_data.gunPickupCount + 1 >= MAP_GUN_PICKUP_MAX_COUNT do return
-    map_data.gunPickups[map_data.gunPickupCount].pos = pos
-    map_data.gunPickups[map_data.gunPickupCount].kind = kind
-    map_data.gunPickupCount += 1
-    map_data.gunPickupSpawnCount = map_data.gunPickupCount
-}
-
-map_addHealthPickup :: proc(pos: Vec3) {
-    if map_data.healthPickupCount + 1 >= MAP_HEALTH_PICKUP_MAX_COUNT do return
-    map_data.healthPickups[map_data.healthPickupCount] = pos
-    map_data.healthPickupCount += 1
-    map_data.healthPickupSpawnCount = map_data.healthPickupCount
+level_tilePosClamp :: proc(coord: IVec2) -> IVec2 {
+    return IVec2{clamp(coord.x, 0, level.bounds.x), clamp(coord.y, 0, level.bounds.y)}
 }
 
 
 
-map_floorTileBox :: proc(posxz: Vec2) -> box_t {
+level_addGunPickup :: proc(pos: Vec3, kind: Gun_Kind) {
+    if level.gunPickupCount + 1 >= MAP_GUN_PICKUP_MAX_COUNT do return
+    level.gunPickups[level.gunPickupCount].pos = pos
+    level.gunPickups[level.gunPickupCount].kind = kind
+    level.gunPickupCount += 1
+    level.gunPickupSpawnCount = level.gunPickupCount
+}
+
+level_addHealthPickup :: proc(pos: Vec3) {
+    if level.healthPickupCount + 1 >= MAP_HEALTH_PICKUP_MAX_COUNT do return
+    level.healthPickups[level.healthPickupCount] = pos
+    level.healthPickupCount += 1
+    level.healthPickupSpawnCount = level.healthPickupCount
+}
+
+
+
+level_floorTileBox :: proc(posxz: Vec2) -> box_t {
     return(
          {
             Vec3{posxz[0], (-TILE_HEIGHT - TILE_OUT_OF_BOUNDS_SIZE) / 2.0, posxz[1]},
@@ -99,7 +96,7 @@ map_floorTileBox :: proc(posxz: Vec2) -> box_t {
     )
 }
 
-map_ceilTileBox :: proc(posxz: Vec2) -> box_t {
+level_ceilTileBox :: proc(posxz: Vec2) -> box_t {
     //return Vec3{posxz[0],( TILE_HEIGHT-TILE_MIN_HEIGHT)/2.0, posxz[1]},
     //	Vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH}/2.0
     return(
@@ -110,7 +107,7 @@ map_ceilTileBox :: proc(posxz: Vec2) -> box_t {
     )
 }
 
-map_fullTileBox :: proc(posxz: Vec2) -> box_t {
+level_fullTileBox :: proc(posxz: Vec2) -> box_t {
     return(
          {
             Vec3{posxz[0], TILE_WIDTH * 0.5, posxz[1]},
@@ -122,9 +119,9 @@ map_fullTileBox :: proc(posxz: Vec2) -> box_t {
 
 // fills input buffer `boxbuf` with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
-map_getTileBoxes :: proc(coord: IVec2, boxbuf: []box_t) -> i32 {
-    if !map_isTilePosValid(coord) do return 0
-    tileKind := map_data.tilemap[coord[0]][coord[1]]
+level_getTileBoxes :: proc(coord: IVec2, boxbuf: []box_t) -> i32 {
+    if !level_isTilePosValid(coord) do return 0
+    tileKind := level.tilemap[coord[0]][coord[1]]
 
     phy_calcBox :: proc(posxz: Vec2, posy: f32, sizey: f32) -> box_t {
         return(
@@ -142,55 +139,55 @@ map_getTileBoxes :: proc(coord: IVec2, boxbuf: []box_t) -> i32 {
         return 0
 
     case .FULL, .THORNS_LOWER:
-        boxbuf[0] = map_fullTileBox(posxz)
+        boxbuf[0] = level_fullTileBox(posxz)
         return 1
 
     case .EMPTY:
-        boxbuf[0] = map_floorTileBox(posxz)
-        boxbuf[1] = map_ceilTileBox(posxz)
+        boxbuf[0] = level_floorTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
         return 2
 
     case .WALL_MID:
         boxbuf[0] = phy_calcBox(posxz, -2, 5)
-        boxbuf[1] = map_ceilTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
         return 2
 
     case .PLATFORM_SMALL:
-        boxbuf[0] = map_floorTileBox(posxz)
-        boxbuf[1] = map_ceilTileBox(posxz)
+        boxbuf[0] = level_floorTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
         boxbuf[2] = phy_calcBox(posxz, 0, 1)
         return 3
     case .PLATFORM_LARGE:
-        boxbuf[0] = map_floorTileBox(posxz)
-        boxbuf[1] = map_ceilTileBox(posxz)
+        boxbuf[0] = level_floorTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
         boxbuf[2] = phy_calcBox(posxz, 0, 3)
         return 3
 
     case .CEILING:
-        boxbuf[0] = map_floorTileBox(posxz)
+        boxbuf[0] = level_floorTileBox(posxz)
         boxbuf[1] = phy_calcBox(posxz, 2, 5)
         return 2
 
     case .ELEVATOR:
         // the actual moving elevator box is at index 0
         boxsize := Vec3{TILE_WIDTH, TILE_MIN_HEIGHT, TILE_WIDTH} / 2.0
-        height, ok := map_data.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
+        height, ok := level.elevatorHeights[{cast(u8)coord.x, cast(u8)coord.y}]
         if !ok do height = 0.0
         boxbuf[0] =  {
             Vec3{posxz[0], math.lerp(TILE_ELEVATOR_Y0, TILE_ELEVATOR_Y1, height), posxz[1]},
             Vec3{TILE_WIDTH, TILE_WIDTH * TILEMAP_MID, TILE_WIDTH} / 2,
         }
-        boxbuf[1] = map_ceilTileBox(posxz)
-        boxbuf[2] = map_floorTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
+        boxbuf[2] = level_floorTileBox(posxz)
         return 3
 
     case .OBSTACLE_LOWER:
         boxbuf[0] = phy_calcBox(posxz, -3, 3)
-        boxbuf[1] = map_ceilTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
         return 2
     case .OBSTACLE_UPPER:
         boxbuf[0] = phy_calcBox(posxz, -2, 3)
-        boxbuf[1] = map_ceilTileBox(posxz)
+        boxbuf[1] = level_ceilTileBox(posxz)
         return 2
     }
 
@@ -199,60 +196,60 @@ map_getTileBoxes :: proc(coord: IVec2, boxbuf: []box_t) -> i32 {
 
 
 
-map_clearAll :: proc() {
-    tiles.resetMap(&map_data)
+level_clearAll :: proc() {
+    tiles.resetMap(&level)
 
-    map_data.gunPickupSpawnCount = 0
-    map_data.gunPickupCount = 0
-    map_data.healthPickupSpawnCount = 0
-    map_data.healthPickupCount = 0
+    level.gunPickupSpawnCount = 0
+    level.gunPickupCount = 0
+    level.healthPickupSpawnCount = 0
+    level.healthPickupCount = 0
     enemy_data.gruntCount = 0
     enemy_data.knightCount = 0
 
-    delete(map_data.elevatorHeights)
+    delete(level.elevatorHeights)
 
-    map_setDefaultValues()
+    level_setDefaultValues()
 }
 
-map_setDefaultValues :: proc() {
-    map_data.skyColor = {0.6, 0.5, 0.8} * 0.6
-    map_data.fogStrength = 1.0
+level_setDefaultValues :: proc() {
+    level.skyColor = {0.6, 0.5, 0.8} * 0.6
+    level.fogStrength = 1.0
 }
 
-map_loadFromFile :: proc(name: string) -> bool {
+level_loadFromFile :: proc(name: string) -> bool {
     fullpath := asset_path("maps", name)
-    return map_loadFromFileAbs(fullpath)
+    return level_loadFromFileAbs(fullpath)
 }
 
-map_loadFromFileAbs :: proc(fullpath: string) -> bool {
+level_loadFromFileAbs :: proc(fullpath: string) -> bool {
     println("! loading map: ", fullpath)
 
-    map_clearAll()
+    level_clearAll()
 
-    if !tiles.loadFromFile(fullpath, &map_data) {
+    if !tiles.loadFromFile(fullpath, &level) {
         println("! error: map couldn't be loaded")
         return false
     }
 
-    map_data.elevatorHeights = make(type_of(map_data.elevatorHeights))
+    level.elevatorHeights = make(type_of(level.elevatorHeights))
 
-    for x: i32 = 0; x < map_data.bounds.x; x += 1 {
-        for y: i32 = 0; y < map_data.bounds.y; y += 1 {
-            lowpos := map_tileToWorld({x, y}) - Vec3{0, TILE_WIDTH * TILEMAP_Y_TILES / 2 - TILE_WIDTH, 0}
-            highpos := map_tileToWorld({x, y}) + Vec3{0, TILE_WIDTH * 0.5, 0}
-            tile := map_data.tilemap[x][y]
+    for x: i32 = 0; x < level.bounds.x; x += 1 {
+        for y: i32 = 0; y < level.bounds.y; y += 1 {
+            lowpos := level_tileToWorld({x, y}) - Vec3{0, TILE_WIDTH * TILEMAP_Y_TILES / 2 - TILE_WIDTH, 0}
+            highpos := level_tileToWorld({x, y}) + Vec3{0, TILE_WIDTH * 0.5, 0}
+            tile := level.tilemap[x][y]
 
             #partial switch tile {
             case .START_LOWER:
-                map_data.startPos = lowpos + Vec3{0, PLAYER_SIZE.y * 2, 0}
+                level.startPos = lowpos + Vec3{0, PLAYER_SIZE.y * 2, 0}
             case .START_UPPER:
-                map_data.startPos = highpos + Vec3{0, PLAYER_SIZE.y * 2, 0}
+                level.startPos = highpos + Vec3{0, PLAYER_SIZE.y * 2, 0}
             case .FINISH_LOWER:
-                map_data.finishPos = lowpos + Vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
+                level.finishPos = lowpos + Vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
             case .FINISH_UPPER:
-                map_data.finishPos = highpos + Vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
+                level.finishPos = highpos + Vec3{0, MAP_TILE_FINISH_SIZE.y, 0}
             case .ELEVATOR:
-                map_data.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
+                level.elevatorHeights[{cast(u8)x, cast(u8)y}] = 0.0
             case .ENEMY_GRUNT_LOWER:
                 enemy_spawnGrunt(lowpos + Vec3{0, ENEMY_GRUNT_SIZE.y * 1.2, 0})
             case .ENEMY_GRUNT_UPPER:
@@ -262,17 +259,17 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
             case .ENEMY_KNIGHT_UPPER:
                 enemy_spawnKnight(highpos + Vec3{0, ENEMY_KNIGHT_SIZE.y * 2.0, 0})
             case .GUN_SHOTGUN_LOWER:
-                map_addGunPickup(lowpos + Vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
+                level_addGunPickup(lowpos + Vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
             case .GUN_SHOTGUN_UPPER:
-                map_addGunPickup(highpos + Vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
+                level_addGunPickup(highpos + Vec3{0, PLAYER_SIZE.y, 0}, .SHOTGUN)
             case .GUN_MACHINEGUN_LOWER:
-                map_addGunPickup(lowpos + Vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
+                level_addGunPickup(lowpos + Vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
             case .GUN_MACHINEGUN_UPPER:
-                map_addGunPickup(highpos + Vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
+                level_addGunPickup(highpos + Vec3{0, PLAYER_SIZE.y, 0}, .MACHINEGUN)
             case .GUN_LASERRIFLE_LOWER:
-                map_addGunPickup(lowpos + Vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
+                level_addGunPickup(lowpos + Vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
             case .GUN_LASERRIFLE_UPPER:
-                map_addGunPickup(highpos + Vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
+                level_addGunPickup(highpos + Vec3{0, PLAYER_SIZE.y, 0}, .LASERRIFLE)
             case .PICKUP_HEALTH_LOWER:
                 rnd :=
                     Vec2 {
@@ -281,7 +278,7 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
                     } *
                     TILE_WIDTH *
                     0.3
-                map_addHealthPickup(lowpos + Vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
+                level_addHealthPickup(lowpos + Vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
             case .PICKUP_HEALTH_UPPER:
                 rnd :=
                     Vec2 {
@@ -290,11 +287,11 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
                     } *
                     TILE_WIDTH *
                     0.3
-                map_addHealthPickup(highpos + Vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
+                level_addHealthPickup(highpos + Vec3{rnd.x, MAP_HEALTH_PICKUP_SIZE.y, rnd.y})
                 tile = tiles.Tile.WALL_MID
             }
 
-            map_data.tilemap[x][y] = tiles.translate(tile)
+            level.tilemap[x][y] = tiles.translate(tile)
         }
     }
 
@@ -302,15 +299,15 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 
     println("end")
 
-    println("bounds[0]", map_data.bounds[0], "bounds[1]", map_data.bounds[1])
-    println("nextMapName", map_data.nextMapName)
+    println("bounds[0]", level.bounds[0], "bounds[1]", level.bounds[1])
+    println("nextMapName", level.nextMapName)
 
     player_startMap()
 
     rl.SetShaderValue(
         g_state.assets.portalShader,
         cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.portalShader, "portalPos"),
-        &map_data.finishPos,
+        &level.finishPos,
         rl.ShaderUniformDataType.VEC3,
     )
 
@@ -319,25 +316,25 @@ map_loadFromFileAbs :: proc(fullpath: string) -> bool {
 
 }
 
-map_debugPrint :: proc() {
-    for x: i32 = 0; x < map_data.bounds[0]; x += 1 {
-        for y: i32 = 0; y < map_data.bounds[1]; y += 1 {
-            fmt.print(map_data.tilemap[x][y] == tiles.Tile.FULL ? "#" : " ")
+level_debugPrint :: proc() {
+    for x: i32 = 0; x < level.bounds[0]; x += 1 {
+        for y: i32 = 0; y < level.bounds[1]; y += 1 {
+            fmt.print(level.tilemap[x][y] == tiles.Tile.FULL ? "#" : " ")
         }
         println("")
     }
 }
 
 // draw tilemap, pickups, etc.
-map_drawTilemap :: proc() {
+level_drawTilemap :: proc() {
     rl.BeginShaderMode(g_state.assets.tileShader)
-    for x: i32 = 0; x < map_data.bounds[0]; x += 1 {
-        for y: i32 = 0; y < map_data.bounds[1]; y += 1 {
+    for x: i32 = 0; x < level.bounds[0]; x += 1 {
+        for y: i32 = 0; y < level.bounds[1]; y += 1 {
             //rl.DrawCubeWires(Vec3{posxz[0], 0.0, posxz[1]}, TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.GRAY)
-            tilekind := map_data.tilemap[x][y]
+            tilekind := level.tilemap[x][y]
 
             boxbuf: [PHY_MAX_TILE_BOXES]box_t = {}
-            boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
+            boxcount := level_getTileBoxes({x, y}, boxbuf[0:])
             //checker := cast(bool)((x%2) ~ (y%2))
             #partial switch tilekind {
             case:
@@ -435,9 +432,9 @@ map_drawTilemap :: proc() {
 
             case .THORNS_LOWER:
                 yoffs := math.floor(player_data.pos.y / TILE_WIDTH) * TILE_WIDTH
-                p := map_tileToWorld({x, y})
-                floorbox := map_floorTileBox({p.x, p.z})
-                ceilbox := map_ceilTileBox({p.x, p.z})
+                p := level_tileToWorld({x, y})
+                floorbox := level_floorTileBox({p.x, p.z})
+                ceilbox := level_ceilTileBox({p.x, p.z})
                 THORN_DRAW_COUNT :: 32
 
                 rl.DrawModelEx(
@@ -474,12 +471,12 @@ map_drawTilemap :: proc() {
     }
     rl.EndShaderMode()
 
-    if settings.debugIsEnabled {
-        for x: i32 = 0; x < map_data.bounds[0]; x += 1 {
-            for y: i32 = 0; y < map_data.bounds[1]; y += 1 {
-                tilekind := map_data.tilemap[x][y]
+    if settings.debug {
+        for x: i32 = 0; x < level.bounds[0]; x += 1 {
+            for y: i32 = 0; y < level.bounds[1]; y += 1 {
+                tilekind := level.tilemap[x][y]
                 boxbuf: [PHY_MAX_TILE_BOXES]box_t = {}
-                boxcount := map_getTileBoxes({x, y}, boxbuf[0:])
+                boxcount := level_getTileBoxes({x, y}, boxbuf[0:])
                 for i: i32 = 0; i < boxcount; i += 1 {
                     rl.DrawCubeWiresV(
                         boxbuf[i].pos,
@@ -497,7 +494,7 @@ map_drawTilemap :: proc() {
     // draw finish
     doqDrawCubeTexture(
         g_state.assets.portalTexture,
-        map_data.finishPos,
+        level.finishPos,
         MAP_TILE_FINISH_SIZE.x * 2,
         MAP_TILE_FINISH_SIZE.y * 2,
         MAP_TILE_FINISH_SIZE.z * 2,
@@ -505,21 +502,21 @@ map_drawTilemap :: proc() {
     )
     rl.EndShaderMode()
     rl.DrawCube(
-        map_data.finishPos,
+        level.finishPos,
         -MAP_TILE_FINISH_SIZE.x * 2 - 4,
         -MAP_TILE_FINISH_SIZE.y * 2 - 4,
         -MAP_TILE_FINISH_SIZE.z * 2 - 4,
         {0, 0, 0, 40},
     )
     rl.DrawCube(
-        map_data.finishPos,
+        level.finishPos,
         -MAP_TILE_FINISH_SIZE.x * 2 - 2,
         -MAP_TILE_FINISH_SIZE.y * 2 - 2,
         -MAP_TILE_FINISH_SIZE.z * 2 - 2,
         {0, 0, 0, 60},
     )
     rl.DrawCube(
-        map_data.finishPos,
+        level.finishPos,
         -MAP_TILE_FINISH_SIZE.x * 2 - 1,
         -MAP_TILE_FINISH_SIZE.y * 2 - 1,
         -MAP_TILE_FINISH_SIZE.z * 2 - 1,
@@ -533,9 +530,9 @@ map_drawTilemap :: proc() {
 
         // update gun pickups
         // draw gun pickups
-        for i: i32 = 0; i < map_data.gunPickupCount; i += 1 {
-            pos := map_data.gunPickups[i].pos + Vec3{0, math.sin(g_state.time_passed * 8.0) * 0.2, 0}
-            gunindex := cast(i32)map_data.gunPickups[i].kind
+        for i: i32 = 0; i < level.gunPickupCount; i += 1 {
+            pos := level.gunPickups[i].pos + Vec3{0, math.sin(g_state.time_passed * 8.0) * 0.2, 0}
+            gunindex := cast(i32)level.gunPickups[i].kind
             rl.DrawModelEx(
                 g_state.assets.gun.gunModels[gunindex],
                 pos,
@@ -549,23 +546,23 @@ map_drawTilemap :: proc() {
             RAD :: 6.5
             if linalg.length2(player_data.pos - pos) < RAD * RAD &&
                gun_data.ammoCounts[gunindex] < gun_maxAmmoCounts[gunindex] {
-                gun_data.equipped = map_data.gunPickups[i].kind
+                gun_data.equipped = level.gunPickups[i].kind
                 gun_data.ammoCounts[gunindex] = gun_maxAmmoCounts[gunindex]
                 playSoundMulti(g_state.assets.gun.ammoPickupSound)
 
-                temp := map_data.gunPickups[i]
-                map_data.gunPickupCount -= 1
-                map_data.gunPickups[i] = map_data.gunPickups[map_data.gunPickupCount]
-                map_data.gunPickups[map_data.gunPickupCount] = temp
+                temp := level.gunPickups[i]
+                level.gunPickupCount -= 1
+                level.gunPickups[i] = level.gunPickups[level.gunPickupCount]
+                level.gunPickups[level.gunPickupCount] = temp
             }
         }
 
         // update health pickups
         // draw health pickups
-        for i: i32 = 0; i < map_data.healthPickupCount; i += 1 {
+        for i: i32 = 0; i < level.healthPickupCount; i += 1 {
             //rl.DrawCubeTexture(
-            //	map_data.healthPickupTexture,
-            //	map_data.healthPickups[i],
+            //	level.healthPickupTexture,
+            //	level.healthPickups[i],
             //	MAP_HEALTH_PICKUP_SIZE.x*2.0,
             //	MAP_HEALTH_PICKUP_SIZE.y*2.0,
             //	MAP_HEALTH_PICKUP_SIZE.z*2.0,
@@ -574,22 +571,22 @@ map_drawTilemap :: proc() {
 
             rl.DrawModel(
                 g_state.assets.healthPickupModel,
-                map_data.healthPickups[i],
+                level.healthPickups[i],
                 MAP_HEALTH_PICKUP_SIZE.x,
                 rl.WHITE,
             )
 
             RAD :: 6.5
-            if linalg.length2(player_data.pos - map_data.healthPickups[i]) < RAD * RAD &&
+            if linalg.length2(player_data.pos - level.healthPickups[i]) < RAD * RAD &&
                player_data.health < PLAYER_MAX_HEALTH {
                 player_data.health += PLAYER_MAX_HEALTH * 0.25
                 player_data.health = clamp(player_data.health, 0.0, PLAYER_MAX_HEALTH)
-                screenTint = {1.0, 0.8, 0.0}
+                screen_tint = {1.0, 0.8, 0.0}
                 playSound(g_state.assets.player.healthPickupSound)
-                temp := map_data.healthPickups[i]
-                map_data.healthPickupCount -= 1
-                map_data.healthPickups[i] = map_data.healthPickups[map_data.healthPickupCount]
-                map_data.healthPickups[map_data.healthPickupCount] = temp
+                temp := level.healthPickups[i]
+                level.healthPickupCount -= 1
+                level.healthPickups[i] = level.healthPickups[level.healthPickupCount]
+                level.healthPickups[level.healthPickupCount] = temp
             }
         }
     }
@@ -662,15 +659,15 @@ calcThornsCollision :: proc(pos: Vec3, rad: f32) -> (isColliding: bool, pushdir:
         pushdir = {}
         return isColliding, pushdir
     }
-    tilepos := map_worldToTile(pos)
+    tilepos := level_worldToTile(pos)
     rad2 := rad * rad
 
     for x: i32 = -1; x <= 1; x += 1 {
         for y: i32 = -1; y <= 1; y += 1 {
             p := tilepos + {x, y}
 
-            if !map_isTilePosValid(p) do continue
-            if map_data.tilemap[p.x][p.y] == .THORNS_LOWER {
+            if !level_isTilePosValid(p) do continue
+            if level.tilemap[p.x][p.y] == .THORNS_LOWER {
                 posxz := Vec2{f32(p.x) + 0.5, f32(p.y) + 0.5} * TILE_WIDTH
                 dir := Vec2{pos.x - posxz.x, pos.z - posxz.y}
                 length2 := linalg.length2(dir)

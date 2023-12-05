@@ -35,7 +35,7 @@ Assets :: struct {
     },
     gun:                          struct {
         flareModel:      rl.Model,
-        gunModels:       [GUN_COUNT]rl.Model,
+        gunModels:       [Gun_Kind]rl.Model,
         shotgunSound:    rl.Sound,
         machinegunSound: rl.Sound,
         laserrifleSound: rl.Sound,
@@ -128,9 +128,12 @@ assets_load_persistent :: proc() -> (result: Assets) {
     rl.SetSoundVolume(result.player.landSound, 0.45)
     rl.SetSoundPitch(result.player.landSound, 0.8)
 
-    result.gun.gunModels[cast(i32)gun_kind_t.SHOTGUN] = loadModel("shotgun.glb")
-    result.gun.gunModels[cast(i32)gun_kind_t.MACHINEGUN] = loadModel("machinegun.glb")
-    result.gun.gunModels[cast(i32)gun_kind_t.LASERRIFLE] = loadModel("laserrifle.glb")
+    result.gun.gunModels = {
+        .Shotgun     = loadModel("shotgun.glb"),
+        .Machine_Gun = loadModel("machinegun.glb"),
+        .Laser_Rifle = loadModel("laserrifle.glb"),
+    }
+
     result.gun.flareModel = loadModel("flare.glb")
 
     result.tileModel = rl.LoadModelFromMesh(rl.GenMeshCube(1.0, 1.0, 1.0))
@@ -174,11 +177,11 @@ assets_load_persistent :: proc() -> (result: Assets) {
     // )
 
 
-    gui.menuContext.normalFont = loadFont("germania_one.ttf")
-    gui.menuContext.selectSound = loadSound("button4.wav")
-    gui.menuContext.setValSound = loadSound("button3.wav")
-    rl.SetSoundVolume(gui.menuContext.selectSound, 0.6)
-    rl.SetSoundVolume(gui.menuContext.setValSound, 0.8)
+    // gui.menuContext.normalFont = loadFont("germania_one.ttf")
+    // gui.menuContext.selectSound = loadSound("button4.wav")
+    // gui.menuContext.setValSound = loadSound("button3.wav")
+    // rl.SetSoundVolume(gui.menuContext.selectSound, 0.6)
+    // rl.SetSoundVolume(gui.menuContext.setValSound, 0.8)
 
     return result
 }

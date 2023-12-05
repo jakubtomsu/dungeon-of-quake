@@ -27,7 +27,7 @@ SUB_MOUSE_BUTTON :: rl.MouseButton.RIGHT
 cameraPos: Vec2
 
 
-brushKind: enum {
+Brush_Kind: enum {
     DRAW,
     BOX_FILL,
     BOX_EDGE,
@@ -42,7 +42,7 @@ fileMenuElems: [FILE_MENU_MAX_ELEMS_COUNT]gui.Ui_Elem
 fileMenuElemsCount: i32
 fileMenuButtonBool: bool
 
-menuKind: enum {
+Menu_Kind: enum {
     NONE,
     PAUSE,
     FILE,
@@ -104,20 +104,20 @@ main :: proc() {
         mapData.skyColor.g = clamp(mapData.skyColor.g, 0.0, 1.0)
         mapData.skyColor.b = clamp(mapData.skyColor.b, 0.0, 1.0)
 
-        prevMenuKind := menuKind
+        prevMenuKind := Menu_Kind
 
         _update :: proc() {
             if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) {
-                if menuKind != .NONE do menuKind = .NONE
-                else do menuKind = .PAUSE
+                if Menu_Kind != .NONE do Menu_Kind = .NONE
+                else do Menu_Kind = .PAUSE
             }
 
             if rl.IsKeyPressed(rl.KeyboardKey.TAB) {
-                if menuKind == .TILE do menuKind = .NONE
-                else do menuKind = .TILE
+                if Menu_Kind == .TILE do Menu_Kind = .NONE
+                else do Menu_Kind = .TILE
             }
 
-            if menuKind != .NONE do return
+            if Menu_Kind != .NONE do return
             gui.menuContext.startOffs = 0
 
             if rl.IsMouseButtonDown(rl.MouseButton.MIDDLE) {
@@ -126,9 +126,9 @@ main :: proc() {
                 return
             }
 
-            brushKind = .DRAW
-            if rl.IsKeyDown(rl.KeyboardKey.E) do brushKind = .BOX_EDGE
-            if rl.IsKeyDown(rl.KeyboardKey.B) do brushKind = .BOX_FILL
+            Brush_Kind = .DRAW
+            if rl.IsKeyDown(rl.KeyboardKey.E) do Brush_Kind = .BOX_EDGE
+            if rl.IsKeyDown(rl.KeyboardKey.B) do Brush_Kind = .BOX_FILL
 
             mousetile := calcMouseTilePos(rl.GetMousePosition())
 
@@ -152,7 +152,7 @@ main :: proc() {
 
                 if (isEditing || finishedEditing) {
                     tile := isErasing ? tiles.Tile.NONE : tileSelected
-                    switch brushKind {
+                    switch Brush_Kind {
                     case .DRAW:
                         if isTilePosValid(mousetile) do mapData.tilemap[mousetile.x][mousetile.y] = tile
                     case .BOX_FILL:
@@ -257,8 +257,8 @@ main :: proc() {
             cursorcol := rl.GRAY
             if isEditing do cursorcol = isErasing ? {200, 100, 100, 200} : {100, 200, 200, 200}
 
-            if menuKind == .NONE {
-                switch brushKind {
+            if Menu_Kind == .NONE {
+                switch Brush_Kind {
                 case .DRAW:
                     drawTileLines(mousetile, cursorcol)
                 case .BOX_FILL:
@@ -303,7 +303,7 @@ main :: proc() {
                 }
             }
 
-            gui.drawText({10, 10}, 25, gui.ACTIVE_COLOR, fmt.tprint("brush :   ", brushKind))
+            gui.drawText({10, 10}, 25, gui.ACTIVE_COLOR, fmt.tprint("brush :   ", Brush_Kind))
             gui.drawText(
                 {10, 40},
                 25,
@@ -311,11 +311,11 @@ main :: proc() {
                 fmt.tprint("tile :       ", rune(tileSelected), tileSelected),
             )
 
-            // gui.drawText({10, 70}, 25, gui.ACTIVE_COLOR, fmt.tprint("menuKind", menuKind))
+            // gui.drawText({10, 70}, 25, gui.ACTIVE_COLOR, fmt.tprint("Menu_Kind", Menu_Kind))
 
             gui.drawText({10, f32(windowSizeY) - 50}, 25, gui.INACTIVE_VAL_COLOR, mapData.fullpath)
 
-            if menuKind != .NONE do rl.DrawRectangle(0, 0, windowSizeX, windowSizeY, {10, 10, 10, 200})
+            if Menu_Kind != .NONE do rl.DrawRectangle(0, 0, windowSizeX, windowSizeY, {10, 10, 10, 200})
 
             rl.DrawRectangleV(
                 {0, f32(windowSizeY) - 20},
@@ -325,7 +325,7 @@ main :: proc() {
                 ),
             )
 
-            switch menuKind {
+            switch Menu_Kind {
             case .NONE:
             case .FILE:
                 if fileMenuElemsCount > 0 {
@@ -338,9 +338,9 @@ main :: proc() {
                             fileMenuElems[gui.menuContext.selected].(gui.Ui_File_Button).fullpath,
                             &mapData,
                         )
-                        menuKind = .NONE
+                        Menu_Kind = .NONE
                     }
-                } else do menuKind = .NONE
+                } else do Menu_Kind = .NONE
 
             case .PAUSE:
                 shouldSave := false
@@ -361,10 +361,10 @@ main :: proc() {
 
                 if shouldSave {
                     tiles.saveToFile(&mapData)
-                    menuKind = .NONE
+                    Menu_Kind = .NONE
                 } else if shouldOpen {
                     fileMenuFetchFiles()
-                    menuKind = .FILE
+                    Menu_Kind = .FILE
                 }
 
             case .TILE:
@@ -374,14 +374,14 @@ main :: proc() {
                     tileSelected = tiles.Tile(
                         tileMenuElems[gui.menuContext.selected].(gui.Ui_Button).name[0],
                     ) // ughh
-                    menuKind = .NONE
+                    Menu_Kind = .NONE
                 }
             }
         };_draw()
         rl.EndDrawing()
 
-        if menuKind != prevMenuKind do gui.menuContext.selected = 0
-        if menuKind != prevMenuKind do gui.menuContext.startOffs = 0
+        if Menu_Kind != prevMenuKind do gui.menuContext.selected = 0
+        if Menu_Kind != prevMenuKind do gui.menuContext.startOffs = 0
 
         deltatime = rl.GetFrameTime()
     }

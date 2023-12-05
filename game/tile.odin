@@ -87,8 +87,7 @@ tile_translate :: proc(srctile: Tile) -> Tile {
     return srctile
 }
 
-resetMap :: proc(mapdata: ^mapData_t) {
-    using mapdata
+tile_level_reset :: proc(m: ^Tile_Map) {
     fullpath = {}
     nextMapName = {}
     startPlayerDir = {}
@@ -103,15 +102,15 @@ resetMap :: proc(mapdata: ^mapData_t) {
     }
 }
 
-loadFromFile :: proc(fullpath: string, mapdata: ^mapData_t) -> bool {
+tile_level_load_from_file :: proc(fullpath: string, m: ^Tile_Map) -> bool {
     data, ok := os.read_entire_file_from_filename(fullpath)
 
     if !ok do return false
 
     defer free(&data[0])
 
-    resetMap(mapdata)
-    mapdata.fullpath = fullpath
+    resetMap(m)
+    m.fullpath = fullpath
 
     index: i32 = 0
     x: i32 = 0
@@ -128,33 +127,33 @@ loadFromFile :: proc(fullpath: string, mapdata: ^mapData_t) -> bool {
         case '\n':
             if index + 1 < i32(len(data)) {
                 y += 1
-                mapdata.bounds.x = max(mapdata.bounds.x, x)
-                mapdata.bounds.y = max(mapdata.bounds.y, y)
+                m.bounds.x = max(m.bounds.x, x)
+                m.bounds.y = max(m.bounds.y, y)
             }
             x = 0
             continue dataloop
         case '{':
             for data[index] != '}' {
                 if !attrib.skipWhitespace(data, &index) do index += 1
-                if attrib.match(data, &index, "nextMapName") do mapdata.nextMapName = attrib.readString(data, &index)
+                if attrib.match(data, &index, "nextMapName") do m.nextMapName = attrib.readString(data, &index)
 
                 if attrib.match(data, &index, "startPlayerDir") {
-                    mapdata.startPlayerDir.x = attrib.readF32(data, &index)
-                    mapdata.startPlayerDir.y = attrib.readF32(data, &index)
-                    if mapdata.startPlayerDir.x != 0.0 && mapdata.startPlayerDir.y != 0.0 {
-                        mapdata.startPlayerDir = linalg.normalize(mapdata.startPlayerDir)
+                    m.startPlayerDir.x = attrib.readF32(data, &index)
+                    m.startPlayerDir.y = attrib.readF32(data, &index)
+                    if m.startPlayerDir.x != 0.0 && m.startPlayerDir.y != 0.0 {
+                        m.startPlayerDir = linalg.normalize(m.startPlayerDir)
                     } else {
-                        mapdata.startPlayerDir = {0, -1}
+                        m.startPlayerDir = {0, -1}
                     }
                 }
 
                 if attrib.match(data, &index, "skyColor") {
-                    mapdata.skyColor.r = attrib.readF32(data, &index)
-                    mapdata.skyColor.g = attrib.readF32(data, &index)
-                    mapdata.skyColor.b = attrib.readF32(data, &index)
+                    m.skyColor.r = attrib.readF32(data, &index)
+                    m.skyColor.g = attrib.readF32(data, &index)
+                    m.skyColor.b = attrib.readF32(data, &index)
                 }
 
-                if attrib.match(data, &index, "fogStrength") do mapdata.fogStrength = attrib.readF32(data, &index)
+                if attrib.match(data, &index, "fogStrength") do m.fogStrength = attrib.readF32(data, &index)
             }
             index += 1
             attrib.skipWhitespace(data, &index)
@@ -162,24 +161,23 @@ loadFromFile :: proc(fullpath: string, mapdata: ^mapData_t) -> bool {
         }
 
 
-        mapdata.tilemap[x][y] = Tile(ch)
-        fmt.println("mapdata.tilemap[x][y]", x, y, mapdata.tilemap[x][y])
+        m.tilemap[x][y] = Tile(ch)
+        fmt.println("m.tilemap[x][y]", x, y, m.tilemap[x][y])
 
         x += 1
     }
 
-    mapdata.bounds.y += 1
+    m.bounds.y += 1
 
-    fmt.println("mapdata.bounds.x", mapdata.bounds.x)
-    fmt.println("mapdata.bounds.y", mapdata.bounds.y)
+    fmt.println("m.bounds.x", m.bounds.x)
+    fmt.println("m.bounds.y", m.bounds.y)
 
     return true
 }
 
 
-
-saveToFile :: proc(mapdata: ^mapData_t) {
-    using mapdata
+tile_level_save_to_file :: proc(m: ^Tile_Map) {
+    using m
 
     buf := make([]u8, 1024 + MAP_MAX_SIZE * MAP_MAX_SIZE)
     offs: int = 0

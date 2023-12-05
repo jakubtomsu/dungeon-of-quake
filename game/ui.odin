@@ -4,30 +4,16 @@ import "core:fmt"
 import "core:strings"
 import rl "vendor:raylib"
 
+UI_SCROLL_MARGIN :: 200
+UI_SCROLL_SPEED :: 14.0
 
-SCROLL_MARGIN :: 200
-SCROLL_SPEED :: 14.0
+UI_ACTIVE_COLOR :: rl.Color{220, 220, 220, 220}
+UI_INACTIVE_COLOR :: rl.Color{200, 200, 200, 160}
+UI_ACTIVE_VAL_COLOR :: rl.Color{200, 70, 50, 255}
+UI_INACTIVE_VAL_COLOR :: rl.Color{200, 200, 200, 160}
+UI_TITLE_COLOR :: rl.Color{200, 200, 200, 100}
 
-ACTIVE_COLOR :: rl.Color{220, 220, 220, 220}
-INACTIVE_COLOR :: rl.Color{200, 200, 200, 160}
-ACTIVE_VAL_COLOR :: rl.Color{200, 70, 50, 255}
-INACTIVE_VAL_COLOR :: rl.Color{200, 200, 200, 160}
-TITLE_COLOR :: rl.Color{200, 200, 200, 100}
-
-BACKGROUND :: rl.Vector4{0.08, 0.08, 0.1, 1.0}
-
-menuContext: struct {
-    selected:    i32, // this can be shared, since we always have only one menu on screen
-    startOffs:   f32,
-    normalFont:  rl.Font,
-    selectSound: rl.Sound,
-    setValSound: rl.Sound,
-
-    // gui inputs
-    windowSizeX: i32,
-    windowSizeY: i32,
-    deltatime:   f32,
-}
+UI_BACKGROUND :: rl.Vector4{0.08, 0.08, 0.1, 1.0}
 
 // val is not rendered
 Ui_Button :: struct {
@@ -70,15 +56,13 @@ Ui_Elem :: union {
     Ui_File_Button,
 }
 
-
-
-drawText :: proc(pos: rl.Vector2, size: f32, color: rl.Color, text: string) {
+ui_draw_text :: proc(pos: rl.Vector2, size: f32, color: rl.Color, text: string) {
     cstr := strings.clone_to_cstring(text, context.temp_allocator)
     rl.DrawTextEx(menuContext.normalFont, cstr, pos, size, 0.0, color)
 }
 
 // @retunrs: true if any value changed
-updateAndDrawElemBuf :: proc(elems: []Ui_Elem) -> bool {
+ui_update_and_draw_elems :: proc(elems: []Ui_Elem) -> bool {
     selectDir := 0
     if rl.IsKeyPressed(rl.KeyboardKey.DOWN) || rl.IsKeyPressed(rl.KeyboardKey.S) do selectDir += 1
     if rl.IsKeyPressed(rl.KeyboardKey.UP) || rl.IsKeyPressed(rl.KeyboardKey.W) do selectDir -= 1

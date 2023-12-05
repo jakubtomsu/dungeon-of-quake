@@ -100,9 +100,9 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
     dir := wishpos - pos
     linelen := linalg.length(dir)
     //println("PHY: linelen", linelen)
-    if !map_isTilePosValid(map_worldToTile(pos)) do return linelen, {0, 0.1, 0}, false
-    lowerleft := map_tilePosClamp(
-        map_worldToTile(pos - Vec3{dir.x > 0.0 ? 1.0 : -1.0, 0.0, dir.z > 0.0 ? 1.0 : -1.0} * TILE_WIDTH),
+    if !level_isTilePosValid(level_worldToTile(pos)) do return linelen, {0, 0.1, 0}, false
+    lowerleft := level_tilePosClamp(
+        level_worldToTile(pos - Vec3{dir.x > 0.0 ? 1.0 : -1.0, 0.0, dir.z > 0.0 ? 1.0 : -1.0} * TILE_WIDTH),
     )
     tilepos := lowerleft
 
@@ -152,7 +152,7 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
 
     // DDA traversal
     for {
-        if !map_isTilePosValid(tilepos) ||
+        if !level_isTilePosValid(tilepos) ||
            (linalg.length(Vec2{cast(f32)(tilepos.x - lowerleft.x), cast(f32)(tilepos.y - lowerleft.y)}) -
                        3.0) *
                    TILE_WIDTH >
@@ -179,11 +179,11 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
 
         for j: i32 = 0; j < len(checktiles); j += 1 {
             //println("checktile")
-            if !map_isTilePosValid(checktiles[j]) do continue
+            if !level_isTilePosValid(checktiles[j]) do continue
             phy_boxcastTilemapTile(checktiles[j], &ctx)
-            //rl.DrawCube(map_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
-            //rl.DrawCube(map_tileToWorld(checktiles[j]), 2, 1000, 2, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
-            //rl.DrawCubeWires(map_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
+            //rl.DrawCube(level_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
+            //rl.DrawCube(level_tileToWorld(checktiles[j]), 2, 1000, 2, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
+            //rl.DrawCubeWires(level_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
         }
     }
 
@@ -191,12 +191,12 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
     // @returns : clipped pos
     phy_boxcastTilemapTile :: proc(coord: IVec2, ctx: ^phy_boxcastContext_t) {
         boxbuf: [PHY_MAX_TILE_BOXES]box_t = {}
-        boxcount := map_getTileBoxes(coord, boxbuf[:])
+        boxcount := level_getTileBoxes(coord, boxbuf[:])
 
         for i: i32 = 0; i < boxcount; i += 1 {
             box := boxbuf[i]
 
-            // if debugIsEnabled do rl.DrawCube(box.pos, box.size.x*2+0.2, box.size.y*2+0.2, box.size.z*2+0.2, rl.Fade(rl.GREEN, 0.1))
+            // if debug do rl.DrawCube(box.pos, box.size.x*2+0.2, box.size.y*2+0.2, box.size.z*2+0.2, rl.Fade(rl.GREEN, 0.1))
 
             n := ctx.dirinv * (ctx.pos - box.pos)
             k := ctx.dirinvabs * (box.size + ctx.boxoffs)
@@ -293,10 +293,10 @@ phy_boxcastEnemies :: proc(
 // fires ray directly downwards
 // @returns: minimum depth
 phy_raycastDepth :: proc(pos: Vec3) -> f32 {
-    tilecoord := map_worldToTile(pos)
-    if !map_isTilePosValid(tilecoord) do return 1e6
+    tilecoord := level_worldToTile(pos)
+    if !level_isTilePosValid(tilecoord) do return 1e6
     boxbuf: [PHY_MAX_TILE_BOXES]box_t
-    boxcount := map_getTileBoxes(tilecoord, boxbuf[0:])
+    boxcount := level_getTileBoxes(tilecoord, boxbuf[0:])
 
     tmin: f32 = 1e6
     for i: i32 = 0; i < boxcount; i += 1 {
@@ -421,7 +421,7 @@ phy_simulateMovingBox :: proc(
     // discrete collision detection
     /*
 	{
-		tilepos := map_worldToTile(pos)
+		tilepos := level_worldToTile(pos)
 		//box := box_t{pos, boxsize}
 
 		impulse := Vec3{}
@@ -435,7 +435,7 @@ phy_simulateMovingBox :: proc(
 			for y : i32 = 0; y <= 1; y += 1 {
 				coord := tilepos + {x, y}
 				boxbuf : [PHY_MAX_TILE_BOXES]box_t = {}
-				boxcount := map_getTileBoxes(coord, boxbuf[:])
+				boxcount := level_getTileBoxes(coord, boxbuf[:])
 
 				for i : i32 = 0; i < boxcount; i += 1 {
 					penetration_depth, sep_axis := phy_sdgBox(

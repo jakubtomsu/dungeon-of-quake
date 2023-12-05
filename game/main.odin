@@ -36,6 +36,8 @@ Global_State :: struct {
     app_state:       App_State,
     settings:        Settings,
     assets:          Assets,
+    level:           Level,
+    menu:            Menu_Data,
 }
 
 g_state: Global_State
@@ -47,6 +49,8 @@ main :: proc() {
     for !rl.WindowShouldClose() && !g_state.exit_next_frame {
         //println("### frame =", frame_index, "deltatime =", deltatime)
         g_state.frame_index += 1
+
+        delta := rl.GetFrameTime()
 
         // fixup
         g_state.settings.master_volume = clamp(g_state.settings.master_volume, 0.0, 1.0)
@@ -82,11 +86,14 @@ main :: proc() {
             {
                 rl.UpdateCamera(&g_state.camera, .CUSTOM)
 
-                _app_update()
+                _app_update(delta)
 
                 rl.BeginTextureMode(g_state.render_texture)
-                bckgcol := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, 1.0}
-                rl.ClearBackground(rl.ColorFromNormalized(bckgcol))
+                rl.ClearBackground(
+                    rl.ColorFromNormalized(
+                        {g_state.level.skyColor.x, g_state.level.skyColor.y, g_state.level.skyColor.z, 1.0},
+                    ),
+                )
 
                 rl.BeginMode3D(g_state.camera)
                 _app_render3d()
@@ -110,27 +117,30 @@ main :: proc() {
                 rl.BeginDrawing()
                 rl.ClearBackground(rl.PINK) // for debug
                 rl.SetShaderValue(
-                    postprocessShader,
-                    cast(rl.ShaderLocationIndex)rl.GetShaderLocation(postprocessShader, "tintColor"),
-                    &screenTint,
+                    g_state.assets.postprocessShader,
+                    cast(rl.ShaderLocationIndex)rl.GetShaderLocation(
+                        g_state.assets.postprocessShader,
+                        "tintColor",
+                    ),
+                    &g_state.screen_tint,
                     rl.ShaderUniformDataType.VEC3,
                 )
 
-                rl.BeginShaderMode(postprocessShader)
+                rl.BeginShaderMode(g_state.assets.postprocessShader)
                 rl.DrawTextureRec(
-                    render_texture.texture,
+                    g_state.render_texture.texture,
                     rl.Rectangle {
                         0,
                         0,
-                        cast(f32)render_texture.texture.width,
-                        -cast(f32)render_texture.texture.height,
+                        cast(f32)g_state.render_texture.texture.width,
+                        -cast(f32)g_state.render_texture.texture.height,
                     },
                     {0, 0},
                     rl.WHITE,
                 )
                 rl.EndShaderMode()
 
-                if gameIsPaused {
+                if g_state.paused {
                     menu_updateAndDrawPauseMenu()
                 }
 
@@ -193,22 +203,20 @@ _app_init :: proc() {
         projection = rl.CameraProjection.PERSPECTIVE,
     }
 
-    rand.init(&randData, cast(u64)time.now()._nsec)
-
-    map_clearAll()
-    map_data.bounds = {MAP_SIDE_TILE_COUNT, MAP_SIDE_TILE_COUNT}
+    level_clearAll()
+    g_state.level.bounds = {MAP_SIDE_TILE_COUNT, MAP_SIDE_TILE_COUNT}
     if os.is_file(asset_path("maps", "_quickload.dqm")) {
-        map_loadFromFile("_quickload.dqm")
-        app_setUpdatePathKind(.GAME)
+        level_loadFromFile("_quickload.dqm")
+        app_set_state(.GAME)
     }
 
     player_startMap()
 
 }
 
-_app_update :: proc() {
-    //rl.UpdateMusicStream(map_data.backgroundMusic)
-    //rl.UpdateMusicStream(map_data.ambientMusic)
+_app_update :: proc(delta: f32) {
+    //rl.UpdateMusicStream(level.backgroundMusic)
+    //rl.UpdateMusicStream(level.ambientMusic)
     //rl.SetMusicVolume(player_data.swooshMusic, clamp(linalg.length(player_data.vel * 0.05), 0.0, 1.0))
 
     if rl.IsKeyPressed(rl.KeyboardKey.RIGHT_ALT) {
@@ -221,15 +229,15 @@ _app_update :: proc() {
 
     // pull elevators down
     {
-        playerTilePos := map_worldToTile(player_data.pos)
+        playerTilePos := level_worldToTile(player_data.pos)
         c := [2]u8{cast(u8)playerTilePos.x, cast(u8)playerTilePos.y}
-        for key, val in map_data.elevatorHeights {
+        for key, val in g_state.level.elevatorHeights {
             if key == c do continue
-            map_data.elevatorHeights[key] = clamp(val - (TILE_ELEVATOR_MOVE_FACTOR * deltatime), 0.0, 1.0)
+            g_state.level.elevatorHeights[key] = clamp(val - (TILE_ELEVATOR_MOVE_FACTOR * delta), 0.0, 1.0)
         }
     }
 
-    screenTint = linalg.lerp(screenTint, Vec3{1, 1, 1}, clamp(deltatime * 3.0, 0.0, 1.0))
+    g_state.screen_tint = linalg.lerp(g_state.screen_tint, 1, clamp(delta * 3.0, 0.0, 1.0))
 }
 
 _app_render2d :: proc() {
@@ -238,8 +246,10 @@ _app_render2d :: proc() {
 }
 
 _app_render3d :: proc() {
+    using g_state
+
     when false {
-        if settings.debugIsEnabled {
+        if settings.debug {
             LEN :: 100
             WID :: 1
             rl.DrawCube(Vec3{LEN, 0, 0}, LEN, WID, WID, rl.RED)
@@ -257,7 +267,7 @@ _app_render3d :: proc() {
         &camera.position,
         rl.ShaderUniformDataType.VEC3,
     )
-    fogColor := Vec4{map_data.skyColor.r, map_data.skyColor.g, map_data.skyColor.b, map_data.fogStrength}
+    fog_color := Vec4{level.skyColor.r, level.skyColor.g, level.skyColor.b, level.fogStrength}
 
     rl.SetShaderValue(
         g_state.assets.defaultShader,
@@ -267,15 +277,15 @@ _app_render3d :: proc() {
     )
     rl.SetShaderValue(
         g_state.assets.defaultShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.defaultShader, "fogColor"),
-        &fogColor,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.defaultShader, "fog_color"),
+        &fog_color,
         rl.ShaderUniformDataType.VEC4,
     )
 
     rl.SetShaderValue(
         g_state.assets.tileShader,
-        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.tileShader, "fogColor"),
-        &fogColor,
+        cast(rl.ShaderLocationIndex)rl.GetShaderLocation(g_state.assets.tileShader, "fog_color"),
+        &fog_color,
         rl.ShaderUniformDataType.VEC4,
     )
 
@@ -300,18 +310,14 @@ _app_render3d :: proc() {
     )
 
 
-    map_drawTilemap()
+    level_drawTilemap()
 }
 
-
-
-app_setUpdatePathKind :: proc(kind: app_updatePathKind_t) {
-    app_updatePathKind = kind
+app_set_state :: proc(state: App_State) {
+    g_state.app_state = state
     menu_resetState()
-    gameIsPaused = false
+    g_state.paused = false
 }
-
-
 
 world_reset :: proc() {
     player_initData()
@@ -335,8 +341,8 @@ world_reset :: proc() {
         enemy_data.knights[i].isMoving = false
     }
 
-    map_data.gunPickupCount = map_data.gunPickupSpawnCount
-    map_data.healthPickupCount = map_data.healthPickupSpawnCount
+    level.gunPickupCount = level.gunPickupSpawnCount
+    level.healthPickupCount = level.healthPickupSpawnCount
 }
 
 
@@ -441,7 +447,7 @@ _bullet_updateDataAndRender :: proc() {
     assert(bullet_data.bulletLinesCount >= 0)
     assert(bullet_data.bulletLinesCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
 
-    if !gameIsPaused {
+    if !g_state.paused {
         // remove old
         loopremove: for i: i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
             bullet_data.bulletLines[i].timeToLive -= deltatime

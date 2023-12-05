@@ -11,25 +11,32 @@ import "core:path/filepath"
 import "core:strings"
 import rl "vendor:raylib"
 
-
 MENU_MAX_MAP_SELECT_FILES :: 256
 
-menu_data: struct {
+Menu_Data :: struct {
     loadScreenTimer:         f32,
     pauseMenuIsOpen:         bool,
     mapSelectFileElemsCount: i32,
     mapSelectFileElems:      [MENU_MAX_MAP_SELECT_FILES]Ui_Elem,
     mapSelectButtonBool:     bool, // shared
     mapSelectIsOpen:         bool,
+    selected:                i32, // this can be shared, since we always have only one menu on screen
+    startOffs:               f32,
+    normalFont:              rl.Font,
+    selectSound:             rl.Sound,
+    setValSound:             rl.Sound,
+    // gui inputs
+    windowSizeX:             i32,
+    windowSizeY:             i32,
 }
 
 
 menu_resetState :: proc() {
-    gui.menuContext.selected = 0
-    menu_data.mapSelectIsOpen = false
-    menu_data.mapSelectButtonBool = false
-    menu_data.pauseMenuIsOpen = false
-    menu_data.loadScreenTimer = 0.0
+    g_state.menu.selected = 0
+    g_state.menu.mapSelectIsOpen = false
+    g_state.menu.mapSelectButtonBool = false
+    g_state.menu.pauseMenuIsOpen = false
+    g_state.menu.loadScreenTimer = 0.0
 }
 
 
@@ -78,20 +85,20 @@ menu_drawPlayerUI :: proc() {
     gunindex := cast(i32)gun_data.equipped
 
     // draw ammo
-    gui.drawText(
+    drawText(
         {f32(windowSizeX) - 150, f32(windowSizeY) - 50},
         30,
         rl.Color{255, 200, 50, 220},
         fmt.tprint("AMMO: ", gun_data.ammoCounts[gunindex]),
     )
     // health
-    gui.drawText(
+    drawText(
         {30, f32(windowSizeY) - 50},
         30,
         rl.Color{255, 80, 80, 220},
         fmt.tprint("HEALTH: ", player_data.health),
     )
-    gui.drawText({30, 30}, 30, rl.Color{220, 180, 50, 150}, fmt.tprint("KILL COUNT: ", enemy_data.deadCount))
+    drawText({30, 30}, 30, rl.Color{220, 180, 50, 150}, fmt.tprint("KILL COUNT: ", enemy_data.deadCount))
 
     // draw gun ui
     for i: i32 = 0; i < GUN_COUNT; i += 1 {
@@ -102,26 +109,25 @@ menu_drawPlayerUI :: proc() {
             f32(windowSizeY) * 0.5 + GUN_COUNT * LINE * 0.5 - cast(f32)i * LINE,
         }
 
-        col := gun_data.ammoCounts[i] == 0 ? gui.INACTIVE_COLOR : gui.ACTIVE_COLOR
-        if i == cast(i32)gun_data.equipped do col = gui.ACTIVE_VAL_COLOR
-        gui.drawText(pos, TEXTHEIGHT, col, fmt.tprint(cast(gun_kind_t)i))
-        gui.drawText(
-            pos - Vec2{30, 0},
-            TEXTHEIGHT,
-            gui.TITLE_COLOR,
-            fmt.tprint(args = {i + 1, "."}, sep = ""),
-        )
+        col := gun_data.ammoCounts[i] == 0 ? INACTIVE_COLOR : ACTIVE_COLOR
+        if i == cast(i32)gun_data.equipped do col = ACTIVE_VAL_COLOR
+        drawText(pos, TEXTHEIGHT, col, fmt.tprint(cast(Gun_Kind)i))
+        drawText(pos - Vec2{30, 0}, TEXTHEIGHT, TITLE_COLOR, fmt.tprint(args = {i + 1, "."}, sep = ""))
     }
 
 }
 
 _debugtext_y: i32 = 2
 menu_drawDebugUI :: proc() {
-    if settings.drawFPS || settings.debugIsEnabled do rl.DrawFPS(0, 0)
+    using g_state
+
+    if g_state.settings.draw_fps || g_state.settings.debug {
+        rl.DrawFPS(1, 1)
+    }
 
     _debugtext_y = 2
 
-    if settings.debugIsEnabled {
+    if settings.debug {
         debugtext :: proc(args: ..any) {
             SIZE :: 10
             tstr := fmt.tprint(args = args)
@@ -140,23 +146,23 @@ menu_drawDebugUI :: proc() {
         debugtext(" onground timer", player_data.onGroundTimer)
         debugtext("system")
         debugtext(" windowSize", []i32{windowSizeX, windowSizeY})
-        debugtext(" app_updatePathKind", app_updatePathKind)
+        debugtext(" app_updatePathKind", app_state)
         debugtext(" IsAudioDeviceReady", rl.IsAudioDeviceReady())
         debugtext(" g_state.load_dir", g_state.load_dir)
-        debugtext(" gameIsPaused", gameIsPaused)
+        debugtext(" g_state.paused", g_state.paused)
         debugtext("map")
-        debugtext(" bounds", map_data.bounds)
-        debugtext(" nextMapName", map_data.nextMapName)
-        debugtext(" startPlayerDir", map_data.startPlayerDir)
-        debugtext(" gunPickupCount", map_data.gunPickupCount, "gunPickupSpawnCount", map_data.gunPickupCount)
+        debugtext(" bounds", level.bounds)
+        debugtext(" nextMapName", level.nextMapName)
+        debugtext(" startPlayerDir", level.startPlayerDir)
+        debugtext(" gunPickupCount", level.gunPickupCount, "gunPickupSpawnCount", level.gunPickupCount)
         debugtext(
             " healthPickupCount",
-            map_data.healthPickupCount,
+            level.healthPickupCount,
             "healthPickupSpawnCount",
-            map_data.healthPickupSpawnCount,
+            level.healthPickupSpawnCount,
         )
-        debugtext(" skyColor", map_data.skyColor)
-        debugtext(" fogStrengh", map_data.fogStrength)
+        debugtext(" skyColor", level.skyColor)
+        debugtext(" fogStrengh", level.fogStrength)
         debugtext("gun")
         debugtext(" equipped", gun_data.equipped)
         debugtext(" last equipped", gun_data.lastEquipped)
@@ -176,87 +182,89 @@ menu_drawDebugUI :: proc() {
         // debugtext(" knight anim[0] frame count", g_state.assets.enemy.knightAnim[0].frameCount)
         // debugtext(" knight model bone count", g_state.assets.enemy.knightModel.boneCount)
         debugtext("menus")
-        debugtext(" pauseMenuIsOpen", menu_data.pauseMenuIsOpen)
-        debugtext(" mapSelectFileElemsCount", menu_data.mapSelectFileElemsCount)
+        debugtext(" pauseMenuIsOpen", g_state.menu.pauseMenuIsOpen)
+        debugtext(" mapSelectFileElemsCount", g_state.menu.mapSelectFileElemsCount)
         debugtext("gui")
-        debugtext(" selected", gui.menuContext.selected)
-        debugtext(" startOffset", gui.menuContext.startOffs)
+        debugtext(" selected", g_state.menu.selected)
+        debugtext(" startOffset", g_state.menu.startOffs)
     }
 }
 
 
 
 menu_updateAndDrawPauseMenu :: proc() {
-    if map_data.isMapFinished {
-        screenTint = {}
+    using g_state
+
+    if level.isMapFinished {
+        screen_tint = {}
         shouldContinue := false
-        shouldExitToMainMenu := false
+        should_exit := false
         shouldReset := false
-        elems: []gui.Ui_Elem =  {
-            gui.Ui_Button{"continue", &shouldContinue},
-            gui.Ui_Button{"play again", &shouldReset},
-            gui.Ui_Button{"exit to main menu", &shouldExitToMainMenu},
+        elems: []Ui_Elem =  {
+            Ui_Button{"continue", &shouldContinue},
+            Ui_Button{"play again", &shouldReset},
+            Ui_Button{"exit to main menu", &should_exit},
         }
 
-        gui.updateAndDrawElemBuf(elems[:])
+        ui_update_and_draw_elems(elems[:])
 
 
         if shouldContinue {
-            if map_data.nextMapName == "" {
-                shouldExitToMainMenu = true
+            if level.nextMapName == "" {
+                should_exit = true
             } else {
-                if map_loadFromFile(map_data.nextMapName) {
-                    app_setUpdatePathKind(.GAME)
+                if level_loadFromFile(level.nextMapName) {
+                    app_set_state(.GAME)
                     menu_resetState()
                 } else {
-                    shouldExitToMainMenu = true
+                    should_exit = true
                 }
             }
         }
-        if shouldExitToMainMenu {
-            app_setUpdatePathKind(.MAIN_MENU)
+        if should_exit {
+            app_set_state(.Main_Menu)
         }
         if shouldReset {
             player_die()
             menu_resetState()
-            gameIsPaused = false
+            g_state.paused = false
         }
     } else {
-        shouldExitToMainMenu := false
+        should_exit := false
         shouldReset := false
-        elems: []gui.Ui_Elem =  {
-            gui.Ui_Button{"RESUME", &gameIsPaused},
-            gui.Ui_Button{"reset", &shouldReset},
-            gui.Ui_Button{"go to main menu", &shouldExitToMainMenu},
-            gui.Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
-            gui.Ui_Menu_Title{"settings"},
-            gui.Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
-            gui.Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
-            gui.Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
-            gui.Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
-            gui.Ui_F32{"gun X offset", &settings.gunXOffset, 0.025},
-            gui.Ui_F32{"fild of view", &settings.FOV, 10.0},
-            gui.Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
-            gui.Ui_Bool{"show FPS", &settings.drawFPS},
-            gui.Ui_Bool{"enable debug mode", &settings.debugIsEnabled},
+        elems: []Ui_Elem =  {
+            Ui_Button{"RESUME", &g_state.paused},
+            Ui_Button{"reset", &shouldReset},
+            Ui_Button{"go to main menu", &should_exit},
+            Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
+            Ui_Menu_Title{"settings"},
+            Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
+            Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
+            Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
+            Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
+            Ui_F32{"gun X offset", &settings.gunXOffset, 0.025},
+            Ui_F32{"fild of view", &settings.FOV, 10.0},
+            Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
+            Ui_Bool{"show FPS", &settings.drawFPS},
+            Ui_Bool{"enable debug mode", &settings.debug},
         }
 
         menu_drawNavTips()
-        if gui.updateAndDrawElemBuf(elems[:]) {
+        if updateAndDrawElemBuf(elems[:]) {
             settings_saveToFile()
         }
 
         rl.SetSoundVolume(g_state.assets.player.swooshSound, 0.0)
 
-        screenTint = linalg.lerp(screenTint, Vec3{0.1, 0.1, 0.1}, clamp(deltatime * 5.0, 0.0, 1.0))
+        screen_tint = linalg.lerp(screen_tint, Vec3{0.1, 0.1, 0.1}, clamp(deltatime * 5.0, 0.0, 1.0))
 
-        if shouldExitToMainMenu {
-            app_setUpdatePathKind(.MAIN_MENU)
+        if should_exit {
+            app_set_state(.MAIN_MENU)
         }
         if shouldReset {
             player_die()
             menu_resetState()
-            gameIsPaused = false
+            g_state.paused = false
         }
     }
 }
@@ -268,23 +276,23 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
     playingMusic = &g_state.assets.loadScreenMusic
 
     rl.BeginDrawing()
-    rl.ClearBackground(rl.ColorFromNormalized(gui.BACKGROUND))
+    rl.ClearBackground(rl.ColorFromNormalized(BACKGROUND))
     menu_drawNavTips()
     menu_drawDebugUI()
 
-    if menu_data.mapSelectIsOpen {
-        gui.updateAndDrawElemBuf(menu_data.mapSelectFileElems[:menu_data.mapSelectFileElemsCount])
+    if g_state.menu.mapSelectIsOpen {
+        updateAndDrawElemBuf(g_state.menu.mapSelectFileElems[:g_state.menu.mapSelectFileElemsCount])
         if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) {
-            rl.PlaySound(gui.menuContext.setValSound)
+            rl.PlaySound(g_state.menu.setValSound)
             menu_resetState()
         }
 
-        if menu_data.mapSelectButtonBool {
-            menu_data.mapSelectButtonBool = false
-            elem, ok := menu_data.mapSelectFileElems[gui.menuContext.selected].(gui.Ui_File_Button)
+        if g_state.menu.mapSelectButtonBool {
+            g_state.menu.mapSelectButtonBool = false
+            elem, ok := g_state.menu.mapSelectFileElems[g_state.menu.selected].(Ui_File_Button)
             if ok {
-                if map_loadFromFileAbs(elem.fullpath) {
-                    app_setUpdatePathKind(.GAME)
+                if level_loadFromFileAbs(elem.fullpath) {
+                    app_set_state(.GAME)
                     menu_resetState()
                 }
             } else {
@@ -294,29 +302,29 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 
     } else {
         shouldMapSelect := false
-        elems: []gui.Ui_Elem =  {
-            gui.Ui_Button{"SINGLEPLAYER", &shouldMapSelect},
-            gui.Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
-            gui.Ui_Menu_Title{"settings"},
-            gui.Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
-            gui.Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
-            gui.Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
-            gui.Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
-            gui.Ui_F32{"gun size offset", &settings.gunXOffset, 0.025},
-            gui.Ui_F32{"fild of view", &settings.FOV, 10.0},
-            gui.Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
-            gui.Ui_Bool{"show FPS", &settings.drawFPS},
-            gui.Ui_Bool{"enable debug mode", &settings.debugIsEnabled},
+        elems: []Ui_Elem =  {
+            Ui_Button{"SINGLEPLAYER", &shouldMapSelect},
+            Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
+            Ui_Menu_Title{"settings"},
+            Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
+            Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
+            Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
+            Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
+            Ui_F32{"gun size offset", &settings.gunXOffset, 0.025},
+            Ui_F32{"fild of view", &settings.FOV, 10.0},
+            Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
+            Ui_Bool{"show FPS", &settings.drawFPS},
+            Ui_Bool{"enable debug mode", &settings.debug},
         }
 
-        if gui.updateAndDrawElemBuf(elems[:]) {
+        if updateAndDrawElemBuf(elems[:]) {
             settings_saveToFile()
         }
 
         if shouldMapSelect {
             menu_mainMenuFetchMapSelectFiles()
             menu_resetState()
-            menu_data.mapSelectIsOpen = true
+            g_state.menu.mapSelectIsOpen = true
         }
     }
 
@@ -328,7 +336,7 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
     path := fmt.tprint(args = {g_state.load_dir, filepath.SEPARATOR_STRING, "maps"}, sep = "")
     println("path:", path)
 
-    menu_data.mapSelectFileElemsCount = 0
+    g_state.menu.mapSelectFileElemsCount = 0
 
     mapSelectFilesFetchDirAndAppend(path)
 
@@ -352,13 +360,13 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
             dotindex := strings.index_byte(fileinfo.name, '.')
             if dotindex == 0 do continue
             if fileinfo.name[dotindex:] != ".dqm" do continue // check suffix
-            //menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.Ui_Button{fileinfo.name[:dotindex], &menu_data.mapSelectButtonBool}
-            menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.Ui_File_Button {
+            //g_state.menu.mapSelectFileElems[g_state.menu.mapSelectFileElemsCount] = Ui_Button{fileinfo.name[:dotindex], &g_state.menu.mapSelectButtonBool}
+            g_state.menu.mapSelectFileElems[g_state.menu.mapSelectFileElemsCount] = Ui_File_Button {
                 fileinfo.name[:dotindex],
                 fileinfo.fullpath,
-                &menu_data.mapSelectButtonBool,
+                &g_state.menu.mapSelectButtonBool,
             }
-            menu_data.mapSelectFileElemsCount += 1
+            g_state.menu.mapSelectFileElemsCount += 1
         }
 
         // get subfolders
@@ -366,10 +374,10 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
             fileinfo := filebuf[i]
             if !fileinfo.is_dir do continue
             if fileinfo.name[0] == '_' do continue // hidden
-            menu_data.mapSelectFileElems[menu_data.mapSelectFileElemsCount] = gui.Ui_Menu_Title {
+            g_state.menu.mapSelectFileElems[g_state.menu.mapSelectFileElemsCount] = Ui_Menu_Title {
                 fileinfo.name,
             }
-            menu_data.mapSelectFileElemsCount += 1
+            g_state.menu.mapSelectFileElemsCount += 1
             mapSelectFilesFetchDirAndAppend(fileinfo.fullpath)
         }
     }
@@ -382,19 +390,19 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
        rl.IsMouseButtonPressed(rl.MouseButton.LEFT) ||
        rl.IsMouseButtonPressed(rl.MouseButton.RIGHT) ||
        rl.IsMouseButtonPressed(rl.MouseButton.MIDDLE) {
-        app_setUpdatePathKind(.MAIN_MENU)
-        rl.PlaySound(gui.menuContext.setValSound)
+        app_set_state(.MAIN_MENU)
+        rl.PlaySound(g_state.menu.setValSound)
     }
 
-    if !rl.IsWindowReady() do menu_data.loadScreenTimer = 0.0
+    if !rl.IsWindowReady() do g_state.menu.loadScreenTimer = 0.0
 
-    unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, menu_data.loadScreenTimer * 0.5))
+    unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, g_state.menu.loadScreenTimer * 0.5))
 
     rl.SetMusicVolume(g_state.assets.loadScreenMusic, unfade * unfade * unfade)
     playingMusic = &g_state.assets.loadScreenMusic
 
     rl.BeginDrawing()
-    rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(Vec4{0, 0, 0, 0}, gui.BACKGROUND, unfade)))
+    rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(Vec4{0, 0, 0, 0}, BACKGROUND, unfade)))
 
     OFFS :: 200
     STARTSCALE :: 4.0
@@ -417,7 +425,7 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
         col,
     )
 
-    gui.drawText(
+    drawText(
         {f32(windowSizeX) / 2 - 100, f32(windowSizeY) - 130},
         25,
         rl.ColorFromNormalized(
@@ -431,15 +439,10 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
     )
 
     versionstr := fmt.tprint("version: ", DOQ_VERSION_STRING)
-    gui.drawText(
-        {f32(windowSizeX) - f32(len(versionstr) + 3) * 10, f32(windowSizeY) - 50},
-        25,
-        col,
-        versionstr,
-    )
+    drawText({f32(windowSizeX) - f32(len(versionstr) + 3) * 10, f32(windowSizeY) - 50}, 25, col, versionstr)
     rl.EndDrawing()
 
-    menu_data.loadScreenTimer += deltatime
+    g_state.menu.loadScreenTimer += deltatime
 }
 
 
@@ -448,7 +451,7 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 menu_drawNavTips :: proc() {
     SIZE :: 25.0
 
-    gui.drawText(
+    drawText(
         {SIZE * 2.0, f32(windowSizeY) - SIZE * 3},
         SIZE,
         {200, 200, 200, 120},
