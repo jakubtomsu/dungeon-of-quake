@@ -7,6 +7,10 @@ dqmake_build_.bat
 *.blend1
 *.kra~
 *.exe
+*.pdb
+*.ilk
+*.obj
+*.o
 
 build/*.exp
 build/*.lib
