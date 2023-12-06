@@ -109,7 +109,7 @@ enemy_spawnKnight :: proc(pos: Vec3) {
 
 
 
-_enemy_updateDataAndRender :: proc() {
+_enemy_updateDataAndRender :: proc(delta: f32) {
     assert(enemy_data.gruntCount >= 0)
     assert(enemy_data.knightCount >= 0)
     assert(enemy_data.gruntCount < ENEMY_GRUNT_MAX_COUNT)
@@ -133,7 +133,7 @@ _enemy_updateDataAndRender :: proc() {
             }
 
             pos := enemy_data.grunts[i].pos + Vec3{0, ENEMY_GRUNT_SIZE.y * 0.5, 0}
-            dir := linalg.normalize(player_data.pos - pos)
+            dir := normalize(player_data.pos - pos)
             // cast player
             p_tn, p_hit := phy_boxcastPlayer(pos, dir, {0, 0, 0})
             EPS :: 0.0
@@ -144,7 +144,7 @@ _enemy_updateDataAndRender :: proc() {
 
             // println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 
-            enemy_data.grunts[i].attackTimer -= deltatime
+            enemy_data.grunts[i].attackTimer -= delta
 
 
             if seeplayer {
@@ -159,7 +159,7 @@ _enemy_updateDataAndRender :: proc() {
             enemy_data.grunts[i].rot = math.angle_lerp(
                 enemy_data.grunts[i].rot,
                 roundstep(toTargetRot, 4.0 / math.PI),
-                clamp(deltatime * 1.0, 0.0, 1.0),
+                clamp(delta * 1.0, 0.0, 1.0),
             )
 
             if p_tn < ENEMY_GRUNT_SIZE.y {
@@ -180,7 +180,7 @@ _enemy_updateDataAndRender :: proc() {
                     )
                     // cast bullet
                     bulletdir := linalg.normalize(
-                        dir + randVec3() * rndstrength + player_data.vel * deltatime / PLAYER_SPEED,
+                        dir + randVec3() * rndstrength + player_data.vel * delta / PLAYER_SPEED,
                     )
                     bullet_tn, bullet_norm, bullet_hit := phy_boxcastTilemap(
                         pos,
@@ -211,7 +211,7 @@ _enemy_updateDataAndRender :: proc() {
 
 
             speed := linalg.length(enemy_data.grunts[i].vel)
-            enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * deltatime
+            enemy_data.grunts[i].vel.y -= ENEMY_GRAVITY * delta
 
             phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBox(
                 enemy_data.grunts[i].pos,
@@ -263,7 +263,7 @@ _enemy_updateDataAndRender :: proc() {
 
             // println("p_tn", p_tn, "p_hit", p_hit, "t_tn", t_tn, "t_hit", t_hit)
 
-            enemy_data.knights[i].attackTimer -= deltatime
+            enemy_data.knights[i].attackTimer -= delta
 
 
             if seeplayer {
@@ -278,7 +278,7 @@ _enemy_updateDataAndRender :: proc() {
             enemy_data.knights[i].rot = math.angle_lerp(
                 enemy_data.knights[i].rot,
                 roundstep(toTargetRot, 4.0 / math.PI),
-                clamp(deltatime * 3, 0.0, 1.0),
+                clamp(delta * 3, 0.0, 1.0),
             )
 
             if seeplayer {
@@ -303,7 +303,7 @@ _enemy_updateDataAndRender :: proc() {
 
 
             speed := linalg.length(enemy_data.knights[i].vel)
-            enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * deltatime
+            enemy_data.knights[i].vel.y -= ENEMY_GRAVITY * delta
 
             phy_pos, phy_vel, phy_hit, phy_norm := phy_simulateMovingBox(
                 enemy_data.knights[i].pos,
@@ -353,7 +353,7 @@ _enemy_updateDataAndRender :: proc() {
             animindex := i32(enemy_data.grunts[i].animState)
 
             if !g_state.paused {
-                enemy_data.grunts[i].animFrameTimer += deltatime
+                enemy_data.grunts[i].animFrameTimer += delta
                 if enemy_data.grunts[i].animFrameTimer > ENEMY_GRUNT_ANIM_FRAMETIME {
                     enemy_data.grunts[i].animFrameTimer -= ENEMY_GRUNT_ANIM_FRAMETIME
                     enemy_data.grunts[i].animFrame += 1
@@ -403,7 +403,7 @@ _enemy_updateDataAndRender :: proc() {
             animindex := i32(enemy_data.knights[i].animState)
 
             if !g_state.paused {
-                enemy_data.knights[i].animFrameTimer += deltatime
+                enemy_data.knights[i].animFrameTimer += delta
                 if enemy_data.knights[i].animFrameTimer > ENEMY_KNIGHT_ANIM_FRAMETIME {
                     enemy_data.knights[i].animFrameTimer -= ENEMY_KNIGHT_ANIM_FRAMETIME
                     enemy_data.knights[i].animFrame += 1

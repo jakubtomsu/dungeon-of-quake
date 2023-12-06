@@ -147,12 +147,12 @@ ui_update_and_draw_elems :: proc(elems: []Ui_Elem) -> bool {
     if selectedOffs > f32(menuContext.windowSizeY) - SCROLL_MARGIN {     // bottom
         menuContext.startOffs +=
             (f32(menuContext.windowSizeY) - SCROLL_MARGIN - selectedOffs) *
-            clamp(menuContext.deltatime * SCROLL_SPEED, 0.0, 1.0)
+            clamp(menuContext.delta * SCROLL_SPEED, 0.0, 1.0)
     }
 
     if selectedOffs < SCROLL_MARGIN {     // top
         menuContext.startOffs +=
-            (SCROLL_MARGIN - selectedOffs) * clamp(menuContext.deltatime * SCROLL_SPEED, 0.0, 1.0)
+            (SCROLL_MARGIN - selectedOffs) * clamp(menuContext.delta * SCROLL_SPEED, 0.0, 1.0)
     }
 
 

@@ -17,9 +17,14 @@ Vec4 :: rl.Vector4
 IVec2 :: [2]i32
 Mat3 :: linalg.Matrix3f32
 
+pow :: math.pow
+
+normalize :: linalg.normalize
+
 Error :: union {
     bool,
     json.Error,
+    json.Unmarshal_Error,
 }
 
 playSound :: proc(sound: rl.Sound) {
@@ -34,13 +39,7 @@ playSoundMulti :: proc(sound: rl.Sound) {
 
 // rand vector with elements in -1..1
 randVec3 :: proc() -> Vec3 {
-    return(
-        Vec3 {
-            rand.float32_range(-1.0, 1.0, &randData),
-            rand.float32_range(-1.0, 1.0, &randData),
-            rand.float32_range(-1.0, 1.0, &randData),
-        } \
-    )
+    return Vec3{rand.float32_range(-1.0, 1.0), rand.float32_range(-1.0, 1.0), rand.float32_range(-1.0, 1.0)}
 }
 
 roundstep :: proc(a: f32, step: f32) -> f32 {

@@ -100,9 +100,9 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
     dir := wishpos - pos
     linelen := linalg.length(dir)
     //println("PHY: linelen", linelen)
-    if !level_isTilePosValid(level_worldToTile(pos)) do return linelen, {0, 0.1, 0}, false
-    lowerleft := level_tilePosClamp(
-        level_worldToTile(pos - Vec3{dir.x > 0.0 ? 1.0 : -1.0, 0.0, dir.z > 0.0 ? 1.0 : -1.0} * TILE_WIDTH),
+    if !tile_pos_valid(world_to_tile(pos)) do return linelen, {0, 0.1, 0}, false
+    lowerleft := tile_pos_clamp(
+        world_to_tile(pos - Vec3{dir.x > 0.0 ? 1.0 : -1.0, 0.0, dir.z > 0.0 ? 1.0 : -1.0} * TILE_WIDTH),
     )
     tilepos := lowerleft
 
@@ -152,7 +152,7 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
 
     // DDA traversal
     for {
-        if !level_isTilePosValid(tilepos) ||
+        if !tile_pos_valid(tilepos) ||
            (linalg.length(Vec2{cast(f32)(tilepos.x - lowerleft.x), cast(f32)(tilepos.y - lowerleft.y)}) -
                        3.0) *
                    TILE_WIDTH >
@@ -179,11 +179,11 @@ phy_boxcastTilemap :: proc(pos: Vec3, wishpos: Vec3, boxsize: Vec3) -> (f32, Vec
 
         for j: i32 = 0; j < len(checktiles); j += 1 {
             //println("checktile")
-            if !level_isTilePosValid(checktiles[j]) do continue
+            if !tile_pos_valid(checktiles[j]) do continue
             phy_boxcastTilemapTile(checktiles[j], &ctx)
-            //rl.DrawCube(level_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
-            //rl.DrawCube(level_tileToWorld(checktiles[j]), 2, 1000, 2, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
-            //rl.DrawCubeWires(level_tileToWorld(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
+            //rl.DrawCube(tile_to_world(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
+            //rl.DrawCube(tile_to_world(checktiles[j]), 2, 1000, 2, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
+            //rl.DrawCubeWires(tile_to_world(checktiles[j]), TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH, rl.Fade(j==0? rl.BLUE : rl.ORANGE, 0.1))
         }
     }
 
@@ -293,8 +293,8 @@ phy_boxcastEnemies :: proc(
 // fires ray directly downwards
 // @returns: minimum depth
 phy_raycastDepth :: proc(pos: Vec3) -> f32 {
-    tilecoord := level_worldToTile(pos)
-    if !level_isTilePosValid(tilecoord) do return 1e6
+    tilecoord := world_to_tile(pos)
+    if !tile_pos_valid(tilecoord) do return 1e6
     boxbuf: [PHY_MAX_TILE_BOXES]box_t
     boxcount := level_getTileBoxes(tilecoord, boxbuf[0:])
 
@@ -384,9 +384,14 @@ phy_slideVelocityOnSurf :: proc(vel: Vec3, normal: Vec3) -> Vec3 {
 
 
 
-phy_applyFrictionToVelocity :: proc(vel: Vec3, friction: f32, disallowNegative: bool = true) -> Vec3 {
+phy_applyFrictionToVelocity :: proc(
+    vel: Vec3,
+    friction: f32,
+    disallowNegative: bool = true,
+    delta: f32,
+) -> Vec3 {
     len := linalg.length(vel)
-    drop := len * friction * deltatime
+    drop := len * friction * delta
     if disallowNegative do return (len == 0.0 ? {} : vel / len) * glsl.max(0.0, len - drop)
     return (len == 0.0 ? {} : vel / len) * (len - drop)
 }
@@ -401,6 +406,7 @@ phy_simulateMovingBox :: proc(
     friction: f32,
     boxsize: Vec3,
     rad: f32,
+    delta: f32,
 ) -> (
     newpos: Vec3,
     newvel: Vec3,
@@ -408,7 +414,7 @@ phy_simulateMovingBox :: proc(
     normal: Vec3,
 ) {
     using linalg
-    wishpos := pos + vel * deltatime
+    wishpos := pos + vel * delta
     vellen := length(vel)
     if vellen == 0.0 do return wishpos, vel, false, {}
     dir := vel / vellen
@@ -421,7 +427,7 @@ phy_simulateMovingBox :: proc(
     // discrete collision detection
     /*
 	{
-		tilepos := level_worldToTile(pos)
+		tilepos := world_to_tile(pos)
 		//box := box_t{pos, boxsize}
 
 		impulse := Vec3{}
@@ -454,7 +460,7 @@ phy_simulateMovingBox :: proc(
 					// solve constraint
 					delta_v := vel
 					delta_v_dot_n : f32 = dot(delta_v, sep_axis)
-					bias_penetration_depth : f32 = -(SOLVER_BETA / deltatime) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
+					bias_penetration_depth : f32 = -(SOLVER_BETA / delta) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
 					constraint_bias : f32 = bias_penetration_depth + RESTITUTUION_BIAS
 					penetration_delta_lambda_initial : f32 = -(delta_v_dot_n + constraint_bias)
 					penetration_lambda_temp : f32 = penetration_accumulated_impulse
@@ -469,7 +475,7 @@ phy_simulateMovingBox :: proc(
 
 		normal = linalg.normalize(normal)
 		newvel = vel + impulse
-		newpos = pos + newvel*deltatime
+		newpos = pos + newvel*delta
 
 		return newpos, newvel, hit, normal
 	}
@@ -499,22 +505,22 @@ phy_simulateMovingBox :: proc(
 	delta_v := vel
 	penetration_depth : f32 = dot(pos - contact_point, cast_norm) //!!!
 	delta_v_dot_n : f32 = dot(delta_v, cast_norm)
-	bias_penetration_depth : f32 = -(SOLVER_BETA / deltatime) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
+	bias_penetration_depth : f32 = -(SOLVER_BETA / delta) * glsl.max(0.0, penetration_depth - SOLVER_SLOP)
 	constraint_bias : f32 = bias_penetration_depth + RESTITUTUION_BIAS
 	speculative_offset := cast_tn
 	_ = speculative_offset
 	penetration_delta_lambda : f32 = -(delta_v_dot_n + constraint_bias + speculative_offset)
 	linear_impulse := cast_norm * penetration_delta_lambda
 	newvel = vel + linear_impulse
-	newpos = pos + newvel*deltatime
+	newpos = pos + newvel*delta
 	*/
 
 
 
     EPS :: 0.05
     newpos = pos + dir * cast_tn + cast_norm * EPS
-    //newvel = dir*(glsl.max(0.0, cast_tn)/deltatime + EPS/deltatime) - cast_norm*0.1*EPS/deltatime
-    newvel = dir * (cast_tn / deltatime + EPS / deltatime) - cast_norm * 0.1 * EPS / deltatime
+    //newvel = dir*(glsl.max(0.0, cast_tn)/delta + EPS/delta) - cast_norm*0.1*EPS/delta
+    newvel = dir * (cast_tn / delta + EPS / delta) - cast_norm * 0.1 * EPS / delta
 
     hit = true //cast_tn>0.0
     normal = cast_norm

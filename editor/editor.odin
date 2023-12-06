@@ -19,7 +19,7 @@ println :: fmt.println
 windowSizeX: i32
 windowSizeY: i32
 
-deltatime: f32
+delta: f32
 
 ADD_MOUSE_BUTTON :: rl.MouseButton.LEFT
 SUB_MOUSE_BUTTON :: rl.MouseButton.RIGHT
@@ -220,7 +220,7 @@ main :: proc() {
             // update GUI context
             gui.menuContext.windowSizeX = windowSizeX
             gui.menuContext.windowSizeY = windowSizeY
-            gui.menuContext.deltatime = deltatime
+            gui.menuContext.delta = delta
 
             for x: i32 = 0; x < mapData.bounds.x; x += 1 {
                 for y: i32 = 0; y < mapData.bounds.y; y += 1 {
@@ -329,7 +329,7 @@ main :: proc() {
             case .NONE:
             case .FILE:
                 if fileMenuElemsCount > 0 {
-                    gui.updateAndDrawElemBuf(fileMenuElems[:fileMenuElemsCount])
+                    gui.ui_update_and_draw_elems(fileMenuElems[:fileMenuElemsCount])
 
                     if fileMenuButtonBool {
                         fileMenuButtonBool = false
@@ -357,7 +357,7 @@ main :: proc() {
                     gui.Ui_F32{"sky color BLUE", &mapData.skyColor.b, 0.05},
                     gui.Ui_F32{"fog strength", &mapData.fogStrength, 0.1},
                 }
-                gui.updateAndDrawElemBuf(elems)
+                gui.ui_update_and_draw_elems(elems)
 
                 if shouldSave {
                     tiles.saveToFile(&mapData)
@@ -368,7 +368,7 @@ main :: proc() {
                 }
 
             case .TILE:
-                gui.updateAndDrawElemBuf(tileMenuElems[:])
+                gui.ui_update_and_draw_elems(tileMenuElems[:])
                 if tileMenuButtonBool {
                     tileMenuButtonBool = false
                     tileSelected = tiles.Tile(
@@ -383,7 +383,7 @@ main :: proc() {
         if Menu_Kind != prevMenuKind do gui.menuContext.selected = 0
         if Menu_Kind != prevMenuKind do gui.menuContext.startOffs = 0
 
-        deltatime = rl.GetFrameTime()
+        delta = rl.GetFrameTime()
     }
 
     rl.CloseWindow()
@@ -477,27 +477,4 @@ fileMenuFetchFiles :: proc() {
             mapSelectFilesFetchDirAndAppend(fileinfo.fullpath)
         }
     }
-}
-
-
-
-// util functions, copied from DoQ
-
-
-appendToAssetPath :: proc(subdir: string, path: string) -> string {
-    return fmt.tprint(
-        args = {g_state.load_dir, filepath.SEPARATOR_STRING, subdir, filepath.SEPARATOR_STRING, path},
-        sep = "",
-    )
-}
-
-// ctx temp alloc
-appendToAssetPathCstr :: proc(subdir: string, path: string) -> cstring {
-    return strings.clone_to_cstring(appendToAssetPath(subdir, path), context.temp_allocator)
-}
-
-loadFont :: proc(path: string) -> rl.Font {
-    fullpath := appendToAssetPathCstr("fonts", path)
-    return rl.LoadFontEx(fullpath, 32, nil, 0)
-    //return rl.LoadFont(fullpath)
 }

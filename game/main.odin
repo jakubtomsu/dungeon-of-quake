@@ -13,6 +13,9 @@ import "core:strings"
 import "core:time"
 import rl "vendor:raylib"
 
+GAME_NAME_NICE :: "Dungeon of Quake"
+GAME_NAME :: "dungeon_of_quake"
+
 VERSION_STRING :: "0.1-alpha"
 
 App_State :: enum {
@@ -21,7 +24,6 @@ App_State :: enum {
     Game,
 }
 
-
 Global_State :: struct {
     window_size:     IVec2,
     camera:          rl.Camera,
@@ -29,6 +31,7 @@ Global_State :: struct {
     frame_index:     i64,
     exit_next_frame: bool,
     load_dir:        string,
+    save_dir:        string,
     render_texture:  rl.RenderTexture2D,
     current_music:   ^rl.Music,
     paused:          bool,
@@ -47,7 +50,7 @@ main :: proc() {
     rl.DisableCursor()
 
     for !rl.WindowShouldClose() && !g_state.exit_next_frame {
-        //println("### frame =", frame_index, "deltatime =", deltatime)
+        //println("### frame =", frame_index, "delta =", delta)
         g_state.frame_index += 1
 
         delta := rl.GetFrameTime()
@@ -78,7 +81,7 @@ main :: proc() {
 
         switch g_state.app_state {
         case .Loadscreen:
-            menu_updateAndDrawLoadScreenUpdatePath()
+            menu_updateAndDrawLoadScreenUpdatePath(delta)
         case .Main_Menu:
             menu_updateAndDrawMainMenuUpdatePath()
         case .Game:
@@ -102,7 +105,7 @@ main :: proc() {
                     _player_update()
                 }
                 // _enemy_updateDataAndRender()
-                _bullet_updateDataAndRender()
+                _bullet_updateDataAndRender(delta)
                 rl.EndMode3D()
 
                 viewmodel_cam := g_state.camera
@@ -173,6 +176,12 @@ _app_init :: proc() {
         }
     }
 
+    if game_saves, ok := _platform_game_save_dir(context.temp_allocator).?; ok {
+        g_state.save_dir = filepath.join({game_saves, GAME_NAME})
+    } else {
+        panic("Failed to load game save directory")
+    }
+
 
     rl.SetWindowState({.WINDOW_RESIZABLE, .VSYNC_HINT, .FULLSCREEN_MODE})
     rl.InitWindow(800, 600, "Dungeon of Quake")
@@ -207,7 +216,7 @@ _app_init :: proc() {
     g_state.level.bounds = {MAP_SIDE_TILE_COUNT, MAP_SIDE_TILE_COUNT}
     if os.is_file(asset_path("maps", "_quickload.dqm")) {
         level_loadFromFile("_quickload.dqm")
-        app_set_state(.GAME)
+        app_set_state(.Game)
     }
 
     player_startMap()
@@ -229,7 +238,7 @@ _app_update :: proc(delta: f32) {
 
     // pull elevators down
     {
-        playerTilePos := level_worldToTile(player_data.pos)
+        playerTilePos := world_to_tile(player_data.pos)
         c := [2]u8{cast(u8)playerTilePos.x, cast(u8)playerTilePos.y}
         for key, val in g_state.level.elevatorHeights {
             if key == c do continue
@@ -320,6 +329,8 @@ app_set_state :: proc(state: App_State) {
 }
 
 world_reset :: proc() {
+    using g_state
+
     player_initData()
     player_startMap()
 
@@ -439,18 +450,14 @@ bullet_shootRaycast :: proc(
     return tn, enemykind, enemyindex
 }
 
-bullet_shootProjectile :: proc(start: Vec3, dir: Vec3, damage: f32, rad: f32, col: Vec4) {
-    // TODO
-}
-
-_bullet_updateDataAndRender :: proc() {
+_bullet_updateDataAndRender :: proc(delta: f32) {
     assert(bullet_data.bulletLinesCount >= 0)
     assert(bullet_data.bulletLinesCount < BULLET_LINEAR_EFFECT_MAX_COUNT)
 
     if !g_state.paused {
         // remove old
         loopremove: for i: i32 = 0; i < bullet_data.bulletLinesCount; i += 1 {
-            bullet_data.bulletLines[i].timeToLive -= deltatime
+            bullet_data.bulletLines[i].timeToLive -= delta
             if bullet_data.bulletLines[i].timeToLive <= BULLET_REMOVE_THRESHOLD {     // needs to be removed
                 if i + 1 >= bullet_data.bulletLinesCount {     // we're on the last one
                     bullet_data.bulletLinesCount -= 1

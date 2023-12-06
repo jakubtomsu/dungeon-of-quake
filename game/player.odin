@@ -90,11 +90,7 @@ _player_update :: proc() {
 
     vellen := linalg.length(player_data.vel)
 
-    player_data.swooshStrength = math.lerp(
-        player_data.swooshStrength,
-        vellen,
-        clamp(deltatime * 4.0, 0.0, 1.0),
-    )
+    player_data.swooshStrength = math.lerp(player_data.swooshStrength, vellen, clamp(delta * 4.0, 0.0, 1.0))
     rl.SetSoundVolume(
         g_state.assets.player.swooshSound,
         clamp(math.pow(0.001 + player_data.swooshStrength * 0.008, 2.0), 0.0, 1.0) * 0.75,
@@ -106,7 +102,7 @@ _player_update :: proc() {
     if !rl.IsSoundPlaying(g_state.assets.player.swooshSound) do playSound(g_state.assets.player.swooshSound)
 
     if player_data.isOnGround && linalg.length(player_data.vel * Vec3{1, 0, 1}) > 5.0 {
-        player_data.stepTimer += deltatime * PLAYER_HEAD_SIN_TIME
+        player_data.stepTimer += delta * PLAYER_HEAD_SIN_TIME
         if player_data.stepTimer > math.PI * 2.0 {
             player_data.stepTimer = 0.0
             playSoundMulti(g_state.assets.player.footstepSound)
@@ -115,12 +111,8 @@ _player_update :: proc() {
         player_data.stepTimer = -0.01
     }
 
-    player_data.slowness = linalg.lerp(player_data.slowness, 0.0, clamp(deltatime * 10.0, 0.0, 1.0))
-    player_data.rotImpulse = linalg.lerp(
-        player_data.rotImpulse,
-        Vec3{0, 0, 0},
-        clamp(deltatime * 6.0, 0.0, 1.0),
-    )
+    player_data.slowness = linalg.lerp(player_data.slowness, 0.0, clamp(delta * 10.0, 0.0, 1.0))
+    player_data.rotImpulse = linalg.lerp(player_data.rotImpulse, Vec3{0, 0, 0}, clamp(delta * 6.0, 0.0, 1.0))
 
     player_data.lookRotMat3 = linalg.matrix3_from_yaw_pitch_roll(
         player_data.lookRotEuler.y + player_data.rotImpulse.y,
@@ -146,11 +138,11 @@ _player_update :: proc() {
     if rl.IsKeyDown(rl.KeyboardKey.D) do movedir.x -= 1.0
     //if rl.IsKeyPressed(rl.KeyboardKey.C)do player_data.pos.y -= 2.0
 
-    tilepos := level_worldToTile(player_data.pos)
+    tilepos := world_to_tile(player_data.pos)
     c := [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
     isInElevatorTile := c in level.elevatorHeights
 
-    player_data.vel.y -= (player_data.isOnGround ? PLAYER_GRAVITY * 0.001 : PLAYER_GRAVITY * deltatime)
+    player_data.vel.y -= (player_data.isOnGround ? PLAYER_GRAVITY * 0.001 : PLAYER_GRAVITY * delta)
 
     isJumpInputOn :: proc() -> bool {return rl.IsKeyDown(PLAYER_KEY_JUMP)}
 
@@ -176,7 +168,7 @@ _player_update :: proc() {
         addspeed := wishspeed - currentspeed
         if addspeed < 0.0 do return
 
-        accelspeed := accel * wishspeed * deltatime
+        accelspeed := accel * wishspeed * delta
         if accelspeed > addspeed do accelspeed = addspeed
 
         player_data.vel += dir * accelspeed
@@ -198,7 +190,7 @@ _player_update :: proc() {
     // elevator update
     elevatorIsMoving := false
     {
-        tilepos = level_worldToTile(player_data.pos)
+        tilepos = world_to_tile(player_data.pos)
         c = [2]u8{cast(u8)tilepos.x, cast(u8)tilepos.y}
         isInElevatorTile = c in level.elevatorHeights
 
@@ -213,7 +205,7 @@ _player_update :: proc() {
                 0.01
 
             if player_data.pos.y - PLAYER_SIZE.y - 0.02 < y {
-                height += TILE_ELEVATOR_MOVE_FACTOR * deltatime
+                height += TILE_ELEVATOR_MOVE_FACTOR * delta
                 elevatorIsMoving = true
             }
 
@@ -226,11 +218,11 @@ _player_update :: proc() {
             }
 
             if player_data.pos.y - 0.005 < y && elevatorIsMoving {
-                player_data.pos.y = y + TILE_ELEVATOR_SPEED * deltatime
+                player_data.pos.y = y + TILE_ELEVATOR_SPEED * delta
                 player_data.vel = phy_applyFrictionToVelocity(player_data.vel, 12)
-                //player_data.vel.y -= TILE_ELEVATOR_SPEED*deltatime
+                //player_data.vel.y -= TILE_ELEVATOR_SPEED*delta
                 player_data.vel.y = 0.0
-                //player_data.vel.y = PLAYER_GRAVITY*deltatime
+                //player_data.vel.y = PLAYER_GRAVITY*delta
             }
 
             if rl.IsKeyPressed(PLAYER_KEY_JUMP) && elevatorIsMoving {
@@ -275,16 +267,16 @@ _player_update :: proc() {
 
     if phy_hit {
         //player_data.pos += phy_norm*PHY_BOXCAST_EPS*0.98
-        if !player_data.isOnGround && player_data.onGroundTimer > deltatime * 5.0 {
+        if !player_data.isOnGround && player_data.onGroundTimer > delta * 5.0 {
             //player_data.vel -= phy_norm * linalg.dot(player_data.vel, phy_norm) // project onto the wall plane
             player_data.vel += phy_norm * 25.0
             //player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, 1.2) // bounce off of a wall if player has been in air for some time
         } else {
-            //player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(deltatime*0.5)*1.5, 0.05, 0.99))
+            //player_data.vel = phy_clipVelocity(player_data.vel, phy_norm, clamp(math.sqrt(delta*0.5)*1.5, 0.05, 0.99))
             //player_data.vel = phy_clipVelocity(
             //	player_data.vel,
             //	phy_norm,
-            //	clamp(deltatime*144.0*0.07, 0.002,0.98),
+            //	clamp(delta*144.0*0.07, 0.002,0.98),
             //)
         }
         //player_data.vel = phy_slideVelocityOnSurf(player_data.vel, phy_norm)
@@ -331,7 +323,7 @@ _player_update :: proc() {
         START_FRICT_ADD :: 0.01
         frictadd: f32 = START_FRICT_ADD
         forwdepth := phy_raycastDepth(
-            player_data.pos + player_data.vel * Vec3{1, 0, 1} * deltatime * 6.0 * PLAYER_SIZE.x * 2.0,
+            player_data.pos + player_data.vel * Vec3{1, 0, 1} * delta * 6.0 * PLAYER_SIZE.x * 2.0,
         )
         println("forwdepth", forwdepth)
         if forwdepth > PLAYER_SIZE.y * 2.0 && movedir == {} && player_data.isOnGround {
@@ -352,7 +344,7 @@ _player_update :: proc() {
         // (just a garbage formula)
         //player_data.vel -= phy_norm*frictadd*0.1
 
-        //if player_data.isOnGround do player_data.vel.y = -PLAYER_GRAVITY * deltatime
+        //if player_data.isOnGround do player_data.vel.y = -PLAYER_GRAVITY * delta
     }
 
 
@@ -373,12 +365,8 @@ _player_update :: proc() {
             )
         }
 
-        player_data.lookRotEuler.z = math.lerp(
-            player_data.lookRotEuler.z,
-            0.0,
-            clamp(deltatime * 7.5, 0.0, 1.0),
-        )
-        player_data.lookRotEuler.z -= movedir.x * deltatime * 0.75
+        player_data.lookRotEuler.z = math.lerp(player_data.lookRotEuler.z, 0.0, clamp(delta * 7.5, 0.0, 1.0))
+        player_data.lookRotEuler.z -= movedir.x * delta * 0.75
         player_data.lookRotEuler.z = clamp(player_data.lookRotEuler.z, -math.PI * 0.3, math.PI * 0.3)
 
         cam_y: f32 = PLAYER_HEAD_CENTER_OFFSET
@@ -412,7 +400,7 @@ _player_update :: proc() {
 
 
 
-    player_data.onGroundTimer += deltatime
+    player_data.onGroundTimer += delta
 }
 
 
@@ -424,8 +412,7 @@ player_startMap :: proc() {
     player_data.lookRotEuler.z = 0.0
     player_data.lookRotEuler.y =
         math.PI * 2 -
-        (math.atan2(-level.startPlayerDir.x, -level.startPlayerDir.y) *
-                math.sign(-level.startPlayerDir.x))
+        (math.atan2(-level.startPlayerDir.x, -level.startPlayerDir.y) * math.sign(-level.startPlayerDir.x))
     player_initData()
     screen_tint = {}
     level.isMapFinished = false
@@ -466,7 +453,7 @@ GUN_SCALE :: 1.1
 GUN_POS_X :: 0.1
 
 Gun_Kind :: enum {
-    Shotgun    = 0,
+    Shotgun     = 0,
     Machine_Gun = 1,
     Laser_Rifle = 2,
 }
@@ -478,13 +465,19 @@ GUN_MACHINEGUN_DAMAGE :: 0.2
 GUN_LASERRIFLE_DAMAGE :: 1.0
 
 gun_startAmmoCounts: [Gun_Kind]i32 = {
-    32, 0, 0
+    .Shotgun     = 32,
+    .Machine_Gun = 0,
+    .Laser_Rifle = 0,
 }
 gun_maxAmmoCounts: [Gun_Kind]i32 = {
-    64, 128, 18
+    .Shotgun     = 64,
+    .Machine_Gun = 128,
+    .Laser_Rifle = 18,
 }
 gun_shootTimes: [Gun_Kind]f32 = {
-    0.5, 0.15, 1.0
+    .Shotgun     = 0.5,
+    .Machine_Gun = 0.15,
+    .Laser_Rifle = 1.0,
 }
 
 gun_data: struct {
@@ -577,7 +570,7 @@ _gun_update :: proc() {
         }
     }
 
-    gun_data.timer -= deltatime
+    gun_data.timer -= delta
 
 
 

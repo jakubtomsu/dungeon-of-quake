@@ -25,9 +25,6 @@ Menu_Data :: struct {
     normalFont:              rl.Font,
     selectSound:             rl.Sound,
     setValSound:             rl.Sound,
-    // gui inputs
-    windowSizeX:             i32,
-    windowSizeY:             i32,
 }
 
 
@@ -41,6 +38,8 @@ menu_resetState :: proc() {
 
 
 menu_drawPlayerUI :: proc() {
+    using g_state
+
     // crosshair
     {
         W :: 8
@@ -48,71 +47,76 @@ menu_drawPlayerUI :: proc() {
 
         // horizontal
         rl.DrawRectangle(
-            windowSizeX / 2 - 10 - W / 2,
-            windowSizeY / 2 - 1,
+            window_size.x / 2 - 10 - W / 2,
+            window_size.y / 2 - 1,
             W,
             2,
-            rl.Fade(rl.WHITE, settings.crosshairOpacity),
+            rl.Fade(rl.WHITE, settings.crosshair_opacity),
         )
         rl.DrawRectangle(
-            windowSizeX / 2 + 10 - W / 2,
-            windowSizeY / 2 - 1,
+            window_size.x / 2 + 10 - W / 2,
+            window_size.y / 2 - 1,
             W,
             2,
-            rl.Fade(rl.WHITE, settings.crosshairOpacity),
+            rl.Fade(rl.WHITE, settings.crosshair_opacity),
         )
 
         // vertical
         rl.DrawRectangle(
-            windowSizeX / 2 - 1,
-            windowSizeY / 2 - 7 - H / 2,
+            window_size.x / 2 - 1,
+            window_size.y / 2 - 7 - H / 2,
             2,
             H,
-            rl.Fade(rl.WHITE, settings.crosshairOpacity),
+            rl.Fade(rl.WHITE, settings.crosshair_opacity),
         )
         rl.DrawRectangle(
-            windowSizeX / 2 - 1,
-            windowSizeY / 2 + 7 - H / 2,
+            window_size.x / 2 - 1,
+            window_size.y / 2 + 7 - H / 2,
             2,
             H,
-            rl.Fade(rl.WHITE, settings.crosshairOpacity),
+            rl.Fade(rl.WHITE, settings.crosshair_opacity),
         )
 
         // center dot
-        //rl.DrawRectangle(windowSizeX/2-1, windowSizeY/2-1, 2, 2, rl.WHITE)
+        //rl.DrawRectangle(window_size.x/2-1, window_size.y/2-1, 2, 2, rl.WHITE)
     }
 
-    gunindex := cast(i32)gun_data.equipped
+    gun := gun_data.equipped
 
     // draw ammo
-    drawText(
-        {f32(windowSizeX) - 150, f32(windowSizeY) - 50},
+    ui_draw_text(
+        {f32(window_size.x) - 150, f32(window_size.y) - 50},
         30,
         rl.Color{255, 200, 50, 220},
-        fmt.tprint("AMMO: ", gun_data.ammoCounts[gunindex]),
+        fmt.tprint("AMMO: ", gun_data.ammoCounts[gun]),
     )
     // health
-    drawText(
-        {30, f32(windowSizeY) - 50},
+    ui_draw_text(
+        {30, f32(window_size.y) - 50},
         30,
         rl.Color{255, 80, 80, 220},
         fmt.tprint("HEALTH: ", player_data.health),
     )
-    drawText({30, 30}, 30, rl.Color{220, 180, 50, 150}, fmt.tprint("KILL COUNT: ", enemy_data.deadCount))
+    ui_draw_text({30, 30}, 30, rl.Color{220, 180, 50, 150}, fmt.tprint("KILL COUNT: ", enemy_data.deadCount))
 
     // draw gun ui
-    for i: i32 = 0; i < GUN_COUNT; i += 1 {
+    for kind, i in Gun_Kind {
         LINE :: 40
         TEXTHEIGHT :: LINE * 0.5
         pos := Vec2 {
-            f32(windowSizeX) - 120,
-            f32(windowSizeY) * 0.5 + GUN_COUNT * LINE * 0.5 - cast(f32)i * LINE,
+            f32(window_size.x) - 120,
+            f32(window_size.y) * 0.5 + len(Gun_Kind) * LINE * 0.5 - cast(f32)i * LINE,
         }
 
-        col := gun_data.ammoCounts[i] == 0 ? INACTIVE_COLOR : ACTIVE_COLOR
-        if i == cast(i32)gun_data.equipped do col = ACTIVE_VAL_COLOR
-        drawText(pos, TEXTHEIGHT, col, fmt.tprint(cast(Gun_Kind)i))
-        drawText(pos - Vec2{30, 0}, TEXTHEIGHT, TITLE_COLOR, fmt.tprint(args = {i + 1, "."}, sep = ""))
+        col := gun_data.ammoCounts[kind] == 0 ? UI_INACTIVE_COLOR : UI_ACTIVE_COLOR
+        if gun_data.equipped == kind do col = UI_ACTIVE_VAL_COLOR
+        ui_draw_text(pos, TEXTHEIGHT, col, fmt.tprint(cast(Gun_Kind)i))
+        ui_draw_text(
+            pos - Vec2{30, 0},
+            TEXTHEIGHT,
+            UI_TITLE_COLOR,
+            fmt.tprint(args = {i + 1, "."}, sep = ""),
+        )
     }
 
 }
@@ -145,7 +149,7 @@ menu_drawDebugUI :: proc() {
         debugtext(" onground", player_data.isOnGround)
         debugtext(" onground timer", player_data.onGroundTimer)
         debugtext("system")
-        debugtext(" windowSize", []i32{windowSizeX, windowSizeY})
+        debugtext(" windowSize", []i32{window_size.x, window_size.y})
         debugtext(" app_updatePathKind", app_state)
         debugtext(" IsAudioDeviceReady", rl.IsAudioDeviceReady())
         debugtext(" g_state.load_dir", g_state.load_dir)
@@ -192,7 +196,7 @@ menu_drawDebugUI :: proc() {
 
 
 
-menu_updateAndDrawPauseMenu :: proc() {
+menu_updateAndDrawPauseMenu :: proc(delta: f32) {
     using g_state
 
     if level.isMapFinished {
@@ -214,7 +218,7 @@ menu_updateAndDrawPauseMenu :: proc() {
                 should_exit = true
             } else {
                 if level_loadFromFile(level.nextMapName) {
-                    app_set_state(.GAME)
+                    app_set_state(.Game)
                     menu_resetState()
                 } else {
                     should_exit = true
@@ -232,34 +236,27 @@ menu_updateAndDrawPauseMenu :: proc() {
     } else {
         should_exit := false
         shouldReset := false
-        elems: []Ui_Elem =  {
+        elems := make([dynamic]Ui_Elem, context.temp_allocator)
+        append(
+            &elems,
             Ui_Button{"RESUME", &g_state.paused},
             Ui_Button{"reset", &shouldReset},
             Ui_Button{"go to main menu", &should_exit},
-            Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
-            Ui_Menu_Title{"settings"},
-            Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
-            Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
-            Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
-            Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
-            Ui_F32{"gun X offset", &settings.gunXOffset, 0.025},
-            Ui_F32{"fild of view", &settings.FOV, 10.0},
-            Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
-            Ui_Bool{"show FPS", &settings.drawFPS},
-            Ui_Bool{"enable debug mode", &settings.debug},
-        }
+            Ui_Button{"exit to desktop", &exit_next_frame},
+        )
+        append(&elems, ..menu_settings_elems())
 
         menu_drawNavTips()
-        if updateAndDrawElemBuf(elems[:]) {
-            settings_saveToFile()
+        if ui_update_and_draw_elems(elems[:]) {
+            settings_save()
         }
 
         rl.SetSoundVolume(g_state.assets.player.swooshSound, 0.0)
 
-        screen_tint = linalg.lerp(screen_tint, Vec3{0.1, 0.1, 0.1}, clamp(deltatime * 5.0, 0.0, 1.0))
+        screen_tint = linalg.lerp(screen_tint, Vec3{0.1, 0.1, 0.1}, clamp(delta * 5.0, 0.0, 1.0))
 
         if should_exit {
-            app_set_state(.MAIN_MENU)
+            app_set_state(.Main_Menu)
         }
         if shouldReset {
             player_die()
@@ -272,16 +269,18 @@ menu_updateAndDrawPauseMenu :: proc() {
 
 
 menu_updateAndDrawMainMenuUpdatePath :: proc() {
-    rl.SetMusicVolume(g_state.assets.loadScreenMusic, 1.0)
-    playingMusic = &g_state.assets.loadScreenMusic
+    using g_state
+
+    rl.SetMusicVolume(g_state.assets.music[.Load_Screen], 1.0)
+    current_music = &g_state.assets.music[.Load_Screen]
 
     rl.BeginDrawing()
-    rl.ClearBackground(rl.ColorFromNormalized(BACKGROUND))
+    rl.ClearBackground(rl.ColorFromNormalized(UI_BACKGROUND))
     menu_drawNavTips()
     menu_drawDebugUI()
 
     if g_state.menu.mapSelectIsOpen {
-        updateAndDrawElemBuf(g_state.menu.mapSelectFileElems[:g_state.menu.mapSelectFileElemsCount])
+        ui_update_and_draw_elems(g_state.menu.mapSelectFileElems[:g_state.menu.mapSelectFileElemsCount])
         if rl.IsKeyPressed(rl.KeyboardKey.ESCAPE) {
             rl.PlaySound(g_state.menu.setValSound)
             menu_resetState()
@@ -292,7 +291,7 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
             elem, ok := g_state.menu.mapSelectFileElems[g_state.menu.selected].(Ui_File_Button)
             if ok {
                 if level_loadFromFileAbs(elem.fullpath) {
-                    app_set_state(.GAME)
+                    app_set_state(.Game)
                     menu_resetState()
                 }
             } else {
@@ -302,23 +301,16 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
 
     } else {
         shouldMapSelect := false
-        elems: []Ui_Elem =  {
+        elems := make([dynamic]Ui_Elem, context.temp_allocator)
+        append(
+            &elems,
             Ui_Button{"SINGLEPLAYER", &shouldMapSelect},
-            Ui_Button{"exit to desktop", &app_shouldExitNextFrame},
-            Ui_Menu_Title{"settings"},
-            Ui_F32{"audio volume", &settings.audioMasterVolume, 0.05},
-            Ui_F32{"music volume", &settings.audioMusicVolume, 0.05},
-            Ui_F32{"mouse sensitivity", &settings.mouseSensitivity, 0.05},
-            Ui_F32{"crosshair visibility", &settings.crosshairOpacity, 0.1},
-            Ui_F32{"gun size offset", &settings.gunXOffset, 0.025},
-            Ui_F32{"fild of view", &settings.FOV, 10.0},
-            Ui_F32{"viewmodel field of view", &settings.viewmodelFOV, 10.0},
-            Ui_Bool{"show FPS", &settings.drawFPS},
-            Ui_Bool{"enable debug mode", &settings.debug},
-        }
+            Ui_Button{"exit to desktop", &exit_next_frame},
+        )
+        append(&elems, ..menu_settings_elems())
 
-        if updateAndDrawElemBuf(elems[:]) {
-            settings_saveToFile()
+        if ui_update_and_draw_elems(elems[:]) {
+            settings_save()
         }
 
         if shouldMapSelect {
@@ -329,6 +321,24 @@ menu_updateAndDrawMainMenuUpdatePath :: proc() {
     }
 
     rl.EndDrawing()
+}
+
+menu_settings_elems :: proc() -> []Ui_Elem {
+    using g_state
+    return(
+         {
+            Ui_Menu_Title{"settings"},
+            Ui_F32{"audio volume", &settings.master_volume, 0.05},
+            Ui_F32{"music volume", &settings.music_volume, 0.05},
+            Ui_F32{"mouse sensitivity", &settings.mouse_speed, 0.05},
+            Ui_F32{"crosshair visibility", &settings.crosshair_opacity, 0.1},
+            Ui_F32{"gun size offset", &settings.gun_offset_x, 0.025},
+            Ui_F32{"fild of view", &settings.fov, 10.0},
+            Ui_F32{"viewmodel field of view", &settings.gun_fov, 10.0},
+            Ui_Bool{"show FPS", &settings.draw_fps},
+            Ui_Bool{"enable debug mode", &settings.debug},
+        } \
+    )
 }
 
 menu_mainMenuFetchMapSelectFiles :: proc() {
@@ -385,12 +395,14 @@ menu_mainMenuFetchMapSelectFiles :: proc() {
 
 
 
-menu_updateAndDrawLoadScreenUpdatePath :: proc() {
+menu_updateAndDrawLoadScreenUpdatePath :: proc(delta: f32) {
+    using g_state
+
     if i32(rl.GetKeyPressed()) != 0 ||
        rl.IsMouseButtonPressed(rl.MouseButton.LEFT) ||
        rl.IsMouseButtonPressed(rl.MouseButton.RIGHT) ||
        rl.IsMouseButtonPressed(rl.MouseButton.MIDDLE) {
-        app_set_state(.MAIN_MENU)
+        app_set_state(.Main_Menu)
         rl.PlaySound(g_state.menu.setValSound)
     }
 
@@ -398,18 +410,18 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 
     unfade := math.sqrt(glsl.smoothstep(0.0, 1.0, g_state.menu.loadScreenTimer * 0.5))
 
-    rl.SetMusicVolume(g_state.assets.loadScreenMusic, unfade * unfade * unfade)
-    playingMusic = &g_state.assets.loadScreenMusic
+    rl.SetMusicVolume(g_state.assets.music[.Load_Screen], pow(unfade, 3))
+    current_music = &g_state.assets.music[.Load_Screen]
 
     rl.BeginDrawing()
-    rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(Vec4{0, 0, 0, 0}, BACKGROUND, unfade)))
+    rl.ClearBackground(rl.ColorFromNormalized(linalg.lerp(Vec4{0, 0, 0, 0}, UI_BACKGROUND, unfade)))
 
     OFFS :: 200
     STARTSCALE :: 4.0
     scale :=
         glsl.min(
-            f32(windowSizeX) / f32(g_state.assets.loadScreenLogo.width),
-            f32(windowSizeY) / f32(g_state.assets.loadScreenLogo.height),
+            f32(window_size.x) / f32(g_state.assets.loadScreenLogo.width),
+            f32(window_size.y) / f32(g_state.assets.loadScreenLogo.height),
         ) *
         (STARTSCALE + math.sqrt(unfade)) /
         (1.0 + STARTSCALE)
@@ -417,16 +429,16 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
     rl.DrawTextureEx(
         g_state.assets.loadScreenLogo,
          {
-            f32(windowSizeX) / 2 - f32(g_state.assets.loadScreenLogo.width) * scale / 4,
-            f32(windowSizeY) / 2 - f32(g_state.assets.loadScreenLogo.height) * scale / 4,
+            f32(window_size.x) / 2 - f32(g_state.assets.loadScreenLogo.width) * scale / 4,
+            f32(window_size.y) / 2 - f32(g_state.assets.loadScreenLogo.height) * scale / 4,
         },
         0.0, // rot
         scale * 0.5, // scale
         col,
     )
 
-    drawText(
-        {f32(windowSizeX) / 2 - 100, f32(windowSizeY) - 130},
+    ui_draw_text(
+        {f32(window_size.x) / 2 - 100, f32(window_size.y) - 130},
         25,
         rl.ColorFromNormalized(
             linalg.lerp(
@@ -438,11 +450,16 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
         "press any key to continue",
     )
 
-    versionstr := fmt.tprint("version: ", DOQ_VERSION_STRING)
-    drawText({f32(windowSizeX) - f32(len(versionstr) + 3) * 10, f32(windowSizeY) - 50}, 25, col, versionstr)
+    versionstr := fmt.tprint("version: ", VERSION_STRING)
+    ui_draw_text(
+        {f32(window_size.x) - f32(len(versionstr) + 3) * 10, f32(window_size.y) - 50},
+        25,
+        col,
+        versionstr,
+    )
     rl.EndDrawing()
 
-    g_state.menu.loadScreenTimer += deltatime
+    g_state.menu.loadScreenTimer += delta
 }
 
 
@@ -451,8 +468,8 @@ menu_updateAndDrawLoadScreenUpdatePath :: proc() {
 menu_drawNavTips :: proc() {
     SIZE :: 25.0
 
-    drawText(
-        {SIZE * 2.0, f32(windowSizeY) - SIZE * 3},
+    ui_draw_text(
+        {SIZE * 2.0, f32(g_state.window_size.y) - SIZE * 3},
         SIZE,
         {200, 200, 200, 120},
         "hold CTRL to skip to next title / edit values faster",

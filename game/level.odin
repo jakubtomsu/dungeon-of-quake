@@ -47,24 +47,22 @@ Level :: struct {
 
 
 // @returns: 2d tile position from 3d worldspace 'p'
-level_worldToTile :: proc(p: Vec3) -> IVec2 {
+world_to_tile :: proc(p: Vec3) -> IVec2 {
     return IVec2{cast(i32)((p.x / TILE_WIDTH)), cast(i32)((p.z / TILE_WIDTH))}
 }
 
 // @returns: tile center position in worldspace
-level_tileToWorld :: proc(p: IVec2) -> Vec3 {
+tile_to_world :: proc(p: IVec2) -> Vec3 {
     return Vec3{((cast(f32)p.x) + 0.5) * TILE_WIDTH, 0.0, ((cast(f32)p.y) + 0.5) * TILE_WIDTH}
 }
 
-level_isTilePosInBufferBounds :: proc(coord: IVec2) -> bool {
-    return coord.x >= 0 && coord.y >= 0 && coord.x < MAP_SIDE_TILE_COUNT && coord.y < MAP_SIDE_TILE_COUNT
+tile_pos_valid :: proc(coord: IVec2) -> bool {
+    using g_state
+    return coord.x >= 0 && coord.y >= 0 && coord.x <= level.bounds.x && coord.y <= level.bounds.y
 }
 
-level_isTilePosValid :: proc(coord: IVec2) -> bool {
-    return level_isTilePosInBufferBounds(coord) && coord.x <= level.bounds.x && coord.y <= level.bounds.y
-}
-
-level_tilePosClamp :: proc(coord: IVec2) -> IVec2 {
+tile_pos_clamp :: proc(coord: IVec2) -> IVec2 {
+    using g_state
     return IVec2{clamp(coord.x, 0, level.bounds.x), clamp(coord.y, 0, level.bounds.y)}
 }
 
@@ -120,7 +118,7 @@ level_fullTileBox :: proc(posxz: Vec2) -> box_t {
 // fills input buffer `boxbuf` with axis-aligned boxes for a given tile
 // @returns: number of boxes for the tile
 level_getTileBoxes :: proc(coord: IVec2, boxbuf: []box_t) -> i32 {
-    if !level_isTilePosValid(coord) do return 0
+    if !tile_pos_valid(coord) do return 0
     tileKind := level.tilemap[coord[0]][coord[1]]
 
     phy_calcBox :: proc(posxz: Vec2, posy: f32, sizey: f32) -> box_t {
@@ -235,8 +233,8 @@ level_loadFromFileAbs :: proc(fullpath: string) -> bool {
 
     for x: i32 = 0; x < level.bounds.x; x += 1 {
         for y: i32 = 0; y < level.bounds.y; y += 1 {
-            lowpos := level_tileToWorld({x, y}) - Vec3{0, TILE_WIDTH * TILEMAP_Y_TILES / 2 - TILE_WIDTH, 0}
-            highpos := level_tileToWorld({x, y}) + Vec3{0, TILE_WIDTH * 0.5, 0}
+            lowpos := tile_to_world({x, y}) - Vec3{0, TILE_WIDTH * TILEMAP_Y_TILES / 2 - TILE_WIDTH, 0}
+            highpos := tile_to_world({x, y}) + Vec3{0, TILE_WIDTH * 0.5, 0}
             tile := level.tilemap[x][y]
 
             #partial switch tile {
@@ -432,7 +430,7 @@ level_drawTilemap :: proc() {
 
             case .THORNS_LOWER:
                 yoffs := math.floor(player_data.pos.y / TILE_WIDTH) * TILE_WIDTH
-                p := level_tileToWorld({x, y})
+                p := tile_to_world({x, y})
                 floorbox := level_floorTileBox({p.x, p.z})
                 ceilbox := level_ceilTileBox({p.x, p.z})
                 THORN_DRAW_COUNT :: 32
@@ -659,14 +657,14 @@ calcThornsCollision :: proc(pos: Vec3, rad: f32) -> (isColliding: bool, pushdir:
         pushdir = {}
         return isColliding, pushdir
     }
-    tilepos := level_worldToTile(pos)
+    tilepos := world_to_tile(pos)
     rad2 := rad * rad
 
     for x: i32 = -1; x <= 1; x += 1 {
         for y: i32 = -1; y <= 1; y += 1 {
             p := tilepos + {x, y}
 
-            if !level_isTilePosValid(p) do continue
+            if !tile_pos_valid(p) do continue
             if level.tilemap[p.x][p.y] == .THORNS_LOWER {
                 posxz := Vec2{f32(p.x) + 0.5, f32(p.y) + 0.5} * TILE_WIDTH
                 dir := Vec2{pos.x - posxz.x, pos.z - posxz.y}

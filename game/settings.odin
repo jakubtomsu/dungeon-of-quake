@@ -1,6 +1,8 @@
 package game
 
 import "core:encoding/json"
+import "core:os"
+import "core:path/filepath"
 
 SETTINGS_FILE_NAME :: "doq_settings.json"
 
@@ -34,7 +36,13 @@ settings_path :: proc() -> string {
     return filepath.join({g_state.save_dir, SETTINGS_FILE_NAME})
 }
 
-settings_load_from_file :: proc(path: string) -> (result: Settings, err: Error) {
+settings_load_from_file :: proc(
+    path: string,
+    allocator := context.temp_allocator,
+) -> (
+    result: Settings,
+    err: Error,
+) {
     defer if err != nil {
         result = SETTINGS_DEFAULT
     }
@@ -44,8 +52,16 @@ settings_load_from_file :: proc(path: string) -> (result: Settings, err: Error) 
     return result, nil
 }
 
-setting_save_to_file :: proc(path: string, settings: Settings) {
-    if data, ok := json.marshal(settings, {.pretty}, context.temp_allocator); ok {
+settings_save_to_file :: proc(path: string, settings: Settings) {
+    if data, ok := json.marshal(settings, {pretty = true}, context.temp_allocator); ok {
         os.write_entire_file(data)
     }
+}
+
+settings_save :: proc() {
+    settings_save_to_file(settings_path(), g_state.settings)
+}
+
+settings_load :: proc() -> Error {
+    g_state.settings = settings_load_from_file(settings_path()) or_return
 }
