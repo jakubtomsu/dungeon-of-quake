@@ -13,7 +13,9 @@ and
 </br>
 </br>
 
-Note: the game is not in development anymore.
+> :warning: Note: This game hasn't been updated in a long time, so now I'm trying to update it to the latest Odin and Raylib version,
+> and also make some general improvements.
+> It might take some time since I've been pretty busy lately.
 
 If you just want to play the game, take a look at [releases](https://github.com/jakubtomsu/dungeon-of-quake/releases).
 
